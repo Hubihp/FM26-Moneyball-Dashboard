@@ -164,8 +164,11 @@ for i, pozycja_nazwa in enumerate(POZYCJE):
     with arkusze[i]:
         st.markdown(f"<div style='font-size: 1.40rem; font-weight: 600; margin-top: 0.5rem; margin-bottom: 0.5rem;'>📋 Arkusz: {pozycja_nazwa}</div>", unsafe_allow_html=True)
         
-        file_key = f"uploader_{pozycja_nazwa}"
-        uploaded_file = st.file_uploader("Wgraj plik CSV", type=["csv"], key=file_key, label_visibility="collapsed")
+        # Ograniczenie szerokości uploadera
+        col_up, _ = st.columns([1, 8])
+        with col_up:
+            file_key = f"uploader_{pozycja_nazwa}"
+            uploaded_file = st.file_uploader("Wgraj plik CSV", type=["csv"], key=file_key, label_visibility="collapsed")
         
         if uploaded_file is not None:
             current_file_id = getattr(uploaded_file, "file_id", uploaded_file.name + str(uploaded_file.size))
@@ -194,9 +197,8 @@ for i, pozycja_nazwa in enumerate(POZYCJE):
                     st.session_state["data_storage"][pozycja_nazwa] = loaded_df
                     st.session_state[processed_key] = current_file_id
                     
-                    st.success(f"✓ Pomyślnie załadowano i przeliczono SCORE dla: {pozycja_nazwa}.")
                 except Exception as e:
-                    st.error(f"Błąd podczas ładowania pliku: {e}")
+                    pass
 
         df = st.session_state["data_storage"][pozycja_nazwa]
 
@@ -372,7 +374,6 @@ for i, pozycja_nazwa in enumerate(POZYCJE):
                         cols = st.columns(2)
                         for idx, stat_col in enumerate(kolumny_statystyk):
                             with cols[idx % 2]:
-                                # Format zależny od tego czy to wartość procentowa (np. pojedynki główkowe) czy standardowa float
                                 is_percent = '%' in stat_col
                                 stat_format = '.1f' if not is_percent else '.0f'
                                 
@@ -390,6 +391,3 @@ for i, pozycja_nazwa in enumerate(POZYCJE):
                                     ]
                                 ).properties(height=400, title=stat_col)
                                 st.altair_chart(bar_chart.interactive(), use_container_width=True)
-
-        else:
-            st.info(f"ℹ️ Ten arkusz jest pusty. Przeciągnij plik `.csv` dedykowany dla pozycji: **{pozycja_nazwa}** powyżej.")
