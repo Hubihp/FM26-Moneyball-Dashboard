@@ -616,7 +616,7 @@ if df is not None and not df.empty:
 
     # --- NOWA SEKCJA: ZNAJDŹ SOBOWTÓRA ---
     st.markdown("---")
-    st.subheader("Znajdź sobowtóra (Machine Learning)", anchor=False)
+    st.subheader("Znajdź sobowtóra", anchor=False)
     st.markdown("Wybierz gwiazdę ze swojej drużyny. Algorytm na podstawie dystansu kosinusowego przeanalizuje styl gry (statystyki per 90 minut) i wskaże 5 graczy z przefiltrowanej bazy o najwierniej odwzorowanym profilu (np. tanie, młode zastępstwo).")
     
     opcje_sobowtor = [""] + list(filtered_df['Piłkarz'].unique()) if 'Piłkarz' in filtered_df.columns else [""]
@@ -704,7 +704,7 @@ if df is not None and not df.empty:
     # --- SEKCJA WYKRESÓW (Moneyball i Top 10) ---
     if 'Wartość_Numeryczna' in filtered_df.columns and 'SCORE' in filtered_df.columns:
         st.markdown("---")
-        st.subheader("Cena vs Control Score (Top 30)", anchor=False)
+        st.subheader("Score vs Cena (Top 30)", anchor=False)
         
         chart_data = filtered_df[filtered_df['Wartość_Numeryczna'] < 900_000_000].head(30)
         
@@ -735,7 +735,7 @@ if df is not None and not df.empty:
                         title='Cena',
                         scale=alt.Scale(domain=[min_val - 3000000, max_val + (max_val*0.1)])),
                 y=alt.Y('SCORE:Q', 
-                        title='Control Score', 
+                        title='Score', 
                         axis=alt.Axis(format='.0f'),
                         scale=alt.Scale(zero=False, domain=[min_score - score_margin, max_score + score_margin])),
                 color=alt.Color('Piłkarz', legend=None),
