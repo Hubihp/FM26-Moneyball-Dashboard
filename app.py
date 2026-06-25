@@ -375,7 +375,7 @@ if df is not None and not df.empty:
         # --- FILTR KONCA KONTRAKTU ---
         filtr_kontraktu = False
         if 'Wygasa' in df.columns:
-            filtr_kontraktu = st.checkbox("Tylko kończące się kontrakty (do 6 mies.)", key=f"contract_{pozycja_nazwa}")
+            filtr_kontraktu = st.checkbox("Tylko kontrakty do 6 mies.", key=f"contract_{pozycja_nazwa}")
 
         age_filter = st.slider("Wiek:", min_age, max_age, (min_age, max_age), key=f"age_{pozycja_nazwa}")
         price_filter_mln = st.slider(
@@ -388,7 +388,7 @@ if df is not None and not df.empty:
         price_max_bytes = price_filter_mln[1] * 1_000_000
 
         # --- EDYTOR WAG W SIDEBARZE ---
-        st.markdown("### Zaawansowane Wagi")
+        st.markdown("### Zaawansowane wagi")
         custom_weights = {}
         defaults = MERYTORYKA_WAG.get(pozycja_nazwa, {})
         with st.expander("Modyfikuj wagi statystyk", expanded=False):
