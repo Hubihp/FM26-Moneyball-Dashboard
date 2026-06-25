@@ -4,6 +4,8 @@ import altair as alt
 import numpy as np
 import matplotlib.colors as mcolors
 import plotly.graph_objects as go
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics.pairwise import cosine_similarity
 
 # Konfiguracja strony
 st.set_page_config(page_title="FM26 Moneyball Dashboard", layout="wide")
@@ -66,6 +68,24 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
+# Słownik tłumaczeń kolumn statystycznych
+TLUMACZENIE_KOLUMN = {
+    "xA/90": "Oczekiwane asysty/90",
+    "KPzG/90": "Kluczowe podania z gry/90",
+    "Liczba goli na 90 min": "Liczba goli na 90 min",
+    "xG/strzał": "Oczekiwane gole na strzał",
+    "Skut (%)": "Skuteczność strzałów (%)",
+    "Ud Pres/90": "Udane próby pressingu/90",
+    "Prz/90": "Przechwyty/90",
+    "Odz Płk/90": "Odzyskane piłki/90",
+    "Str Płk/90": "Stracone piłki/90",
+    "Pod/90": "Próby podań/90",
+    "% Głw": "% wygranych pojedynków główkowych",
+    "Drb/90": "Liczba dryblingów/90",
+    "ZxG/90": "Uniknięte oczekiwane gole/90",
+    "Szacowana wartość": "Cena"
+}
 
 # Mnożniki lig bazowe
 MNOZNIKI_LIG = {
@@ -135,13 +155,13 @@ MAPOWANIE_NAZW_LIG = {
 
 # Definicje domyślnych wag merytorycznych per pozycja
 MERYTORYKA_WAG = {
-    "Bramkarz": {'Uniknięte oczekiwane gole/90 (BR)': 130.0, 'Odzyskane piłki/90': 30.0, 'Próby podań/90': 0.5},
+    "Bramkarz": {'Uniknięte oczekiwane gole/90': 130.0, 'Odzyskane piłki/90': 30.0, 'Próby podań/90': 0.5},
     "Środkowy Obrońca": {'% wygranych pojedynków główkowych': 15.0, 'Przechwyty/90': 20.0, 'Udane próby pressingu/90': 5.0, 'Kluczowe podania z gry/90': 20.0, 'Odzyskane piłki/90': 8.0},
-    "Boczny Obrońca": {'xA/90': 100.0, 'Kluczowe podania z gry/90': 60.0, 'Przechwyty/90': 12.0, 'Odzyskane piłki/90': 6.0, 'Udane próby pressingu/90': 8.0},
-    "Defensywny Pomocnik": {'xA/90': 9.0, 'Kluczowe podania z gry/90': 40.0, 'Przechwyty/90': 9.0, 'Odzyskane piłki/90': 9.0, 'Udane próby pressingu/90': 9.0, '% wygranych pojedynków główkowych': 5.0},
-    "Środkowy Pomocnik": {'xA/90': 80.0, 'Liczba goli/90': 40.0, 'Kluczowe podania z gry/90': 60.0, 'Liczba dryblingów/90': 12.0, 'Odzyskane piłki/90': 8.0, 'Udane próby pressingu/90': 8.0},
-    "Skrzydłowy": {'xA/90': 96.0, 'Liczba goli/90': 80.0, 'Oczekiwane gole na strzał': 58.0, 'Kluczowe podania z gry/90': 40.0, 'Liczba dryblingów/90': 16.0, 'Udane próby pressingu/90': 6.0, 'Odzyskane piłki/90': 6.0},
-    "Napastnik": {'Liczba goli/90': 180.0, 'Oczekiwane gole na strzał': 60.0, 'xA/90': 80.0, 'Kluczowe podania z gry/90': 40.0, 'Liczba dryblingów/90': 15.0, 'Udane próby pressingu/90': 8.0, 'Odzyskane piłki/90': 8.0, 'Skuteczność (%)': 1.0}
+    "Boczny Obrońca": {'Oczekiwane asysty/90': 100.0, 'Kluczowe podania z gry/90': 60.0, 'Przechwyty/90': 12.0, 'Odzyskane piłki/90': 6.0, 'Udane próby pressingu/90': 8.0},
+    "Defensywny Pomocnik": {'Oczekiwane asysty/90': 9.0, 'Kluczowe podania z gry/90': 40.0, 'Przechwyty/90': 9.0, 'Odzyskane piłki/90': 9.0, 'Udane próby pressingu/90': 9.0, '% wygranych pojedynków główkowych': 5.0},
+    "Środkowy Pomocnik": {'Oczekiwane asysty/90': 80.0, 'Liczba goli na 90 min': 40.0, 'Kluczowe podania z gry/90': 60.0, 'Liczba dryblingów/90': 12.0, 'Odzyskane piłki/90': 8.0, 'Udane próby pressingu/90': 8.0},
+    "Skrzydłowy": {'Oczekiwane asysty/90': 96.0, 'Liczba goli na 90 min': 80.0, 'Oczekiwane gole na strzał': 58.0, 'Kluczowe podania z gry/90': 40.0, 'Liczba dryblingów/90': 16.0, 'Udane próby pressingu/90': 6.0, 'Odzyskane piłki/90': 6.0},
+    "Napastnik": {'Liczba goli na 90 min': 180.0, 'Oczekiwane gole na strzał': 60.0, 'Oczekiwane asysty/90': 80.0, 'Kluczowe podania z gry/90': 40.0, 'Liczba dryblingów/90': 15.0, 'Udane próby pressingu/90': 8.0, 'Odzyskane piłki/90': 8.0, 'Skuteczność strzałów (%)': 1.0}
 }
 
 def parse_age(val_str):
@@ -200,6 +220,38 @@ def parse_wages(val_str):
     except:
         return 0
 
+# --- NOWA FUNKCJA Z BUFOROWANIEM (CACHING) ---
+@st.cache_data(show_spinner="Przetwarzanie pliku CSV...")
+def load_and_clean_data(file_buffer):
+    file_buffer.seek(0) # Zabezpieczenie przed błędem odczytu po zmianie stanu
+    df_loaded = pd.read_csv(file_buffer, sep=None, engine='python')
+    df_loaded.columns = df_loaded.columns.astype(str).str.replace('\ufeff', '', regex=False).str.strip()
+    
+    df_loaded = df_loaded.rename(columns=TLUMACZENIE_KOLUMN)
+    
+    if 'Piłkarz' in df_loaded.columns:
+        df_loaded = df_loaded[df_loaded['Piłkarz'].notna()]
+    
+    if 'Wiek' in df_loaded.columns:
+        df_loaded['Wiek'] = df_loaded['Wiek'].apply(parse_age)
+        df_loaded = df_loaded[df_loaded['Wiek'] > 0]
+        
+    if 'Cena' in df_loaded.columns:
+        df_loaded['Wartość_Numeryczna'] = df_loaded['Cena'].apply(parse_market_value)
+    else:
+        df_loaded['Wartość_Numeryczna'] = 0
+
+    if 'Płaca' in df_loaded.columns:
+        df_loaded['Zarobki_Numeryczne'] = df_loaded['Płaca'].apply(parse_wages)
+    else:
+        df_loaded['Zarobki_Numeryczne'] = 0
+        
+    if 'Liga' in df_loaded.columns:
+        df_loaded['Liga'] = df_loaded['Liga'].astype(str).str.replace('\xa0', ' ', regex=False).str.strip()
+        df_loaded['Liga'] = df_loaded['Liga'].map(MAPOWANIE_NAZW_LIG).fillna(df_loaded['Liga'])
+        
+    return df_loaded
+
 def calculate_score(df, position, weights_dict, ignore_mult=False):
     def get_col(name):
         if name in df.columns:
@@ -208,16 +260,16 @@ def calculate_score(df, position, weights_dict, ignore_mult=False):
         return pd.Series(0.0, index=df.index)
 
     col_map = {
-        'xA/90': get_col('xA/90'),
+        'Oczekiwane asysty/90': get_col('Oczekiwane asysty/90'),
         'Kluczowe podania z gry/90': get_col('Kluczowe podania z gry/90'),
-        'Liczba goli/90': get_col('Liczba goli/90'),
+        'Liczba goli na 90 min': get_col('Liczba goli na 90 min'),
         'Oczekiwane gole na strzał': get_col('Oczekiwane gole na strzał'),
-        'Skuteczność (%)': get_col('Skuteczność (%)'),
+        'Skuteczność strzałów (%)': get_col('Skuteczność strzałów (%)'),
         'Udane próby pressingu/90': get_col('Udane próby pressingu/90'),
         'Przechwyty/90': get_col('Przechwyty/90'),
         'Odzyskane piłki/90': get_col('Odzyskane piłki/90'),
         '% wygranych pojedynków główkowych': get_col('% wygranych pojedynków główkowych') / 100.0,
-        'Uniknięte oczekiwane gole/90 (BR)': get_col('Uniknięte oczekiwane gole/90 (BR)'),
+        'Uniknięte oczekiwane gole/90': get_col('Uniknięte oczekiwane gole/90'),
         'Liczba dryblingów/90': get_col('Liczba dryblingów/90'),
         'Próby podań/90': get_col('Próby podań/90')
     }
@@ -259,14 +311,15 @@ def clear_filters(pozycja, min_a, max_a, max_p):
         if f"weight_{pozycja}_{stat_name}" in st.session_state:
             st.session_state[f"weight_{pozycja}_{stat_name}"] = float(default_val)
 
+# Zaktualizowana kolejność: Wiek jest zawsze po Piłkarzu, a Preferowana noga zaraz po Wieku
 KOLUMNY_PER_POZYCJA = {
-    "Bramkarz": ['SCORE', 'Percentyl', 'Nazwisko', 'Wiek', 'Klub', 'Liga', 'Wartość', 'Noga', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Uniknięte oczekiwane gole/90 (BR)'],
-    "Środkowy Obrońca": ['SCORE', 'Percentyl', 'Nazwisko', 'Wiek', 'Klub', 'Liga', 'Wartość', 'Noga', 'Kluczowe podania z gry/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', '% wygranych pojedynków główkowych'],
-    "Boczny Obrońca": ['SCORE', 'Percentyl', 'Nazwisko', 'Wiek', 'Klub', 'Liga', 'Pozycja', 'Wartość', 'Noga', 'xA/90', 'Kluczowe podania z gry/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90'],
-    "Defensywny Pomocnik": ['SCORE', 'Percentyl', 'Nazwisko', 'Wiek', 'Klub', 'Liga', 'Wartość', 'Noga', 'xA/90', 'Kluczowe podania z gry/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', '% wygranych pojedynków główkowych'],
-    "Środkowy Pomocnik": ['SCORE', 'Percentyl', 'Nazwisko', 'Wiek', 'Klub', 'Liga', 'Wartość', 'Noga', 'xA/90', 'Kluczowe podania z gry/90', 'Liczba goli/90', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Liczba dryblingów/90'],
-    "Skrzydłowy": ['SCORE', 'Percentyl', 'Nazwisko', 'Klub', 'Wiek', 'Liga', 'Pozycja', 'Wartość', 'Noga', 'xA/90', 'Kluczowe podania z gry/90', 'Liczba goli/90', 'Oczekiwane gole na strzał', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Liczba dryblingów/90'],
-    "Napastnik": ['SCORE', 'Percentyl', 'Nazwisko', 'Klub', 'Wiek', 'Liga', 'Wartość', 'Noga', 'xA/90', 'Kluczowe podania z gry/90', 'Liczba goli/90', 'Oczekiwane gole na strzał', 'Skuteczność (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Liczba dryblingów/90']
+    "Bramkarz": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Cena', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Uniknięte oczekiwane gole/90'],
+    "Środkowy Obrońca": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Cena', 'Kluczowe podania z gry/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', '% wygranych pojedynków główkowych'],
+    "Boczny Obrońca": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Pozycja', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90'],
+    "Defensywny Pomocnik": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', '% wygranych pojedynków główkowych'],
+    "Środkowy Pomocnik": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Liczba dryblingów/90'],
+    "Skrzydłowy": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Pozycja', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole na strzał', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Liczba dryblingów/90'],
+    "Napastnik": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole na strzał', 'Skuteczność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Liczba dryblingów/90']
 }
 
 # --- NAGŁÓWEK GŁÓWNY ---
@@ -284,39 +337,11 @@ with st.sidebar:
     st.markdown("---")
 
 if uploaded_file is not None:
-    current_file_id = getattr(uploaded_file, "file_id", uploaded_file.name + str(uploaded_file.size))
-    processed_key = f"processed_{pozycja_nazwa}"
-    
-    if processed_key not in st.session_state or st.session_state[processed_key] != current_file_id:
-        try:
-            loaded_df = pd.read_csv(uploaded_file, sep=None, engine='python')
-            loaded_df.columns = loaded_df.columns.astype(str).str.replace('\ufeff', '', regex=False).str.strip()
-            
-            if 'Nazwisko' in loaded_df.columns:
-                loaded_df = loaded_df[loaded_df['Nazwisko'].notna()]
-            
-            if 'Wiek' in loaded_df.columns:
-                loaded_df['Wiek'] = loaded_df['Wiek'].apply(parse_age)
-                loaded_df = loaded_df[loaded_df['Wiek'] > 0]
-                
-            if 'Wartość' in loaded_df.columns:
-                loaded_df['Wartość_Numeryczna'] = loaded_df['Wartość'].apply(parse_market_value)
-            else:
-                loaded_df['Wartość_Numeryczna'] = 0
-
-            if 'Zarobki' in loaded_df.columns:
-                loaded_df['Zarobki_Numeryczne'] = loaded_df['Zarobki'].apply(parse_wages)
-            else:
-                loaded_df['Zarobki_Numeryczne'] = 0
-                
-            loaded_df['Liga'] = loaded_df['Liga'].astype(str).str.replace('\xa0', ' ', regex=False).str.strip()
-            loaded_df['Liga'] = loaded_df['Liga'].map(MAPOWANIE_NAZW_LIG).fillna(loaded_df['Liga'])
-            
-            st.session_state["data_storage"][pozycja_nazwa] = loaded_df
-            st.session_state[processed_key] = current_file_id
-            
-        except Exception as e:
-            pass
+    try:
+        processed_df = load_and_clean_data(uploaded_file)
+        st.session_state["data_storage"][pozycja_nazwa] = processed_df
+    except Exception as e:
+        st.error(f"Wystąpił błąd podczas ładowania lub przetwarzania pliku: {e}")
 
 df = st.session_state["data_storage"][pozycja_nazwa]
 
@@ -326,7 +351,7 @@ if df is not None and not df.empty:
     unikalne_ligi = df['Liga'].dropna().unique().tolist() if 'Liga' in df.columns else []
     dostepne_ligi = sorted(unikalne_ligi, key=lambda x: zdefiniowana_kolejnosc.index(x) if x in zdefiniowana_kolejnosc else 999)
     
-    dostepne_nogi = sorted(df['Noga'].dropna().unique()) if 'Noga' in df.columns else []
+    dostepne_nogi = sorted(df['Preferowana noga'].dropna().unique()) if 'Preferowana noga' in df.columns else []
     
     min_age = int(df['Wiek'].min()) if 'Wiek' in df.columns and not df.empty else 15
     max_age = int(df['Wiek'].max()) if 'Wiek' in df.columns and not df.empty else 45
@@ -349,7 +374,7 @@ if df is not None and not df.empty:
         
         # --- FILTR KONCA KONTRAKTU ---
         filtr_kontraktu = False
-        if 'Koniec kontraktu' in df.columns:
+        if 'Wygasa' in df.columns:
             filtr_kontraktu = st.checkbox("Tylko kończące się kontrakty (do 6 mies.)", key=f"contract_{pozycja_nazwa}")
 
         age_filter = st.slider("Wiek:", min_age, max_age, (min_age, max_age), key=f"age_{pozycja_nazwa}")
@@ -411,18 +436,18 @@ if df is not None and not df.empty:
     if 'Liga' in filtered_df.columns and wybrane_ligi:
         filtered_df = filtered_df[filtered_df['Liga'].isin(wybrane_ligi)]
         
-    if 'Noga' in filtered_df.columns and wybrana_noga:
-        filtered_df = filtered_df[filtered_df['Noga'].isin(wybrana_noga)]
+    if 'Preferowana noga' in filtered_df.columns and wybrana_noga:
+        filtered_df = filtered_df[filtered_df['Preferowana noga'].isin(wybrana_noga)]
         
-    if 'Koniec kontraktu' in filtered_df.columns and filtr_kontraktu:
-        expiry_dates = pd.to_datetime(filtered_df['Koniec kontraktu'], dayfirst=True, errors='coerce')
+    if 'Wygasa' in filtered_df.columns and filtr_kontraktu:
+        expiry_dates = pd.to_datetime(filtered_df['Wygasa'], dayfirst=True, errors='coerce')
         if not expiry_dates.dropna().empty:
             filtered_df = filtered_df[expiry_dates <= (expiry_dates.min() + pd.Timedelta(days=180))]
     
     if search:
         cond = pd.Series(False, index=filtered_df.index)
-        if 'Nazwisko' in filtered_df.columns:
-            cond |= filtered_df['Nazwisko'].str.contains(search, case=False, na=False)
+        if 'Piłkarz' in filtered_df.columns:
+            cond |= filtered_df['Piłkarz'].str.contains(search, case=False, na=False)
         if 'Klub' in filtered_df.columns:
             cond |= filtered_df['Klub'].str.contains(search, case=False, na=False)
         filtered_df = filtered_df[cond]
@@ -435,14 +460,20 @@ if df is not None and not df.empty:
     cols_to_show = [c for c in dedykowane_kolumny if c in filtered_df.columns]
     
     if len(cols_to_show) <= 2:
-        zapasowe_kolumny = ['SCORE', 'Percentyl', 'Nazwisko', 'Klub', 'Liga', 'Wiek', 'Wartość']
+        zapasowe_kolumny = ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Cena']
         cols_to_show = [c for c in zapasowe_kolumny if c in filtered_df.columns]
 
-    if 'Zarobki' in filtered_df.columns and 'Zarobki' not in cols_to_show:
-        idx = cols_to_show.index('Wartość') + 1 if 'Wartość' in cols_to_show else len(cols_to_show)
-        cols_to_show.insert(idx, 'Zarobki')
-    if 'Koniec kontraktu' in filtered_df.columns and 'Koniec kontraktu' not in cols_to_show:
-        cols_to_show.append('Koniec kontraktu')
+    if 'Płaca' in filtered_df.columns and 'Płaca' not in cols_to_show:
+        idx = cols_to_show.index('Cena') + 1 if 'Cena' in cols_to_show else len(cols_to_show)
+        cols_to_show.insert(idx, 'Płaca')
+        
+    if 'Wygasa' in filtered_df.columns and 'Wygasa' not in cols_to_show:
+        if 'Płaca' in cols_to_show:
+            idx_wygasa = cols_to_show.index('Płaca') + 1
+            cols_to_show.insert(idx_wygasa, 'Wygasa')
+        else:
+            idx_wygasa = cols_to_show.index('Cena') + 1 if 'Cena' in cols_to_show else len(cols_to_show)
+            cols_to_show.insert(idx_wygasa, 'Wygasa')
 
     format_dict = {}
     if 'SCORE' in filtered_df.columns:
@@ -451,7 +482,7 @@ if df is not None and not df.empty:
         format_dict['Wiek'] = '{:.0f}'
     
     for col in cols_to_show:
-        if col not in ['SCORE', 'Percentyl', 'Wiek', 'Nazwisko', 'Klub', 'Liga', 'Pozycja', 'Wartość', 'Zarobki', 'Koniec kontraktu', 'Kraj', 'Noga'] and pd.api.types.is_numeric_dtype(filtered_df[col]):
+        if col not in ['SCORE', 'Percentyl', 'Wiek', 'Piłkarz', 'Klub', 'Liga', 'Pozycja', 'Cena', 'Płaca', 'Wygasa', 'Kraj', 'Preferowana noga'] and pd.api.types.is_numeric_dtype(filtered_df[col]):
             format_dict[col] = '{:.1f}'
 
     jasna_paleta = mcolors.LinearSegmentedColormap.from_list("jasne_kolory", ["#ff9999", "#ffff99", "#99ff99"])
@@ -500,22 +531,22 @@ if df is not None and not df.empty:
     
     zawodnicy_do_porownania = st.multiselect(
         "Wybierz dokładnie dwóch zawodników z tabeli, aby nałożyć ich statystyki na radar percentylowy:",
-        options=filtered_df['Nazwisko'].unique() if 'Nazwisko' in filtered_df.columns else [],
+        options=filtered_df['Piłkarz'].unique() if 'Piłkarz' in filtered_df.columns else [],
         max_selections=2,
         key=f"compare_{pozycja_nazwa}"
     )
 
     if len(zawodnicy_do_porownania) == 2:
-        df_compare = filtered_df[filtered_df['Nazwisko'].isin(zawodnicy_do_porownania)]
+        df_compare = filtered_df[filtered_df['Piłkarz'].isin(zawodnicy_do_porownania)]
         
-        kolumny_ignorowane_porownanie = ['SCORE', 'Percentyl', 'Nazwisko', 'Wiek', 'Klub', 'Liga', 'Pozycja', 'Wartość', 'Noga', 'Kraj', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Zarobki', 'Koniec kontraktu']
+        kolumny_ignorowane_porownanie = ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Klub', 'Liga', 'Pozycja', 'Cena', 'Preferowana noga', 'Kraj', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Płaca', 'Wygasa']
         stat_cols = [c for c in dedykowane_kolumny if c not in kolumny_ignorowane_porownanie and c in df_compare.columns]
         
         if stat_cols:
             fig = go.Figure()
             
             for _, row in df_compare.iterrows():
-                player_name = row['Nazwisko']
+                player_name = row['Piłkarz']
                 player_percentiles = []
                 
                 for col in stat_cols:
@@ -582,6 +613,93 @@ if df is not None and not df.empty:
             st.info("Brak szczegółowych statystyk meczowych do wygenerowania radaru.")
     elif len(zawodnicy_do_porownania) == 1:
         st.info("Wybierz jeszcze drugiego zawodnika z listy.")
+
+    # --- NOWA SEKCJA: ZNAJDŹ SOBOWTÓRA ---
+    st.markdown("---")
+    st.subheader("Znajdź sobowtóra (Machine Learning)", anchor=False)
+    st.markdown("Wybierz gwiazdę ze swojej drużyny. Algorytm na podstawie dystansu kosinusowego przeanalizuje styl gry (statystyki per 90 minut) i wskaże 5 graczy z przefiltrowanej bazy o najwierniej odwzorowanym profilu (np. tanie, młode zastępstwo).")
+    
+    opcje_sobowtor = [""] + list(filtered_df['Piłkarz'].unique()) if 'Piłkarz' in filtered_df.columns else [""]
+    zawodnik_do_zastapienia = st.selectbox(
+        "Kogo chcesz zastąpić?",
+        options=opcje_sobowtor,
+        key=f"ml_clone_{pozycja_nazwa}"
+    )
+
+    if zawodnik_do_zastapienia:
+        kolumny_ignorowane_ml = ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Klub', 'Liga', 'Pozycja', 'Cena', 'Preferowana noga', 'Kraj', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Płaca', 'Wygasa']
+        cechy_ml = [c for c in filtered_df.columns if c not in kolumny_ignorowane_ml]
+
+        if cechy_ml:
+            ml_data = pd.DataFrame(index=filtered_df.index)
+            for c in cechy_ml:
+                ml_data[c] = pd.to_numeric(
+                    filtered_df[c].astype(str).str.replace('%', '', regex=False).str.replace(',', '.', regex=False).str.strip(), 
+                    errors='coerce'
+                ).fillna(0.0)
+            
+            if zawodnik_do_zastapienia in filtered_df['Piłkarz'].values:
+                # Skalowanie Danych
+                scaler = StandardScaler()
+                X_scaled = scaler.fit_transform(ml_data)
+                
+                # Znalezienie indeksu wybranego zawodnika
+                df_reset = filtered_df.reset_index()
+                idx_w_macierzy = df_reset.index[df_reset['Piłkarz'] == zawodnik_do_zastapienia].tolist()[0]
+                wektor_zawodnika = X_scaled[idx_w_macierzy].reshape(1, -1)
+                
+                # Użycie Cosine Similarity (Podobieństwo Kosinusowe)
+                podobienswa = cosine_similarity(wektor_zawodnika, X_scaled)[0]
+                
+                df_wyniki = filtered_df.copy()
+                df_wyniki['Podobieństwo'] = podobienswa
+                
+                # Wyciągnięcie top 5 i pozbycie się z wyników samego poszukiwanego gracza
+                top_5_podobnych = df_wyniki[df_wyniki['Piłkarz'] != zawodnik_do_zastapienia].sort_values(by='Podobieństwo', ascending=False).head(5)
+                
+                # Ustawienie nazwy "Zgodność"
+                top_5_podobnych['Zgodność'] = (top_5_podobnych['Podobieństwo'].clip(0, 1) * 100).round(1).astype(str) + "%"
+                
+                st.success(f"Oto 5 najlepszych alternatyw dla: **{zawodnik_do_zastapienia}** (wśród widocznych w tabeli zawodników)")
+                
+                # Ściśle określona kolejność kolumn przez użytkownika
+                kolumny_do_pokazania_ml = ['SCORE', 'Zgodność', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Pozycja', 'Cena', 'Płaca', 'Wygasa']
+                # Bezpieczne filtrowanie w razie gdyby jakiejś kolumny nie było w arkuszu (np. Pozycji u Bramkarza)
+                kolumny_do_pokazania_ml = [c for c in kolumny_do_pokazania_ml if c in top_5_podobnych.columns]
+                
+                # --- STYLOWANIE TABELI ML ---
+                format_dict_ml = {}
+                if 'SCORE' in kolumny_do_pokazania_ml:
+                    format_dict_ml['SCORE'] = '{:.0f}'
+                if 'Wiek' in kolumny_do_pokazania_ml:
+                    format_dict_ml['Wiek'] = '{:.0f}'
+                
+                df_ml_style = top_5_podobnych[kolumny_do_pokazania_ml].style.format(format_dict_ml)
+                df_ml_style = df_ml_style.apply(highlight_tottenham, axis=1)
+
+                if 'SCORE' in kolumny_do_pokazania_ml:
+                    df_ml_style = df_ml_style.background_gradient(subset=['SCORE'], cmap=jasna_paleta)
+                    df_ml_style = df_ml_style.set_properties(subset=['SCORE'], **{'color': 'black', 'text-align': 'center'})
+
+                df_ml_style = df_ml_style.set_table_styles([
+                    {'selector': 'th', 'props': [('text-align', 'center')]}
+                ], overwrite=False)
+
+                col_config_ml = {
+                    'Zgodność': st.column_config.TextColumn("Zgodność", help="Procentowe podobieństwo kształtu statystyk meczowych do poszukiwanego zawodnika."),
+                    'SCORE': st.column_config.Column("SCORE", alignment="center")
+                }
+                
+                st.dataframe(
+                    df_ml_style,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config=col_config_ml
+                )
+            else:
+                st.warning("Wybrany zawodnik nie spełnia obecnych filtrów w panelu bocznym. Zmień filtry (np. wiek, cenę, ligę), aby aplikacja mogła załadować jego statystyki.")
+        else:
+            st.info("Brak wystarczających kolumn liczbowych do uruchomienia algorytmu uczenia maszynowego.")
         
     # --- SEKCJA WYKRESÓW (Moneyball i Top 10) ---
     if 'Wartość_Numeryczna' in filtered_df.columns and 'SCORE' in filtered_df.columns:
@@ -601,26 +719,26 @@ if df is not None and not df.empty:
                 score_margin = max_score * 0.05 if max_score != 0 else 1
             
             tooltip_cols = [
-                alt.Tooltip('Nazwisko:N', title='Nazwisko'),
+                alt.Tooltip('Piłkarz:N', title='Piłkarz'),
                 alt.Tooltip('Wiek:Q', title='Wiek', format='.0f'),
                 alt.Tooltip('Klub:N', title='Klub'),
-                alt.Tooltip('Wartość:N', title='Wartość'),
+                alt.Tooltip('Cena:N', title='Cena'),
                 alt.Tooltip('SCORE:Q', title='SCORE', format='.0f'),
                 alt.Tooltip('Percentyl:Q', title='Percentyl', format='.0f'),
                 alt.Tooltip('Liga:N', title='Liga')
             ]
-            if 'Zarobki' in chart_data.columns:
-                tooltip_cols.append(alt.Tooltip('Zarobki:N', title='Zarobki'))
+            if 'Płaca' in chart_data.columns:
+                tooltip_cols.append(alt.Tooltip('Płaca:N', title='Płaca'))
             
             chart = alt.Chart(chart_data).mark_circle(size=300).encode(
                 x=alt.X('Wartość_Numeryczna', 
-                        title='Wartość',
+                        title='Cena',
                         scale=alt.Scale(domain=[min_val - 3000000, max_val + (max_val*0.1)])),
                 y=alt.Y('SCORE:Q', 
                         title='Control Score', 
                         axis=alt.Axis(format='.0f'),
                         scale=alt.Scale(zero=False, domain=[min_score - score_margin, max_score + score_margin])),
-                color=alt.Color('Nazwisko', legend=None),
+                color=alt.Color('Piłkarz', legend=None),
                 tooltip=tooltip_cols
             ).properties(height=500)
                 
@@ -629,7 +747,7 @@ if df is not None and not df.empty:
             st.markdown("---")
             st.subheader("Najlepsi zawodnicy w poszczególnych statystykach (Top 10)", anchor=False)
             
-            kolumny_ignorowane = ['SCORE', 'Percentyl', 'Nazwisko', 'Wiek', 'Klub', 'Liga', 'Pozycja', 'Wartość', 'Noga', 'Kraj', 'Wartość_Numeryczna', 'Zarobki', 'Zarobki_Numeryczne', 'Koniec kontraktu']
+            kolumny_ignorowane = ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Klub', 'Liga', 'Pozycja', 'Cena', 'Preferowana noga', 'Kraj', 'Wartość_Numeryczna', 'Płaca', 'Zarobki_Numeryczne', 'Wygasa']
             kolumny_statystyk = [c for c in dedykowane_kolumny if c not in kolumny_ignorowane and c in filtered_df.columns]
             
             if kolumny_statystyk:
@@ -656,7 +774,7 @@ if df is not None and not df.empty:
                         
                         bar_chart = alt.Chart(stat_bar_data).mark_bar().encode(
                             x=alt.X(field=stat_col, type='quantitative', title=stat_col),
-                            y=alt.Y('Nazwisko', type='nominal', sort=sort_order, title=''),
+                            y=alt.Y('Piłkarz', type='nominal', sort=sort_order, title=''),
                             color=alt.Color('SCORE:Q', scale=alt.Scale(scheme='blues'), legend=None),
                             tooltip=tooltip_cols + [alt.Tooltip(f'{stat_col}:Q', title=stat_col, format=stat_format)]
                         ).properties(height=350, title=stat_col)

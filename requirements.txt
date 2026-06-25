@@ -3,5 +3,4 @@ pandas
 altair
 numpy
 matplotlib
-openpyxl
 plotly
