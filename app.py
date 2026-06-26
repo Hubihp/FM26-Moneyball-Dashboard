@@ -93,38 +93,38 @@ TLUMACZENIE_KOLUMN = {
 
 # Mnożniki lig bazowe
 MNOZNIKI_LIG = {
-    "Premier League": 0.918,               # ANG 1
-    "EFL Championship": 0.811,             # ANG 2
-    "Liga Profesional de Fútbol": 0.809,   # ARG 1
-    "Primera Nacional": 0.749,             # ARG 2
-    "Jupiler Pro League": 0.816,           # BEL 1
-    "Challenger Pro League": 0.695,        # BEL 2
-    "Série A": 0.826,                      # BRA 1
-    "Série B": 0.721,                      # BRA 2
-    "Hrvatska nogometna liga": 0.792,      # CHO 1
-    "Prva nogometa liga": 0.673,           # CHO 2
-    "Ligue 1": 0.856,                      # FRA 1
-    "Ligue 2": 0.758,                      # FRA 2
-    "LaLiga": 0.866,                       # HIS 1
-    "LaLiga 2": 0.777,                     # HIS 2
-    "Eredivisie": 0.783,                   # HOL 1
-    "Eerste Divisie": 0.66,                # HOL 2
-    "J1 League": 0.777,                    # JAP 1
-    "J2 League": 0.695,                    # JAP 2
-    "Liga MX": 0.778,                      # MEX 1
-    "Liga Rozwojowa": 0.7,                 # MEX 2
-    "Bundesliga": 0.867,                   # NIE 1
-    "2. Bundesliga": 0.778,                # NIE 2
-    "Ekstraklasa": 0.795,                  # POL 1
-    "I liga": 0.686,                       # POL 2
-    "Liga Portugal": 0.814,                # POR 1
-    "Liga Portugal 2": 0.726,              # POR 2
-    "MLS": 0.784,                          # USA 1
-    "Serie A": 0.86,                       # WLO 1
-    "Serie B": 0.759                       # WLO 2
+    "Premier League": 0.918,
+    "EFL Championship": 0.811,
+    "Liga Profesional de Fútbol": 0.809,
+    "Primera Nacional": 0.749,
+    "Jupiler Pro League": 0.816,
+    "Challenger Pro League": 0.695,
+    "Série A": 0.826,
+    "Série B": 0.721,
+    "Hrvatska nogometna liga": 0.792,
+    "Prva nogometa liga": 0.673,
+    "Ligue 1": 0.856,
+    "Ligue 2": 0.758,
+    "LaLiga": 0.866,
+    "LaLiga 2": 0.777,
+    "Eredivisie": 0.783,
+    "Eerste Divisie": 0.66,
+    "J1 League": 0.777,
+    "J2 League": 0.695,
+    "Liga MX": 0.778,
+    "Liga Rozwojowa": 0.7,
+    "Bundesliga": 0.867,
+    "2. Bundesliga": 0.778,
+    "Ekstraklasa": 0.795,
+    "I liga": 0.686,
+    "Liga Portugal": 0.814,
+    "Liga Portugal 2": 0.726,
+    "MLS": 0.784,
+    "Serie A": 0.86,
+    "Serie B": 0.759
 }
 
-# Słownik mapujący wyświetlane nazwy lig
+# Słownik mapujący wyświetlane nazwy lig w aplikacji
 MAPOWANIE_NAZW_LIG = {
     "Premier League": "Premier League (ANG 1)",
     "EFL Championship": "EFL Championship (ANG 2)",
@@ -315,21 +315,20 @@ def clear_filters(pozycja, min_a, max_a, max_p):
         if f"weight_{pozycja}_{stat_name}" in st.session_state:
             st.session_state[f"weight_{pozycja}_{stat_name}"] = float(default_val)
 
-# Zaktualizowana kolejność: Wiek jest zawsze po Piłkarzu, a Preferowana noga zaraz po Wieku
 KOLUMNY_PER_POZYCJA = {
-    "Bramkarz": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Cena', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Uniknięte oczekiwane gole/90'],
-    "Środkowy Obrońca": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Cena', 'Kluczowe podania z gry/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', '% wygranych pojedynków główkowych'],
-    "Boczny Obrońca": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Pozycja', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90'],
-    "Defensywny Pomocnik": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', '% wygranych pojedynków główkowych'],
-    "Środkowy Pomocnik": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Liczba dryblingów/90'],
-    "Skrzydłowy": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Pozycja', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole na strzał', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Liczba dryblingów/90'],
-    "Napastnik": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole na strzał', 'Skuteczność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Liczba dryblingów/90']
+    "Bramkarz": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Cena', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Uniknięte oczekiwane gole/90'],
+    "Środkowy Obrońca": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja','Preferowana noga', 'Liga', 'Klub', 'Cena', 'Kluczowe podania z gry/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', '% wygranych pojedynków główkowych'],
+    "Boczny Obrońca": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Pozycja', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90'],
+    "Defensywny Pomocnik": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', '% wygranych pojedynków główkowych'],
+    "Środkowy Pomocnik": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Liczba dryblingów/90'],
+    "Skrzydłowy": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Pozycja', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole na strzał', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Liczba dryblingów/90'],
+    "Napastnik": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole na strzał', 'Skuteczność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Próby podań/90', 'Liczba dryblingów/90']
 }
 
 # --- NAGŁÓWEK GŁÓWNY ---
 st.markdown("<div style='font-size: 2.7rem; font-weight: bold; margin-top: -3.5rem; margin-bottom: 1rem;'>FM26 Moneyball Dashboard</div>", unsafe_allow_html=True)
 
-# --- SIDEBAR (WYBÓR POZYCJI I WGACIE PLIKU) ---
+# --- SIDEBAR (WYBÓR POZYCJI I WGRANIE PLIKU) ---
 with st.sidebar:
     st.markdown("### Wybierz pozycję")
     pozycja_nazwa = st.radio("Pozycja", POZYCJE, label_visibility="collapsed")
