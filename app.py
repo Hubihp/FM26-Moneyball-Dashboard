@@ -8,7 +8,11 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics.pairwise import cosine_similarity
 
 # Konfiguracja strony
-st.set_page_config(page_title="FM26 Moneyball Dashboard", layout="wide")
+st.set_page_config(
+    page_title="FM26 Moneyball Dashboard",
+    page_icon="⚽",
+    layout="wide"
+)
 
 # Ukrywanie alertów po 5 sekundach, usuwanie ikon hiperłączy, poprawa odstępów w sidebarze oraz modyfikacja uploada
 st.markdown("""
