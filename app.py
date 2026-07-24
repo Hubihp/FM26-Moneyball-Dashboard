@@ -101,7 +101,7 @@ MNOZNIKI_LIG = {
     "Jupiler Pro League": 0.816,
     "Profvoetbal 1A": 0.816,
     "Challenger Pro League": 0.695,
-    "Profvoetbal 1B: 0.695,
+    "Profvoetbal 1B": 0.695,
     "Série A": 0.826,
     "Brasileirão": 0.826,
     "Série B": 0.721,
