@@ -143,6 +143,7 @@ MAPOWANIE_NAZW_LIG = {
     "Jupiler Pro League": "Jupiler Pro League (BEL 1)",
     "Profvoetbal 1A": "Jupiler Pro League (BEL 1)",
     "Challenger Pro League": "Challenger Pro League (BEL 2)",
+    "Profvoetbal 1B": "Challenger Pro League (BEL 2)",
     "Série A": "Série A (BRA 1)",
     "Brasileirão": "Série A (BRA 1)",
     "Série B": "Série B (BRA 2)",
