@@ -35,3 +35,14 @@ def test_podejrzane_tabele_i_diagnoza_klubu():
     assert opis["wybrana_liga"]["database_id"] == 50
     assert {t["competition_id"] for t in opis["tabele"]} == {5, 6}
     assert zbadaj.opisz_klub("Nie ma", kluby, tabele, liga_klubu, nacja, baza)["blad"]
+
+
+def test_porownanie_lig_terminarz_vs_tabele():
+    from fm_moneyball.zrodla.zapis_fm import KandydatLigi
+    kluby = [NS(uid=i, name=f"Klub {i}", nation_id=1) for i in (1, 2, 3)]
+    z_terminarza = {1: [KandydatLigi(30, 500, 5, 1)], 2: [KandydatLigi(30, 500, 5, 1)]}
+    z_tabel = {1: [KandydatLigi(20, 500, 5, 1)], 2: [KandydatLigi(12, 901, 9, 1)], 3: [KandydatLigi(18, 600, 6, 1)]}
+    wynik = zbadaj.porownaj_ligi(z_terminarza, z_tabel, kluby, {5: "Serie A"})
+    assert wynik["liczniki"] == {"zgodne": 1, "rozne": 1, "tylko_tabele": 1}
+    assert wynik["przyklady"] == [{"klub": "Klub 2", "rodzaj": "rozne", "tabele": "Rozgrywki #9",
+                                   "terminarz": "Serie A", "mecze": 30}]

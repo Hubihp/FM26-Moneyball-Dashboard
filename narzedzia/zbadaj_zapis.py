@@ -31,7 +31,8 @@ import pandas as pd  # noqa: E402
 from fm_moneyball.stale import KOLUMNY_PER_POZYCJA  # noqa: E402
 from fm_moneyball.zrodla.csv_fm import wczytaj_csv  # noqa: E402
 from fm_moneyball.zrodla.zapis_fm import (PLIK_NAZW_ROZGRYWEK, OpcjeZapisu, kandydaci_lig,  # noqa: E402
-                                          ligi_klubow, opis_tabeli, mapa_nazw_z_csv, sumuj_statystyki,
+                                          kandydaci_lig_z_terminarza, kluby_drugorzedne,
+                                          ligi_klubow, opis_tabeli, polacz_kandydatow, mapa_nazw_z_csv, sumuj_statystyki,
                                           wczytaj_nazwy_rozgrywek, zapisz_nazwy_rozgrywek, zbuduj_ramki)
 
 KOLUMNY_PROBKI = ['Piłkarz', 'Wiek', 'Pozycja', 'Liga', 'Minuty', 'Cena', 'Płaca', 'Wygasa', 'CA', 'PA',
@@ -78,7 +79,36 @@ def podejrzane_tabele(tabele, liga_klubu, nacja, baza, kluby):
     return wynik[:40]
 
 
-def opisz_klub(nazwa, kluby, tabele, liga_klubu, nacja, baza):
+def porownaj_ligi(z_terminarza, z_tabel, kluby, nazwy, limit=15):
+    """Kluby, dla ktorych liga z terminarza i liga z tabel sie roznia (do recznej kontroli)."""
+    liga_t = ligi_klubow([], [], kluby, nazwy, kandydaci=z_terminarza)
+    liga_tab = ligi_klubow([], [], kluby, nazwy, kandydaci=z_tabel)
+    nazwa_klubu = {k.uid: k.name for k in kluby}
+    licznik = Counter()
+    przyklady = []
+    for uid in set(liga_t) | set(liga_tab):
+        a, b = liga_tab.get(uid), liga_t.get(uid)
+        if a is None:
+            licznik["tylko_terminarz"] += 1
+            klucz = "tylko_terminarz"
+        elif b is None:
+            licznik["tylko_tabele"] += 1
+            continue
+        elif a.competition_id != b.competition_id:
+            licznik["rozne"] += 1
+            klucz = "rozne"
+        else:
+            licznik["zgodne"] += 1
+            continue
+        if len(przyklady) < limit:
+            mecze = z_terminarza[uid][0].rozmiar
+            przyklady.append({"klub": nazwa_klubu.get(uid), "rodzaj": klucz,
+                              "tabele": None if a is None else a.etykieta, "terminarz": b.etykieta,
+                              "mecze": mecze})
+    return {"liczniki": dict(licznik), "przyklady": przyklady}
+
+
+def opisz_klub(nazwa, kluby, tabele, liga_klubu, nacja, baza, mecze=(), data_gry=None):
     """Wszystko, co wplywa na przypisanie ligi klubowi: jego druzyny i tabele, w ktorych wystepuja."""
     szukana = nazwa.strip().lower()
     pasujace = [k for k in kluby if szukana in {(k.name or "").lower(), (k.short_name or "").lower()}]
@@ -96,6 +126,11 @@ def opisz_klub(nazwa, kluby, tabele, liga_klubu, nacja, baza):
                     opis.update(team_id=w.team_id, team_slot=w.team_slot, wiersz_club_uid=w.club_uid,
                                 pozycja=w.position)
                     tabele_klubu.append(opis)
+        terminarz = Counter()
+        for m in mecze:
+            if m.round is None and m.competition_id is not None and klub.uid in (m.home_club_uid, m.away_club_uid):
+                if data_gry is None or m.date is None or abs((m.date - data_gry).days) <= 300:
+                    terminarz[m.competition_id] += 1
         liga = liga_klubu.get(klub.uid)
         wynik.append({
             "szukano": nazwa, "klub": klub.name, "uid": klub.uid, "nation_id": klub.nation_id,
@@ -104,6 +139,7 @@ def opisz_klub(nazwa, kluby, tabele, liga_klubu, nacja, baza):
             "wybrana_liga": None if liga is None else {"competition_id": liga.competition_id,
                                                        "database_id": liga.database_id, "nazwa": liga.nazwa},
             "tabele": tabele_klubu,
+            "terminarz_mecze_bez_rundy": [[comp, baza.get(comp), ile] for comp, ile in terminarz.most_common(8)],
         })
     return wynik
 
@@ -135,17 +171,32 @@ def main():
             kluby = _czas("kluby", lambda: list(zapis.clubs()), czasy)
             zawodnicy = _czas("zawodnicy", lambda: list(zapis.players()), czasy)
             statystyki = _czas("statystyki sezonu", lambda: list(zapis.player_season_stats()), czasy)
+            rozgrywki = list(zapis.competitions())
+            try:
+                mecze = _czas("terminarz", lambda: list(zapis.fixtures()), czasy)
+            except Exception as e:
+                print(f"  terminarz: BLAD {e}")
+                raport["blad_terminarza"] = str(e)
+                mecze = []
             try:
                 tabele = _czas("tabele ligowe", lambda: list(zapis.league_tables()), czasy)
-                rozgrywki = list(zapis.competitions())
             except Exception as e:
                 print(f"  tabele ligowe: BLAD {e}")
                 raport["blad_tabel_ligowych"] = str(e)
-                tabele, rozgrywki = [], []
+                tabele = []
             zarzadzane = list(zapis.managed_clubs())
     raport["ostrzezenia_fmsave"] = sorted({f"{w.category.__name__}: {w.message}"[:300] for w in zlapane})[:20]
 
-    kandydaci = kandydaci_lig(tabele, rozgrywki, kluby)
+    drugorzedne = kluby_drugorzedne(kluby)
+    odrzucone = Counter()
+    z_terminarza = kandydaci_lig_z_terminarza(mecze, rozgrywki, kluby, info.game_date,
+                                              drugorzedne=drugorzedne, statystyki=odrzucone)
+    z_tabel = kandydaci_lig(tabele, rozgrywki, kluby, drugorzedne=drugorzedne)
+    kandydaci = polacz_kandydatow(z_terminarza, z_tabel)
+    raport["terminarz"] = {"mecze": len(mecze), "kluby_z_liga_z_terminarza": len(z_terminarza),
+                           "kluby_z_liga_z_tabel": len(z_tabel), "kluby_drugorzedne": len(drugorzedne),
+                           "odrzucone_rozgrywki": dict(odrzucone)}
+    print("Terminarz:", json.dumps(raport["terminarz"], ensure_ascii=False))
     nazwy = wczytaj_nazwy_rozgrywek()
     if args.csv:
         ramki_csv = []
@@ -164,6 +215,8 @@ def main():
             nowe = set(mapa.values())
             nazwy = {**{k: v for k, v in nazwy.items() if k not in mapa and v not in nowe}, **mapa}
     liga_klubu = ligi_klubow(tabele, rozgrywki, kluby, nazwy, kandydaci=kandydaci)
+    raport["porownanie_lig"] = porownaj_ligi(z_terminarza, z_tabel, kluby, nazwy)
+    print("Terminarz vs tabele:", json.dumps(raport["porownanie_lig"]["liczniki"], ensure_ascii=False))
     rodzaje = pd.Series([str(s.kind) for s in statystyki]).value_counts().to_dict()
     raport["liczniki"] = {
         "kluby": len(kluby), "zawodnicy": len(zawodnicy), "wiersze_statystyk": len(statystyki),
@@ -179,7 +232,8 @@ def main():
     if raport["tabele_podejrzane"]:
         print(f"Podejrzane tabele ligowe: {len(raport['tabele_podejrzane'])} (szczegóły w raporcie)")
     if args.klub:
-        raport["kluby_diagnoza"] = [opisz_klub(n, kluby, tabele, liga_klubu, nacja, baza) for n in args.klub]
+        raport["kluby_diagnoza"] = [opisz_klub(n, kluby, tabele, liga_klubu, nacja, baza, mecze, info.game_date)
+                                    for n in args.klub]
         for opis in raport["kluby_diagnoza"]:
             print(f"\n--klub {json.dumps(opis, ensure_ascii=False, default=str)[:2000]}")
 
@@ -203,12 +257,12 @@ def main():
     print("Zawodnicy w analizie:", raport["zawodnicy_na_pozycji"])
 
     if zarzadzane:
-        moj = zarzadzane[0].club_name
+        moj, moj_uid = zarzadzane[0].club_name, zarzadzane[0].club_uid
         raport["moj_klub"] = moj
         wszyscy = zbuduj_ramki(zawodnicy, sumuj_statystyki(statystyki, opcje.rodzaj_statystyk), liga_klubu,
                                OpcjeZapisu(min_minut=0, tylko_kluby_w_lidze=False))
         kadra = pd.concat([d.assign(Grupa=p) for p, d in wszyscy.items()])
-        kadra = kadra[kadra['Klub'] == moj].sort_values('Minuty', ascending=False).head(20)
+        kadra = kadra[kadra['Klub_UID'] == moj_uid].sort_values('Minuty', ascending=False).head(20)
         kolumny = ['Grupa'] + [k for k in KOLUMNY_PROBKI if k in kadra.columns]
         raport["probka_kadry"] = json.loads(kadra[kolumny].round(2).to_json(orient="records", force_ascii=False))
         print(f"\nTwoja kadra ({moj}) - porównaj z ekranem w grze:")

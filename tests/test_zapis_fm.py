@@ -9,7 +9,8 @@ import pytest
 fmsave = pytest.importorskip("fmsave")
 
 from fm_moneyball.zrodla.zapis_fm import (KandydatLigi, OpcjeZapisu, glowna_pozycja, grupy_pozycji,  # noqa: E402
-                                          kandydaci_lig, ligi_klubow, mapa_nazw_z_csv, preferowana_noga, statystyki_kanoniczne,
+                                          kandydaci_lig, kandydaci_lig_z_terminarza, kluby_drugorzedne,
+                                          polacz_kandydatow, ligi_klubow, mapa_nazw_z_csv, preferowana_noga, statystyki_kanoniczne,
                                           sumuj_statystyki, zbuduj_ramki, zapisz_nazwy_rozgrywek,
                                           wczytaj_nazwy_rozgrywek)
 
@@ -148,7 +149,7 @@ def test_ligi_klubow():
     assert ligi[1].competition_id == 100 and ligi[1].etykieta == "Ekstraklasa"
     assert ligi[5].competition_id == 100
     assert 21 not in ligi and 27 not in ligi
-    assert ligi[19].etykieta == "Rozgrywki #10"
+    assert 19 not in ligi     # tylko we fragmencie tabeli (2 kluby) - to nie liga
 
 
 def _kluby(nazwy):
@@ -237,3 +238,68 @@ def test_domyslna_mapa_nazw_pasuje_do_mnoznikow():
     mapa = wczytaj_nazwy_rozgrywek(PLIK_NAZW_ROZGRYWEK)
     assert mapa and all(nazwa in MNOZNIKI_LIG for nazwa in mapa.values())
     assert len(set(mapa.values())) == len(mapa)
+
+
+# --- liga z terminarza ---------------------------------------------------------------------------
+DZIS = date(2032, 3, 21)
+
+
+def _mecz(comp, dom, wyj, dzien=DZIS, runda=None, slot_dom=0, slot_wyj=0):
+    return NS(competition_id=comp, round=runda, date=dzien, home_club_uid=dom, away_club_uid=wyj,
+              home_team_slot=slot_dom, away_team_slot=slot_wyj)
+
+
+def _kolejki(comp, uidy, ile_kolejek, dzien=DZIS):
+    """Kazdy z kazdym, az kazdy klub zagra `ile_kolejek` meczow (w przyblizeniu)."""
+    mecze = []
+    for i in range(ile_kolejek):
+        for j in range(0, len(uidy) - 1, 2):
+            a, b = uidy[(j + i) % len(uidy)], uidy[(j + 1 + i) % len(uidy)]
+            mecze.append(_mecz(comp, a, b, dzien))
+    return mecze
+
+
+def test_terminarz_liga_wygrywa_z_liga_stanowa_i_towarzyskimi():
+    kluby = [NS(uid=i, name=f"Clube {i}", nation_id=1) for i in range(1, 21)] + \
+            [NS(uid=i, name=f"Foreign {i}", nation_id=i) for i in range(50, 56)]
+    serie_a = list(range(1, 21))
+    mecze = (_kolejki(500, serie_a, 30, date(2032, 6, 1))                # Serie A: zaplanowana na przyszlosc
+             + _kolejki(901, list(range(1, 13)), 11)                      # liga stanowa
+             + [_mecz(777, 1, u) for u in range(50, 56)])                 # towarzyskie z zagranicznymi
+    rozgrywki = [NS(id=500, database_id=5), NS(id=901, database_id=9), NS(id=777, database_id=7)]
+    kandydaci = kandydaci_lig_z_terminarza(mecze, rozgrywki, kluby, DZIS)
+    assert kandydaci[1][0].competition_id == 500
+    assert {k.competition_id for k in kandydaci[1]} == {500, 901}     # towarzyskie odrzucone (mieszane kraje)
+    assert ligi_klubow([], [], kluby, kandydaci=kandydaci)[1].etykieta == "Rozgrywki #5"
+
+
+def test_terminarz_pomija_rundy_pucharowe_druzyny_rezerw_i_mecze_spoza_sezonu():
+    kluby = [NS(uid=i, name=f"K{i}", nation_id=1) for i in range(1, 9)]
+    uidy = list(range(1, 9))
+    mecze = (_kolejki(1, uidy, 10, date(2030, 1, 1))                     # dawny sezon - poza oknem
+             + [_mecz(2, a, a + 1, runda=NS(raw=7)) for a in range(1, 8)]   # puchar (runda)
+             + [_mecz(3, a, a + 1, slot_dom=1) for a in range(1, 8)])        # druzyny rezerw
+    assert kandydaci_lig_z_terminarza(mecze, [], kluby, DZIS) == {}
+
+
+def test_rozgrywki_kobiece_sa_pomijane():
+    meskie = [NS(uid=i, name=f"Klub {i}", nation_id=1) for i in range(1, 9)]
+    kobiece = [NS(uid=2_000_000_000 + i, name=f"Klub {i}", nation_id=1) for i in range(1, 9)]
+    assert kluby_drugorzedne(meskie + kobiece) == {k.uid for k in kobiece}
+    mecze = _kolejki(10, [k.uid for k in meskie], 14) + _kolejki(20, [k.uid for k in kobiece], 14)
+    kandydaci = kandydaci_lig_z_terminarza(mecze, [], meskie + kobiece, DZIS)
+    assert set(kandydaci) == {k.uid for k in meskie}
+    assert all(l[0].competition_id == 10 for l in kandydaci.values())
+
+
+def test_polacz_kandydatow_terminarz_ma_pierwszenstwo():
+    z_terminarza = {1: [KandydatLigi(30, 500, 5)]}
+    z_tabel = {1: [KandydatLigi(12, 901, 9)], 2: [KandydatLigi(18, 600, 6)]}
+    polaczeni = polacz_kandydatow(z_terminarza, z_tabel)
+    assert polaczeni[1][0].competition_id == 500 and polaczeni[2][0].competition_id == 600
+
+
+def test_klub_uid_w_ramce():
+    ramki = zbuduj_ramki([zawodnik(1, pozycje(stc=20))], sumuj_statystyki([wiersz_statystyk(1)], "league"),
+                         {10: _liga()}, OpcjeZapisu())
+    assert ramki["Napastnik"].iloc[0]["Klub_UID"] == 10

@@ -552,10 +552,22 @@ for col in cols_to_show:
 jasna_paleta = mcolors.LinearSegmentedColormap.from_list("jasne_kolory", ["#ff9999", "#ffff99", "#99ff99"])
 
 
-def podswietl_moj_klub(row):
-    if moj_klub and 'Klub' in row.index and pd.notna(row['Klub']) and moj_klub.lower() in str(row['Klub']).lower():
-        return ['background-color: #282933;' for _ in row]
-    return ['' for _ in row]
+# Z zapisu znamy uid mojego klubu - porownanie po uid nie myli go z klubem o tej samej nazwie
+# (np. kobieca "F.C. Barcelona"). Gdy uzytkownik wpisze inny klub, porownujemy po nazwie.
+moj_klub_uid = (wynik_zapisu.moj_klub_uid
+                if wynik_zapisu is not None and moj_klub and moj_klub == wynik_zapisu.moj_klub else None)
+
+
+def podswietl_moj_klub(zrodlo):
+    """Funkcja dla Styler.apply(axis=1); `zrodlo` to ramka z pelnymi danymi wierszy (takze Klub_UID)."""
+    def styl(row):
+        if moj_klub_uid is not None and 'Klub_UID' in zrodlo.columns:
+            moj = zrodlo.at[row.name, 'Klub_UID'] == moj_klub_uid
+        else:
+            klub = zrodlo.at[row.name, 'Klub'] if 'Klub' in zrodlo.columns else None
+            moj = bool(moj_klub) and pd.notna(klub) and moj_klub.lower() in str(klub).lower()
+        return ['background-color: #282933;' if moj else '' for _ in row]
+    return styl
 
 
 do_tabeli = filtered_df.head(int(maks_wierszy))
@@ -563,7 +575,7 @@ if len(filtered_df) > len(do_tabeli):
     st.caption(f"Pokazano {len(do_tabeli)} najlepszych z {len(filtered_df)} zawodników spełniających filtry "
                "(limit w Ustawieniach).")
 df_style = do_tabeli[cols_to_show].style.format(format_dict, na_rep="–")
-df_style = df_style.apply(podswietl_moj_klub, axis=1)
+df_style = df_style.apply(podswietl_moj_klub(do_tabeli), axis=1)
 if 'SCORE' in cols_to_show:
     df_style = df_style.background_gradient(subset=['SCORE'], cmap=jasna_paleta)
     df_style = df_style.set_properties(subset=['SCORE'], **{'color': 'black', 'text-align': 'center'})
@@ -663,7 +675,7 @@ if zawodnik_do_zastapienia:
         kolumny_ml = [c for c in ['SCORE', 'Zgodność', 'Piłkarz', 'Wiek', 'Preferowana noga', 'Klub', 'Liga', 'Pozycja',
                                   'Cena', 'Płaca', 'Wygasa'] if c in top5.columns]
         format_ml = {c: '{:.0f}' for c in ('SCORE', 'Wiek') if c in kolumny_ml}
-        stylowana = top5[kolumny_ml].style.format(format_ml, na_rep="–").apply(podswietl_moj_klub, axis=1)
+        stylowana = top5[kolumny_ml].style.format(format_ml, na_rep="–").apply(podswietl_moj_klub(top5), axis=1)
         if 'SCORE' in kolumny_ml:
             stylowana = stylowana.background_gradient(subset=['SCORE'], cmap=jasna_paleta)
             stylowana = stylowana.set_properties(subset=['SCORE'], **{'color': 'black', 'text-align': 'center'})

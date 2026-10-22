@@ -13,7 +13,7 @@ ktora mozna zbudowac automatycznie ze starych eksportow CSV (`zbuduj_mape_nazw_l
 import csv
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -43,6 +43,10 @@ POZYCJA_Z_KODU = {
 KOLEJNOSC_KODOW = ("gk", "dc", "sw", "dr", "dl", "wbr", "wbl", "dm", "mc", "amc", "mr", "ml", "amr", "aml", "stc")
 OCENA_NATURALNA = 18   # pozycja "naturalna" w FM to ocena 18-20
 MAKS_KLUBOW_W_LIDZE = 40   # wieksza "tabela" to nie liga (np. zbiorcza tabela towarzyska)
+MIN_KLUBOW_W_LIDZE = 6     # mniejsze tabele to fragmenty (1 klub = "100% z jednego kraju")
+MAKS_KLUBOW_W_TERMINARZU = 80
+OKNO_SEZONU_WSTECZ = timedelta(days=240)    # od poczatku biezacego sezonu...
+OKNO_SEZONU_NAPRZOD = timedelta(days=300)   # ...do jego konca (wlacznie z nierozegranymi kolejkami)
 
 # Liczniki sezonowe potrzebne do statystyk per 90 i odsetkow
 POLA_LICZNIKOW = (
@@ -97,6 +101,7 @@ class WynikZapisu:
     dane: dict
     data_gry: date | None = None
     moj_klub: str | None = None
+    moj_klub_uid: int | None = None
     nazwa_zapisu: str = ""
     build: str = ""
     ostrzezenia: list = field(default_factory=list)
@@ -225,6 +230,7 @@ def wiersz_zawodnika(zawodnik, liczniki, liga, opcje):
         "PA": getattr(ability, "potential", None),
         "Wypożyczony": bool(getattr(zawodnik, "on_loan", False)),
         "UID": zawodnik.uid,
+        "Klub_UID": zawodnik.club_uid,
     }
     wiersz.update(statystyki_kanoniczne(liczniki))
     return wiersz
@@ -275,24 +281,106 @@ def opis_tabeli(tabela, nacja):
     return wiersze, kraj, ile / len(wiersze)
 
 
-def kandydaci_lig(tabele, rozgrywki, kluby, prog_krajowy=0.8):
+def kluby_drugorzedne(kluby):
+    """
+    Kluby, dla ktorych istnieje inny klub o tej samej nazwie i kraju z nizszym uid. W FM26 to
+    przede wszystkim druzyny kobiece (np. A.S. Roma 1100 i 2000209836, FC Twente 1009 i 37087234).
+    """
+    najstarszy = {}
+    for klub in kluby:
+        nazwa = (getattr(klub, "name", None) or "").strip().lower()
+        if nazwa:
+            klucz = (nazwa, getattr(klub, "nation_id", None))
+            najstarszy[klucz] = min(najstarszy.get(klucz, klub.uid), klub.uid)
+    return {k.uid for k in kluby
+            if (getattr(k, "name", None) or "").strip()
+            and najstarszy[((k.name or "").strip().lower(), getattr(k, "nation_id", None))] != k.uid}
+
+
+def _czy_krajowe(uidy, nacja, drugorzedne, prog_krajowy, min_klubow, maks_klubow, statystyki=None):
+    """Kraj rozgrywek albo None, gdy to nie liga krajowa (miedzynarodowe, za male/duze, kobiece)."""
+    def odrzuc(powod):
+        if statystyki is not None:
+            statystyki[powod] += 1
+        return None
+    n = len(uidy)
+    if not min_klubow <= n <= maks_klubow:
+        return odrzuc("rozmiar")
+    znane = [nacja.get(u) for u in uidy if nacja.get(u) is not None]
+    if not znane:
+        return odrzuc("bez_kraju")
+    kraj, ile = Counter(znane).most_common(1)[0]
+    if ile / n < prog_krajowy:
+        return odrzuc("miedzynarodowe")
+    if sum(u in drugorzedne for u in uidy) / n >= 0.5:
+        return odrzuc("kobiece_lub_drugorzedne")
+    return kraj
+
+
+def kandydaci_lig_z_terminarza(mecze, rozgrywki, kluby, data_gry=None, prog_krajowy=0.8,
+                               drugorzedne=None, statystyki=None):
+    """
+    Liga klubu z terminarza: rozgrywki, w ktorych pierwsza druzyna gra kolejki ligowe (mecz bez
+    rundy) w biezacym sezonie - lacznie z kolejkami jeszcze nierozegranymi. Dziala takze, gdy tabela
+    ligi nie istnieje (Belgia w play-offach, Serie A przed startem sezonu) i nie daje fragmentow.
+    Rozgrywki sa krajowe, gdy >= `prog_krajowy` uczestnikow jest z jednego znanego kraju, maja
+    MIN_KLUBOW_W_LIDZE..MAKS_KLUBOW_W_TERMINARZU klubow i nie sa rozgrywkami kobiecymi.
+    Zwraca {club_uid: [KandydatLigi(rozmiar=liczba meczow, ...), ...]} od najwiekszej liczby meczow.
+    """
+    nacja = {k.uid: getattr(k, "nation_id", None) for k in kluby}
+    baza = {r.id: r.database_id for r in rozgrywki}
+    drugorzedne = kluby_drugorzedne(kluby) if drugorzedne is None else drugorzedne
+    uczestnicy = defaultdict(set)
+    mecze_klubu = defaultdict(Counter)
+    for m in mecze:
+        if m.round is not None or m.competition_id is None:
+            continue
+        if data_gry is not None:
+            if m.date is None or not (data_gry - OKNO_SEZONU_WSTECZ <= m.date <= data_gry + OKNO_SEZONU_NAPRZOD):
+                continue
+        strony = ((m.home_club_uid, m.home_team_slot), (m.away_club_uid, m.away_team_slot))
+        if any(uid is None or slot not in (0, None) for uid, slot in strony):
+            continue
+        for uid, _ in strony:
+            uczestnicy[m.competition_id].add(uid)
+            mecze_klubu[uid][m.competition_id] += 1
+    krajowe = {}
+    for comp, uidy in uczestnicy.items():
+        kraj = _czy_krajowe(uidy, nacja, drugorzedne, prog_krajowy, MIN_KLUBOW_W_LIDZE,
+                            MAKS_KLUBOW_W_TERMINARZU, statystyki)
+        if kraj is not None:
+            krajowe[comp] = kraj
+    wynik = {}
+    for uid, licznik in mecze_klubu.items():
+        lista = [KandydatLigi(ile, comp, baza.get(comp), krajowe[comp])
+                 for comp, ile in licznik.items() if comp in krajowe]
+        if lista:
+            wynik[uid] = sorted(lista, key=lambda k: (-k.rozmiar, k.competition_id))
+    return wynik
+
+
+def kandydaci_lig(tabele, rozgrywki, kluby, prog_krajowy=0.8, drugorzedne=None):
     """
     Wszystkie krajowe tabele ligowe, w ktorych wystepuje pierwsza druzyna klubu.
-    Tabela jest krajowa, gdy co najmniej `prog_krajowy` jej klubow pochodzi z jednego, znanego
-    kraju (kluby bez kraju sie do niego nie licza) i ma najwyzej MAKS_KLUBOW_W_LIDZE klubow.
-    Pomijane sa wiec rozgrywki miedzynarodowe (np. faza ligowa pucharow) i zbiorcze tabele.
+    Zapasowe zrodlo (gdy klub nie ma kandydata z terminarza). Tabela jest krajowa, gdy co
+    najmniej `prog_krajowy` jej klubow pochodzi z jednego, znanego kraju (kluby bez kraju sie do
+    niego nie licza), ma MIN_KLUBOW_W_LIDZE..MAKS_KLUBOW_W_LIDZE klubow i nie jest kobieca.
+    Pomijane sa wiec rozgrywki miedzynarodowe, fragmenty tabel i zbiorcze tabele.
     Klub moze miec kilku kandydatow: np. w marcu kluby brazylijskie sa w tabeli ligi stanowej,
     a gdy rusza sezon - takze w tabeli Serie A.
     Zwraca {club_uid: [KandydatLigi, ...]} od najwiekszej tabeli.
     """
     nacja = {k.uid: getattr(k, "nation_id", None) for k in kluby}
     baza = {r.id: r.database_id for r in rozgrywki}
+    drugorzedne = kluby_drugorzedne(kluby) if drugorzedne is None else drugorzedne
     rozmiary = defaultdict(dict)   # club_uid -> competition_id -> (rozmiar, kraj)
     for tabela in tabele:
         if tabela.competition_id is None:
             continue
-        wiersze, kraj, udzial = opis_tabeli(tabela, nacja)
-        if not wiersze or kraj is None or udzial < prog_krajowy or len(wiersze) > MAKS_KLUBOW_W_LIDZE:
+        wiersze, _, _ = opis_tabeli(tabela, nacja)
+        kraj = _czy_krajowe({w.club_uid for w in wiersze}, nacja, drugorzedne, prog_krajowy,
+                            MIN_KLUBOW_W_LIDZE, MAKS_KLUBOW_W_LIDZE)
+        if kraj is None:
             continue
         for w in wiersze:
             obecny = rozmiary[w.club_uid].get(tabela.competition_id, (0, kraj))
@@ -425,12 +513,29 @@ def _otworz(sciezka):
         return fmsave.open(sciezka)
 
 
-def _ligi_z_zapisu(zapis, nazwy, ostrzezenia):
+def polacz_kandydatow(z_terminarza, z_tabel):
+    """Terminarz ma pierwszenstwo; tabele tylko dla klubow, ktorych terminarz nie przypisal."""
+    wynik = dict(z_tabel)
+    wynik.update({uid: lista for uid, lista in z_terminarza.items() if lista})
+    return wynik
+
+
+def kandydaci_lig_lacznie(zapis, kluby, data_gry, ostrzezenia=None, statystyki=None):
+    """Kandydaci lig z terminarza i (zapasowo) z tabel ligowych; bledy odczytu nie blokuja reszty."""
+    ostrzezenia = [] if ostrzezenia is None else ostrzezenia
+    drugorzedne = kluby_drugorzedne(kluby)
+    rozgrywki = list(zapis.competitions())
+    z_terminarza, z_tabel = {}, {}
     try:
-        return ligi_klubow(zapis.league_tables(), zapis.competitions(), zapis.clubs(), nazwy)
-    except Exception as e:   # odczyt tabel ligowych jest najmniej pewny - nie blokuje reszty
-        ostrzezenia.append(f"Nie udało się odczytać tabel ligowych ({e}); liga nieznana dla wszystkich klubów.")
-        return {}
+        z_terminarza = kandydaci_lig_z_terminarza(zapis.fixtures(), rozgrywki, kluby, data_gry,
+                                                  drugorzedne=drugorzedne, statystyki=statystyki)
+    except Exception as e:
+        ostrzezenia.append(f"Nie udało się odczytać terminarza ({e}); liga z tabel ligowych.")
+    try:
+        z_tabel = kandydaci_lig(zapis.league_tables(), rozgrywki, kluby, drugorzedne=drugorzedne)
+    except Exception as e:
+        ostrzezenia.append(f"Nie udało się odczytać tabel ligowych ({e}).")
+    return polacz_kandydatow(z_terminarza, z_tabel)
 
 
 def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None):
@@ -444,7 +549,9 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None):
         warnings.simplefilter("always", fmsave.FmsaveWarning)
         with fmsave.open(sciezka) as zapis:
             info = zapis.info
-            liga_klubu = _ligi_z_zapisu(zapis, nazwy, ostrzezenia)
+            kluby = list(zapis.clubs())
+            kandydaci = kandydaci_lig_lacznie(zapis, kluby, info.game_date, ostrzezenia)
+            liga_klubu = ligi_klubow([], [], kluby, nazwy, kandydaci=kandydaci)
             zawodnicy = list(zapis.players())
             rodzaj = fmsave.SeasonStatsKind(opcje.rodzaj_statystyk)
             liczniki = sumuj_statystyki(zapis.player_season_stats().where(kind=rodzaj), opcje.rodzaj_statystyk)
@@ -462,6 +569,7 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None):
         dane=dane,
         data_gry=info.game_date,
         moj_klub=zarzadzane[0].club_name if zarzadzane else None,
+        moj_klub_uid=zarzadzane[0].club_uid if zarzadzane else None,
         nazwa_zapisu=info.save_name,
         build=info.build,
         ostrzezenia=ostrzezenia,
@@ -474,5 +582,5 @@ def zbuduj_mape_nazw_lig(sciezka, ramki_csv):
     """Plik .fm + ramki ze starych eksportow CSV -> {database_id: nazwa ligi}."""
     with _otworz(sciezka) as zapis:
         kluby = list(zapis.clubs())
-        kandydaci = kandydaci_lig(zapis.league_tables(), zapis.competitions(), kluby)
+        kandydaci = kandydaci_lig_lacznie(zapis, kluby, zapis.info.game_date)
     return mapa_nazw_z_csv(kandydaci, kluby, ramki_csv)
