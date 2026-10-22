@@ -42,6 +42,7 @@ POZYCJA_Z_KODU = {
 # Kolejnosc rozstrzygania remisow w ocenach pozycji
 KOLEJNOSC_KODOW = ("gk", "dc", "sw", "dr", "dl", "wbr", "wbl", "dm", "mc", "amc", "mr", "ml", "amr", "aml", "stc")
 OCENA_NATURALNA = 18   # pozycja "naturalna" w FM to ocena 18-20
+MAKS_KLUBOW_W_LIDZE = 40   # wieksza "tabela" to nie liga (np. zbiorcza tabela towarzyska)
 
 # Liczniki sezonowe potrzebne do statystyk per 90 i odsetkow
 POLA_LICZNIKOW = (
@@ -181,7 +182,9 @@ def statystyki_kanoniczne(liczniki):
         wynik[kolumna] = _iloraz(liczniki.get(pole), minuty, 90.0)
     strzaly = liczniki.get("shots")
     wynik["Oczekiwane gole na strzał"] = _iloraz(liczniki.get("expected_goals"), strzaly)
-    wynik["Skuteczność strzałów (%)"] = _iloraz(liczniki.get("shots_on_target"), strzaly, 100.0)
+    # "Skut (%)" w FM to skutecznosc (gole / strzaly) - potwierdzone na zapisie; celnosc osobno
+    wynik["Skuteczność strzałów (%)"] = _iloraz(liczniki.get("goals"), strzaly, 100.0)
+    wynik["Celność strzałów (%)"] = _iloraz(liczniki.get("shots_on_target"), strzaly, 100.0)
     wynik["% wygranych pojedynków główkowych"] = _iloraz(
         liczniki.get("headers_won"), liczniki.get("aerial_challenges_attempted"), 100.0)
     # Pola bramkarskie sa tylko u bramkarzy (u reszty None); bez nich xG zapobiegniete nie ma sensu
@@ -258,34 +261,44 @@ class KandydatLigi:
     rozmiar: int
     competition_id: int
     database_id: int | None
+    kraj: int | None = None      # dominujacy kraj klubow w tabeli
+
+
+def opis_tabeli(tabela, nacja):
+    """(wiersze pierwszych druzyn, dominujacy kraj, jego udzial) - kluby bez kraju liczone jako obce."""
+    wiersze = [w for w in tabela.rows
+               if w.club_uid is not None and getattr(w, "team_slot", None) in (0, None)]
+    znane = [nacja.get(w.club_uid) for w in wiersze if nacja.get(w.club_uid) is not None]
+    if not znane:
+        return wiersze, None, 0.0
+    kraj, ile = Counter(znane).most_common(1)[0]
+    return wiersze, kraj, ile / len(wiersze)
 
 
 def kandydaci_lig(tabele, rozgrywki, kluby, prog_krajowy=0.8):
     """
     Wszystkie krajowe tabele ligowe, w ktorych wystepuje pierwsza druzyna klubu.
-    Tabele, w ktorych mniej niz `prog_krajowy` klubow pochodzi z jednego kraju, to rozgrywki
-    miedzynarodowe (np. faza ligowa pucharow) - sa pomijane. Klub moze miec kilku kandydatow:
-    np. w marcu kluby brazylijskie sa jednoczesnie w tabeli ligi stanowej i Serie A.
+    Tabela jest krajowa, gdy co najmniej `prog_krajowy` jej klubow pochodzi z jednego, znanego
+    kraju (kluby bez kraju sie do niego nie licza) i ma najwyzej MAKS_KLUBOW_W_LIDZE klubow.
+    Pomijane sa wiec rozgrywki miedzynarodowe (np. faza ligowa pucharow) i zbiorcze tabele.
+    Klub moze miec kilku kandydatow: np. w marcu kluby brazylijskie sa w tabeli ligi stanowej,
+    a gdy rusza sezon - takze w tabeli Serie A.
     Zwraca {club_uid: [KandydatLigi, ...]} od najwiekszej tabeli.
     """
-    nacja = {k.uid: k.nation_id for k in kluby}
+    nacja = {k.uid: getattr(k, "nation_id", None) for k in kluby}
     baza = {r.id: r.database_id for r in rozgrywki}
-    rozmiary = defaultdict(dict)   # club_uid -> competition_id -> najwieksza tabela tych rozgrywek
+    rozmiary = defaultdict(dict)   # club_uid -> competition_id -> (rozmiar, kraj)
     for tabela in tabele:
         if tabela.competition_id is None:
             continue
-        wiersze = [w for w in tabela.rows
-                   if w.club_uid is not None and getattr(w, "team_slot", None) in (0, None)]
-        if not wiersze:
-            continue
-        _, ile = Counter(nacja.get(w.club_uid) for w in wiersze).most_common(1)[0]
-        if ile / len(wiersze) < prog_krajowy:
+        wiersze, kraj, udzial = opis_tabeli(tabela, nacja)
+        if not wiersze or kraj is None or udzial < prog_krajowy or len(wiersze) > MAKS_KLUBOW_W_LIDZE:
             continue
         for w in wiersze:
-            obecny = rozmiary[w.club_uid].get(tabela.competition_id, 0)
-            rozmiary[w.club_uid][tabela.competition_id] = max(obecny, len(wiersze))
+            obecny = rozmiary[w.club_uid].get(tabela.competition_id, (0, kraj))
+            rozmiary[w.club_uid][tabela.competition_id] = (max(obecny[0], len(wiersze)), kraj)
     return {
-        uid: sorted((KandydatLigi(r, comp, baza.get(comp)) for comp, r in per_comp.items()),
+        uid: sorted((KandydatLigi(r, comp, baza.get(comp), kraj) for comp, (r, kraj) in per_comp.items()),
                     key=lambda k: (-k.rozmiar, k.competition_id))
         for uid, per_comp in rozmiary.items()
     }
@@ -293,15 +306,19 @@ def kandydaci_lig(tabele, rozgrywki, kluby, prog_krajowy=0.8):
 
 def ligi_klubow(tabele, rozgrywki, kluby, nazwy=None, prog_krajowy=0.8, kandydaci=None):
     """
-    Liga krajowa kazdego klubu. Sposrod kandydatow (`kandydaci_lig`) wygrywaja rozgrywki,
-    ktorych nazwe znamy z mapy (liga stanowa przegrywa wtedy z Serie A), a dopiero potem
-    najwieksza tabela (grupa pucharu krajowego przegrywa z liga). Zwraca {club_uid: Liga}.
+    Liga krajowa kazdego klubu. Sposrod kandydatow (`kandydaci_lig`) wygrywaja kolejno:
+    tabele z krajem klubu (Club.nation_id), rozgrywki, ktorych nazwe znamy z mapy (liga stanowa
+    przegrywa wtedy z Serie A), najwieksza tabela (grupa pucharu krajowego przegrywa z liga).
+    Zwraca {club_uid: Liga}.
     """
     nazwy = nazwy or {}
+    nacja = {k.uid: getattr(k, "nation_id", None) for k in kluby}
     if kandydaci is None:
         kandydaci = kandydaci_lig(tabele, rozgrywki, kluby, prog_krajowy)
     wynik = {}
     for uid, lista in kandydaci.items():
+        swoje = [k for k in lista if k.kraj is not None and k.kraj == nacja.get(uid)]
+        lista = swoje or lista
         nazwane = [k for k in lista if k.database_id in nazwy]
         wybrany = (nazwane or lista)[0]
         db_id = wybrany.database_id
@@ -317,7 +334,7 @@ def surowa_nazwa_ligi(wyswietlana):
     return wyswietlana
 
 
-def mapa_nazw_z_csv(kandydaci, kluby, ramki_csv, min_glosow=2, min_udzial=0.6):
+def mapa_nazw_z_csv(kandydaci, kluby, ramki_csv, min_glosow=2, min_udzial=0.6, min_pokrycie=0.5):
     """
     Uczy sie nazw lig ze starych eksportow CSV: klub z CSV -> klub w zapisie (po nazwie) ->
     rozgrywki, w ktorych klub teraz gra; nazwa ligi z CSV oddaje "glos" na kazde z nich.
@@ -326,6 +343,9 @@ def mapa_nazw_z_csv(kandydaci, kluby, ramki_csv, min_glosow=2, min_udzial=0.6):
     zachlannie od najwiekszej liczby glosow. Dzieki temu kilka klubow, ktore od czasu eksportu
     awansowaly lub spadly (albo graja tez w lidze stanowej), nie nada swojej starej nazwy
     innym rozgrywkom - te przegrywaja z rozgrywkami, w ktorych gra wiekszosc ligi.
+    Warunki dla pary (id, nazwa): co najmniej `min_glosow` glosow, `min_udzial` glosow oddanych
+    na to id oraz `min_pokrycie` klubow z CSV o tej nazwie ligi. Ostatni warunek odrzuca np. lige
+    stanowa, w ktorej gra tylko czesc klubow Serie A (gdy sama Serie A jeszcze nie ruszyla).
     Zwraca {database_id: nazwa}.
     """
     po_nazwie = defaultdict(set)
@@ -344,10 +364,13 @@ def mapa_nazw_z_csv(kandydaci, kluby, ramki_csv, min_glosow=2, min_udzial=0.6):
                 pary.add((next(iter(uidy)), surowa_nazwa_ligi(str(liga))))
 
     glosy = defaultdict(Counter)
+    kluby_z_nazwa = Counter()   # ile klubow z CSV o danej nazwie ligi ma jakichkolwiek kandydatow
     for uid, nazwa in pary:
-        for kandydat in kandydaci.get(uid, ()):
-            if kandydat.database_id is not None:
-                glosy[kandydat.database_id][nazwa] += 1
+        lista = [k for k in kandydaci.get(uid, ()) if k.database_id is not None]
+        if lista:
+            kluby_z_nazwa[nazwa] += 1
+        for kandydat in lista:
+            glosy[kandydat.database_id][nazwa] += 1
 
     propozycje = sorted(
         ((ile, ile / sum(licznik.values()), db_id, nazwa)
@@ -355,7 +378,8 @@ def mapa_nazw_z_csv(kandydaci, kluby, ramki_csv, min_glosow=2, min_udzial=0.6):
         key=lambda p: (-p[0], -p[1], p[2], p[3]))
     mapa, zajete_nazwy = {}, set()
     for ile, udzial, db_id, nazwa in propozycje:
-        if ile < min_glosow or udzial < min_udzial or db_id in mapa or nazwa in zajete_nazwy:
+        if (ile < min_glosow or udzial < min_udzial or ile / kluby_z_nazwa[nazwa] < min_pokrycie
+                or db_id in mapa or nazwa in zajete_nazwy):
             continue
         mapa[db_id] = nazwa
         zajete_nazwy.add(nazwa)

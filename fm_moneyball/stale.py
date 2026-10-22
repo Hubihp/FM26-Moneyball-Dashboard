@@ -29,6 +29,7 @@ KOLUMNY_TYLKO_Z_ZAPISU = [
     "Oczekiwane gole bez karnych/90",
     "Podania progresywne/90",
     "Skuteczność obron (%)",
+    "Celność strzałów (%)",
 ]
 
 # Kolumny liczbowe, ktore konwertujemy raz, przy wczytywaniu
@@ -113,8 +114,8 @@ KOLUMNY_PER_POZYCJA = {
     "Boczny Obrońca": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Podania progresywne/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90'],
     "Defensywny Pomocnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Podania progresywne/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', '% wygranych pojedynków główkowych'],
     "Środkowy Pomocnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Podania progresywne/90', 'Liczba goli na 90 min', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
-    "Skrzydłowy": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
-    "Napastnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Skuteczność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
+    "Skrzydłowy": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Celność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
+    "Napastnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Skuteczność strzałów (%)', 'Celność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
 }
 
 # Wskazowki do rozpoznawania pozycji po nazwie pliku CSV (bez rozszerzenia, malymi literami).

@@ -74,7 +74,8 @@ def test_statystyki_per_90_i_odsetki():
     assert s["Minuty"] == 900
     assert s["Liczba goli na 90 min"] == pytest.approx(0.3)
     assert s["Oczekiwane gole na strzał"] == pytest.approx(0.125)
-    assert s["Skuteczność strzałów (%)"] == pytest.approx(40)
+    assert s["Skuteczność strzałów (%)"] == pytest.approx(15)     # gole / strzaly (jak "Skut (%)" w grze)
+    assert s["Celność strzałów (%)"] == pytest.approx(40)         # celne / strzaly
     assert s["% wygranych pojedynków główkowych"] == pytest.approx(60)
     # u zawodnika z pola brak pol bramkarskich -> brak danych (a nie 0)
     assert np.isnan(s["Skuteczność obron (%)"]) and np.isnan(s["Uniknięte oczekiwane gole/90"])
@@ -173,6 +174,32 @@ def test_mapa_nazw_liga_stanowa_przegrywa_z_krajowa():
     assert mapa == {500: "Série A"}
     ligi = ligi_klubow([], [], kluby, nazwy=mapa, kandydaci=kandydaci)
     assert all(l.competition_id == 500 and l.etykieta == "Série A" for l in ligi.values())
+
+
+def test_mapa_nazw_liga_stanowa_bez_krajowej_nie_dostaje_nazwy():
+    # Serie A jeszcze nie ruszyla: 8 klubow z CSV "Série A" gra tylko w trzech ligach stanowych
+    kluby = _kluby([f"Clube {i}" for i in range(1, 9)])
+    stan = {1: 901, 2: 901, 3: 901, 4: 902, 5: 902, 6: 902, 7: 903, 8: 903}
+    kandydaci = {k.uid: [KandydatLigi(12, stan[k.uid], stan[k.uid])] for k in kluby}
+    csv = pd.DataFrame({"Klub": [k.name for k in kluby], "Liga": ["Série A (BRA 1)"] * 8})
+    assert mapa_nazw_z_csv(kandydaci, kluby, [csv]) == {}
+
+
+def test_kraj_none_i_limit_rozmiaru():
+    kluby = [NS(uid=i, nation_id=None if i <= 50 else 1) for i in range(1, 61)]
+    tabele = [_tabela(1, list(range(1, 51))),          # kluby bez kraju - nie jest krajowa
+              _tabela(2, list(range(51, 61)))]         # 10 klubow z kraju 1
+    kandydaci = kandydaci_lig(tabele, [NS(id=1, database_id=1), NS(id=2, database_id=2)], kluby)
+    assert 1 not in kandydaci and kandydaci[51][0].competition_id == 2
+    duze = [NS(uid=i, nation_id=1) for i in range(1, 51)]
+    assert kandydaci_lig([_tabela(3, list(range(1, 51)))], [NS(id=3, database_id=3)], duze) == {}
+
+
+def test_liga_z_krajem_klubu_wygrywa_z_obca_nazwana():
+    kluby = [NS(uid=1, nation_id=1)]
+    kandydaci = {1: [KandydatLigi(20, 100, 7, kraj=2), KandydatLigi(18, 200, 8, kraj=1)]}
+    liga = ligi_klubow([], [], kluby, nazwy={7: "Obca liga"}, kandydaci=kandydaci)[1]
+    assert liga.competition_id == 200
 
 
 def test_kandydaci_lig_bez_nazw_najwieksza_tabela():

@@ -9,6 +9,8 @@ Wypisuje i zapisuje do pliku `raport_zapisu.json` (obok zapisu albo w biezacym f
   - pokrycie kolumn aplikacji (procent zawodnikow z wartoscia) dla kazdej pozycji,
   - probke Twojej kadry (do porownania z tym, co pokazuje gra),
   - liste lig z liczba klubow i przykladowymi klubami (do sprawdzenia przypisania),
+  - tabele ligowe wygladajace podejrzanie (mieszane kraje, bardzo duze),
+  - z --klub NAZWA: wszystkie tabele, w ktorych wystepuje dany klub (do diagnozy przypisania ligi),
   - (opcjonalnie) nazwy lig rozpoznane ze starych eksportow CSV; z --zapisz-nazwy zapisuje je
     do dane/nazwy_rozgrywek.csv, z ktorego korzysta aplikacja.
 Raport jest maly (kilkadziesiat KB), wiec mozna go wkleic lub wyslac zamiast calego zapisu.
@@ -16,6 +18,7 @@ Skrypt niczego nie zmienia w zapisie.
 """
 import argparse
 import json
+from collections import Counter
 import sys
 import time
 import warnings
@@ -28,7 +31,7 @@ import pandas as pd  # noqa: E402
 from fm_moneyball.stale import KOLUMNY_PER_POZYCJA  # noqa: E402
 from fm_moneyball.zrodla.csv_fm import wczytaj_csv  # noqa: E402
 from fm_moneyball.zrodla.zapis_fm import (PLIK_NAZW_ROZGRYWEK, OpcjeZapisu, kandydaci_lig,  # noqa: E402
-                                          ligi_klubow, mapa_nazw_z_csv, sumuj_statystyki,
+                                          ligi_klubow, opis_tabeli, mapa_nazw_z_csv, sumuj_statystyki,
                                           wczytaj_nazwy_rozgrywek, zapisz_nazwy_rozgrywek, zbuduj_ramki)
 
 KOLUMNY_PROBKI = ['Piłkarz', 'Wiek', 'Pozycja', 'Liga', 'Minuty', 'Cena', 'Płaca', 'Wygasa', 'CA', 'PA',
@@ -45,6 +48,66 @@ def _czas(etykieta, funkcja, czasy):
     return wynik
 
 
+def _kraje(wiersze, nacja):
+    licznik = Counter(nacja.get(w.club_uid) for w in wiersze)
+    return {"top": [[k, n] for k, n in licznik.most_common(3) if k is not None],
+            "bez_kraju": licznik.get(None, 0)}
+
+
+def _opis(tabela, nacja, baza, nazwa_klubu=None):
+    wiersze, kraj, udzial = opis_tabeli(tabela, nacja)
+    opis = {"competition_id": tabela.competition_id, "database_id": baza.get(tabela.competition_id),
+            "wiersze": len(tabela.rows), "pierwsze_druzyny": len(wiersze), "kraj": kraj,
+            "udzial_kraju": round(udzial, 2), "kraje": _kraje(tabela.rows, nacja)}
+    if nazwa_klubu is not None:
+        opis["przyklady"] = [nazwa_klubu.get(w.club_uid, w.club_name) for w in tabela.rows[:6]]
+    return opis
+
+
+def podejrzane_tabele(tabele, liga_klubu, nacja, baza, kluby):
+    """Tabele uzyte jako liga, ktore maja mieszane kraje albo bardzo duzo klubow."""
+    nazwa_klubu = {k.uid: k.name for k in kluby}
+    uzyte = {l.competition_id for l in liga_klubu.values()}
+    wynik = []
+    for tabela in tabele:
+        if tabela.competition_id not in uzyte:
+            continue
+        opis = _opis(tabela, nacja, baza, nazwa_klubu)
+        if opis["udzial_kraju"] < 0.9 or opis["pierwsze_druzyny"] > 30:
+            wynik.append(opis)
+    return wynik[:40]
+
+
+def opisz_klub(nazwa, kluby, tabele, liga_klubu, nacja, baza):
+    """Wszystko, co wplywa na przypisanie ligi klubowi: jego druzyny i tabele, w ktorych wystepuja."""
+    szukana = nazwa.strip().lower()
+    pasujace = [k for k in kluby if szukana in {(k.name or "").lower(), (k.short_name or "").lower()}]
+    pasujace = pasujace or [k for k in kluby if szukana in (k.name or "").lower()][:3]
+    if not pasujace:
+        return {"szukano": nazwa, "blad": "nie znaleziono klubu"}
+    wynik = []
+    for klub in pasujace:
+        druzyny = {t.team_id: t for t in klub.teams}
+        tabele_klubu = []
+        for tabela in tabele:
+            for w in tabela.rows:
+                if w.club_uid == klub.uid or w.team_id in druzyny:
+                    opis = _opis(tabela, nacja, baza)
+                    opis.update(team_id=w.team_id, team_slot=w.team_slot, wiersz_club_uid=w.club_uid,
+                                pozycja=w.position)
+                    tabele_klubu.append(opis)
+        liga = liga_klubu.get(klub.uid)
+        wynik.append({
+            "szukano": nazwa, "klub": klub.name, "uid": klub.uid, "nation_id": klub.nation_id,
+            "fa_nation_id": klub.fa_nation_id, "parent_club": klub.parent_club_name,
+            "druzyny": [[t.team_id, t.slot, t.club_uid, t.is_affiliate] for t in klub.teams],
+            "wybrana_liga": None if liga is None else {"competition_id": liga.competition_id,
+                                                       "database_id": liga.database_id, "nazwa": liga.nazwa},
+            "tabele": tabele_klubu,
+        })
+    return wynik
+
+
 def main():
     import fmsave
 
@@ -52,6 +115,8 @@ def main():
     parser.add_argument("zapis", type=Path)
     parser.add_argument("csv", nargs="*", type=Path, help="stare eksporty CSV z gry (do rozpoznania nazw lig)")
     parser.add_argument("--wyjscie", type=Path, default=Path("raport_zapisu.json"))
+    parser.add_argument("--klub", action="append", default=[],
+                        help="nazwa klubu do szczegolowej diagnozy przypisania ligi (mozna podac wiele razy)")
     parser.add_argument("--zapisz-nazwy", action="store_true",
                         help=f"zapisz nazwy lig rozpoznane z CSV do {PLIK_NAZW_ROZGRYWEK.name}")
     args = parser.parse_args()
@@ -107,6 +172,16 @@ def main():
         "ligi_z_nazwa": len({l.competition_id for l in liga_klubu.values() if l.nazwa}),
     }
     print("Liczniki:", json.dumps(raport["liczniki"], ensure_ascii=False))
+
+    nacja = {k.uid: k.nation_id for k in kluby}
+    baza = {r.id: r.database_id for r in rozgrywki}
+    raport["tabele_podejrzane"] = podejrzane_tabele(tabele, liga_klubu, nacja, baza, kluby)
+    if raport["tabele_podejrzane"]:
+        print(f"Podejrzane tabele ligowe: {len(raport['tabele_podejrzane'])} (szczegóły w raporcie)")
+    if args.klub:
+        raport["kluby_diagnoza"] = [opisz_klub(n, kluby, tabele, liga_klubu, nacja, baza) for n in args.klub]
+        for opis in raport["kluby_diagnoza"]:
+            print(f"\n--klub {json.dumps(opis, ensure_ascii=False, default=str)[:2000]}")
 
     nazwa_klubu = {k.uid: k.name for k in kluby}
     kluby_ligi = {}
