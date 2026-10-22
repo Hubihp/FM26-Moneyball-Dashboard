@@ -1,0 +1,407 @@
+"""
+Zrodlo: plik zapisu kariery FM26 (.fm), czytany biblioteka `fmsave`.
+
+Plik .fm to kontener z sekcjami skompresowanymi Zstandardem (bez szyfrowania); fmsave
+rozpakowuje go i dekoduje rekordy gry. Z jednego zapisu powstaja od razu ramki dla
+wszystkich siedmiu pozycji - bez eksportow CSV i recznego przypisywania plikow.
+
+Funkcje budujace ramki przyjmuja zwykle obiekty z atrybutami (rekordy fmsave), wiec mozna je
+testowac bez prawdziwego zapisu. Zapis nie zawiera nazw lig (gra bierze je z wlasnej bazy),
+dlatego nazwy pochodza z mapy `dane/nazwy_rozgrywek.csv` (id rozgrywek w bazie -> nazwa),
+ktora mozna zbudowac automatycznie ze starych eksportow CSV (`zbuduj_mape_nazw_lig`).
+"""
+import csv
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
+from datetime import date
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from fm_moneyball.parsery import fmt_eur
+from fm_moneyball.schemat import dopelnij_schemat
+from fm_moneyball.stale import MAPOWANIE_NAZW_LIG, POZYCJE
+
+PLIK_NAZW_ROZGRYWEK = Path(__file__).resolve().parents[2] / "dane" / "nazwy_rozgrywek.csv"
+
+# Waluta bazowa zapisu nie jest waluta wyswietlana w grze. Autor fmsave zmierzyl, ze ekran gry
+# pokazuje kwoty ok. 1,157 razy wieksze niz zapisane (to odpowiada kursowi GBP -> EUR).
+KURS_DOMYSLNY = 1.157
+
+# Kod pozycji z fmsave -> grupa pozycji w aplikacji
+POZYCJA_Z_KODU = {
+    "gk": "Bramkarz",
+    "dc": "Środkowy Obrońca", "sw": "Środkowy Obrońca",
+    "dl": "Boczny Obrońca", "dr": "Boczny Obrońca", "wbl": "Boczny Obrońca", "wbr": "Boczny Obrońca",
+    "dm": "Defensywny Pomocnik",
+    "mc": "Środkowy Pomocnik", "amc": "Środkowy Pomocnik",
+    "ml": "Skrzydłowy", "mr": "Skrzydłowy", "aml": "Skrzydłowy", "amr": "Skrzydłowy",
+    "stc": "Napastnik",
+}
+# Kolejnosc rozstrzygania remisow w ocenach pozycji
+KOLEJNOSC_KODOW = ("gk", "dc", "sw", "dr", "dl", "wbr", "wbl", "dm", "mc", "amc", "mr", "ml", "amr", "aml", "stc")
+OCENA_NATURALNA = 18   # pozycja "naturalna" w FM to ocena 18-20
+
+# Liczniki sezonowe potrzebne do statystyk per 90 i odsetkow
+POLA_LICZNIKOW = (
+    "minutes", "goals", "expected_goals", "non_penalty_expected_goals", "expected_assists", "shots",
+    "shots_on_target", "open_play_key_passes", "pressures_completed", "interceptions", "possession_won",
+    "possession_lost", "passes_attempted", "progressive_passes", "aerial_challenges_attempted",
+    "headers_won", "dribbles", "expected_goals_prevented", "saves_held", "saves_parried", "saves_tipped",
+    "shots_on_target_faced",
+)
+
+# Kolumna w aplikacji -> licznik per 90
+PER_90 = {
+    "Oczekiwane asysty/90": "expected_assists",
+    "Kluczowe podania z gry/90": "open_play_key_passes",
+    "Liczba goli na 90 min": "goals",
+    "Oczekiwane gole bez karnych/90": "non_penalty_expected_goals",
+    "Udane próby pressingu/90": "pressures_completed",
+    "Przechwyty/90": "interceptions",
+    "Odzyskane piłki/90": "possession_won",
+    "Stracone piłki/90": "possession_lost",
+    "Próby podań/90": "passes_attempted",
+    "Podania progresywne/90": "progressive_passes",
+    "Liczba dryblingów/90": "dribbles",
+    "Uniknięte oczekiwane gole/90": "expected_goals_prevented",
+}
+
+
+@dataclass(frozen=True)
+class OpcjeZapisu:
+    rodzaj_statystyk: str = "league"      # "league" (liga) albo "overall" (wszystkie rozgrywki)
+    min_minut: int = 300
+    kurs_waluty: float = KURS_DOMYSLNY
+    wszystkie_naturalne_pozycje: bool = False
+    tylko_kluby_w_lidze: bool = True
+
+
+@dataclass(frozen=True)
+class Liga:
+    competition_id: int
+    database_id: int | None
+    nazwa: str | None
+
+    @property
+    def etykieta(self):
+        if self.nazwa:
+            return self.nazwa
+        return f"Rozgrywki #{self.database_id if self.database_id is not None else self.competition_id}"
+
+
+@dataclass
+class WynikZapisu:
+    dane: dict
+    data_gry: date | None = None
+    moj_klub: str | None = None
+    nazwa_zapisu: str = ""
+    build: str = ""
+    ostrzezenia: list = field(default_factory=list)
+    liczniki: dict = field(default_factory=dict)
+
+
+# =============================================================================
+# CZYSTE FUNKCJE (testowalne bez pliku zapisu)
+# =============================================================================
+def oceny_pozycji(pozycje):
+    """Rekord Positions -> {kod: ocena}."""
+    return {kod: int(getattr(pozycje, kod, 0) or 0) for kod in KOLEJNOSC_KODOW}
+
+
+def glowna_pozycja(pozycje):
+    """Kod pozycji z najwyzsza ocena (remis rozstrzyga KOLEJNOSC_KODOW) albo None."""
+    oceny = oceny_pozycji(pozycje)
+    najlepsza = max(oceny.values(), default=0)
+    if najlepsza <= 0:
+        return None
+    return next(kod for kod in KOLEJNOSC_KODOW if oceny[kod] == najlepsza)
+
+
+def grupy_pozycji(pozycje, wszystkie_naturalne=False):
+    """Lista grup pozycji zawodnika: glowna, a opcjonalnie wszystkie naturalne (ocena >= 18)."""
+    glowna = glowna_pozycja(pozycje)
+    if glowna is None:
+        return []
+    grupy = [POZYCJA_Z_KODU[glowna]]
+    if wszystkie_naturalne:
+        for kod, ocena in oceny_pozycji(pozycje).items():
+            grupa = POZYCJA_Z_KODU[kod]
+            if ocena >= OCENA_NATURALNA and grupa not in grupy:
+                grupy.append(grupa)
+    return grupy
+
+
+def preferowana_noga(lewa, prawa):
+    """
+    Sila nog (1-20) -> etykieta jak w FM. Progi sa przyblizeniem: slabsza noga >= 15 to
+    'Obunożny', <= 5 to 'Wyłącznie ...', pomiedzy - zwykla przewaga jednej nogi.
+    """
+    if not lewa and not prawa:
+        return None
+    slabsza, mocniejsza_lewa = min(lewa, prawa), lewa > prawa
+    if slabsza >= 15:
+        return "Obunożny"
+    if slabsza <= 5:
+        return "Wyłącznie lewonożny" if mocniejsza_lewa else "Wyłącznie prawonożny"
+    return "Lewonożny" if mocniejsza_lewa else "Prawonożny"
+
+
+def sumuj_statystyki(wiersze, rodzaj):
+    """Wiersze PlayerSeasonStats -> {player_uid: {licznik: suma}} dla wybranego rodzaju rozgrywek
+    (zawodnik ma osobny wiersz dla kazdej druzyny, w ktorej gral w tym sezonie)."""
+    sumy = defaultdict(lambda: defaultdict(float))
+    obecne = defaultdict(set)
+    for w in wiersze:
+        if str(getattr(w, "kind", "")) != rodzaj:
+            continue
+        uid = w.player_uid
+        for pole in POLA_LICZNIKOW:
+            wartosc = getattr(w, pole, None)
+            if wartosc is not None:
+                sumy[uid][pole] += float(wartosc)
+                obecne[uid].add(pole)
+    # Pola, ktorych zawodnik nie ma wcale (np. obrony u zawodnika z pola), zostaja None
+    return {uid: {p: (s[p] if p in obecne[uid] else None) for p in POLA_LICZNIKOW} for uid, s in sumy.items()}
+
+
+def _iloraz(licznik, mianownik, mnoznik=1.0):
+    if licznik is None or not mianownik:
+        return np.nan
+    return licznik / mianownik * mnoznik
+
+
+def statystyki_kanoniczne(liczniki):
+    """Sumy licznikow -> kolumny aplikacji (per 90 i odsetki)."""
+    liczniki = liczniki or {}
+    minuty = liczniki.get("minutes") or 0
+    wynik = {"Minuty": minuty}
+    for kolumna, pole in PER_90.items():
+        wynik[kolumna] = _iloraz(liczniki.get(pole), minuty, 90.0)
+    strzaly = liczniki.get("shots")
+    wynik["Oczekiwane gole na strzał"] = _iloraz(liczniki.get("expected_goals"), strzaly)
+    wynik["Skuteczność strzałów (%)"] = _iloraz(liczniki.get("shots_on_target"), strzaly, 100.0)
+    wynik["% wygranych pojedynków główkowych"] = _iloraz(
+        liczniki.get("headers_won"), liczniki.get("aerial_challenges_attempted"), 100.0)
+    obrony = [liczniki.get(p) for p in ("saves_held", "saves_parried", "saves_tipped")]
+    wynik["Skuteczność obron (%)"] = (
+        _iloraz(sum(obrony), liczniki.get("shots_on_target_faced"), 100.0)
+        if all(o is not None for o in obrony) else np.nan)
+    return wynik
+
+
+def wiersz_zawodnika(zawodnik, liczniki, liga, opcje):
+    """Rekord Player (+ jego liczniki sezonowe i liga klubu) -> slownik kolumn aplikacji."""
+    kurs = opcje.kurs_waluty
+    wartosc = None
+    if str(getattr(zawodnik, "transfer_value_state", "ok")) == "ok" and zawodnik.transfer_value is not None:
+        wartosc = zawodnik.transfer_value * kurs
+    kontrakt = getattr(zawodnik, "contract", None)
+    tygodniowka = kontrakt.wage * kurs if kontrakt is not None and kontrakt.wage is not None else None
+    koniec = kontrakt.end if kontrakt is not None else None
+    ability = getattr(zawodnik, "ability", None)
+
+    wiersz = {
+        "Piłkarz": zawodnik.name,
+        "Wiek": zawodnik.age,
+        "Klub": zawodnik.club_name,
+        "Liga": liga.etykieta if liga else None,
+        "Pozycja": ", ".join(k.upper() for k in (zawodnik.natural_positions or ())) or None,
+        "Preferowana noga": preferowana_noga(zawodnik.left_foot, zawodnik.right_foot),
+        "Cena": fmt_eur(wartosc),
+        "Wartość_Numeryczna": np.nan if wartosc is None else float(wartosc),
+        "Płaca": None if tygodniowka is None else f"{fmt_eur(tygodniowka)} tyg.",
+        "Zarobki_Numeryczne": np.nan if tygodniowka is None else float(tygodniowka) * 52,
+        "Wygasa": f"{koniec.day}.{koniec.month}.{koniec.year}" if koniec else None,
+        "Wygasa_Data": pd.Timestamp(koniec) if koniec else pd.NaT,
+        "CA": getattr(ability, "current", None),
+        "PA": getattr(ability, "potential", None),
+        "Wypożyczony": bool(getattr(zawodnik, "on_loan", False)),
+        "UID": zawodnik.uid,
+    }
+    wiersz.update(statystyki_kanoniczne(liczniki))
+    return wiersz
+
+
+def zbuduj_ramki(zawodnicy, liczniki_po_uid, liga_klubu, opcje):
+    """
+    Zawodnicy + liczniki + liga kazdego klubu -> {pozycja: kanoniczny DataFrame}.
+    Pomija zawodnikow bez klubu, bez wieku, ponizej progu minut i (opcjonalnie) z klubow,
+    ktorych nie udalo sie przypisac do ligi krajowej.
+    """
+    wiersze = {p: [] for p in POZYCJE}
+    for zawodnik in zawodnicy:
+        if zawodnik.club_uid is None or not zawodnik.age:
+            continue
+        liga = liga_klubu.get(zawodnik.club_uid)
+        if liga is None and opcje.tylko_kluby_w_lidze:
+            continue
+        liczniki = liczniki_po_uid.get(zawodnik.uid)
+        minuty = (liczniki or {}).get("minutes") or 0
+        if minuty < opcje.min_minut:
+            continue
+        grupy = grupy_pozycji(zawodnik.positions, opcje.wszystkie_naturalne_pozycje)
+        if not grupy:
+            continue
+        wiersz = wiersz_zawodnika(zawodnik, liczniki, liga, opcje)
+        for grupa in grupy:
+            wiersze[grupa].append(wiersz)
+    return {p: dopelnij_schemat(pd.DataFrame(w)) for p, w in wiersze.items() if w}
+
+
+def ligi_klubow(tabele, rozgrywki, kluby, nazwy=None, prog_krajowy=0.8):
+    """
+    Liga krajowa kazdego klubu: tabela ligowa, w ktorej wystepuje jego pierwsza druzyna.
+    Tabele, w ktorych mniej niz `prog_krajowy` klubow pochodzi z jednego kraju, to rozgrywki
+    miedzynarodowe (np. faza ligowa pucharow) - sa pomijane. Gdy klub wystepuje w kilku tabelach
+    krajowych (np. grupa pucharu krajowego), wygrywa najwieksza.
+    Zwraca {club_uid: Liga}.
+    """
+    nazwy = nazwy or {}
+    nacja = {k.uid: k.nation_id for k in kluby}
+    baza = {r.id: r.database_id for r in rozgrywki}
+    najlepsze = {}
+    for tabela in tabele:
+        if tabela.competition_id is None:
+            continue
+        wiersze = [w for w in tabela.rows
+                   if w.club_uid is not None and getattr(w, "team_slot", None) in (0, None)]
+        if not wiersze:
+            continue
+        _, ile = Counter(nacja.get(w.club_uid) for w in wiersze).most_common(1)[0]
+        if ile / len(wiersze) < prog_krajowy:
+            continue
+        for w in wiersze:
+            obecne = najlepsze.get(w.club_uid)
+            if obecne is None or len(wiersze) > obecne[0]:
+                najlepsze[w.club_uid] = (len(wiersze), tabela.competition_id)
+    wynik = {}
+    for uid, (_, comp_id) in najlepsze.items():
+        db_id = baza.get(comp_id)
+        wynik[uid] = Liga(comp_id, db_id, nazwy.get(db_id) if db_id is not None else None)
+    return wynik
+
+
+def surowa_nazwa_ligi(wyswietlana):
+    """'Premier League (ANG 1)' -> 'Premier League' (klucz MNOZNIKI_LIG); nieznana - bez zmian."""
+    for surowa, nazwa in MAPOWANIE_NAZW_LIG.items():
+        if nazwa == wyswietlana:
+            return surowa
+    return wyswietlana
+
+
+def mapa_nazw_z_csv(liga_klubu, kluby, ramki_csv, min_glosow=2):
+    """
+    Uczy sie nazw lig ze starych eksportow CSV: klub z CSV -> klub w zapisie (po nazwie) ->
+    id rozgrywek w bazie; nazwa ligi z CSV oddaje "glos" na to id. Zwraca {database_id: nazwa}.
+    """
+    po_nazwie = defaultdict(set)
+    for klub in kluby:
+        for nazwa in {klub.name, klub.short_name}:
+            if nazwa:
+                po_nazwie[nazwa.strip().lower()].add(klub.uid)
+    glosy = defaultdict(Counter)
+    for ramka in ramki_csv:
+        if 'Klub' not in ramka.columns or 'Liga' not in ramka.columns:
+            continue
+        for klub, liga in ramka[['Klub', 'Liga']].dropna().drop_duplicates().itertuples(index=False):
+            uidy = po_nazwie.get(str(klub).strip().lower(), set())
+            if len(uidy) != 1:
+                continue   # brak lub niejednoznaczna nazwa klubu
+            liga_zapisu = liga_klubu.get(next(iter(uidy)))
+            if liga_zapisu is None or liga_zapisu.database_id is None:
+                continue
+            glosy[liga_zapisu.database_id][surowa_nazwa_ligi(str(liga))] += 1
+    mapa = {}
+    for db_id, licznik in glosy.items():
+        nazwa, ile = licznik.most_common(1)[0]
+        if ile >= min_glosow and ile / sum(licznik.values()) >= 0.6:
+            mapa[db_id] = nazwa
+    return mapa
+
+
+def wczytaj_nazwy_rozgrywek(sciezka=PLIK_NAZW_ROZGRYWEK):
+    sciezka = Path(sciezka)
+    if not sciezka.is_file():
+        return {}
+    import fmsave
+    return dict(fmsave.read_competition_names(sciezka))
+
+
+def zapisz_nazwy_rozgrywek(mapa, sciezka=PLIK_NAZW_ROZGRYWEK):
+    """Dopisuje nowe nazwy do pliku mapy (istniejace wpisy maja pierwszenstwo)."""
+    sciezka = Path(sciezka)
+    polaczona = {**mapa, **wczytaj_nazwy_rozgrywek(sciezka)}
+    sciezka.parent.mkdir(parents=True, exist_ok=True)
+    with open(sciezka, "w", encoding="utf-8", newline="") as plik:
+        pisarz = csv.writer(plik)
+        pisarz.writerow(["database_id", "nazwa"])
+        for db_id in sorted(polaczona):
+            pisarz.writerow([db_id, polaczona[db_id]])
+    return polaczona
+
+
+# =============================================================================
+# ODCZYT PLIKU (fmsave)
+# =============================================================================
+def _otworz(sciezka):
+    import warnings
+
+    import fmsave
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", fmsave.FmsaveWarning)
+        return fmsave.open(sciezka)
+
+
+def _ligi_z_zapisu(zapis, nazwy, ostrzezenia):
+    try:
+        return ligi_klubow(zapis.league_tables(), zapis.competitions(), zapis.clubs(), nazwy)
+    except Exception as e:   # odczyt tabel ligowych jest najmniej pewny - nie blokuje reszty
+        ostrzezenia.append(f"Nie udało się odczytać tabel ligowych ({e}); liga nieznana dla wszystkich klubów.")
+        return {}
+
+
+def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None):
+    """Plik .fm -> WynikZapisu (ramki dla wszystkich pozycji + metadane)."""
+    import warnings
+
+    import fmsave
+    nazwy = wczytaj_nazwy_rozgrywek() if nazwy is None else nazwy
+    ostrzezenia = []
+    with warnings.catch_warnings(record=True) as zlapane:
+        warnings.simplefilter("always", fmsave.FmsaveWarning)
+        with fmsave.open(sciezka) as zapis:
+            info = zapis.info
+            liga_klubu = _ligi_z_zapisu(zapis, nazwy, ostrzezenia)
+            zawodnicy = list(zapis.players())
+            rodzaj = fmsave.SeasonStatsKind(opcje.rodzaj_statystyk)
+            liczniki = sumuj_statystyki(zapis.player_season_stats().where(kind=rodzaj), opcje.rodzaj_statystyk)
+            zarzadzane = list(zapis.managed_clubs())
+    for w in zlapane:
+        if issubclass(w.category, fmsave.UnknownBuildWarning):
+            ostrzezenia.append(f"Nieznana wersja gry - fmsave może czytać dane błędnie: {w.message}")
+
+    dane = zbuduj_ramki(zawodnicy, liczniki, liga_klubu, opcje)
+    bez_nazwy = {l.etykieta for l in liga_klubu.values() if not l.nazwa}
+    if bez_nazwy:
+        ostrzezenia.append(f"{len(bez_nazwy)} lig bez nazwy (pokazane jako 'Rozgrywki #id'). "
+                           "Wgraj stare eksporty CSV w sekcji 'Nazwy lig', aby je rozpoznać.")
+    return WynikZapisu(
+        dane=dane,
+        data_gry=info.game_date,
+        moj_klub=zarzadzane[0].club_name if zarzadzane else None,
+        nazwa_zapisu=info.save_name,
+        build=info.build,
+        ostrzezenia=ostrzezenia,
+        liczniki={"zawodnicy_w_zapisie": len(zawodnicy), "z_statystykami": len(liczniki),
+                  "kluby_z_liga": len(liga_klubu), "w_aplikacji": sum(len(d) for d in dane.values())},
+    )
+
+
+def zbuduj_mape_nazw_lig(sciezka, ramki_csv):
+    """Plik .fm + ramki ze starych eksportow CSV -> {database_id: nazwa ligi}."""
+    with _otworz(sciezka) as zapis:
+        kluby = list(zapis.clubs())
+        liga_klubu = ligi_klubow(zapis.league_tables(), zapis.competitions(), kluby)
+    return mapa_nazw_z_csv(liga_klubu, kluby, ramki_csv)

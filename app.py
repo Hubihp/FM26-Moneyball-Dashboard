@@ -1,21 +1,22 @@
 """
-FM26 Moneyball Dashboard - wersja 2 (punkty 1-5 planu ulepszen).
+FM26 Moneyball Dashboard - wersja 3 (interfejs Streamlit; logika w pakiecie fm_moneyball).
 
-Najwazniejsze zmiany wzgledem wersji 1:
-  1. Poprawki bledow: parser plac ("tyg."), "Nie na sprzedaz" jako brak ceny (NaN), unikalny
-     klucz zawodnika (ID), odwrocony kierunek "strat pilek" w radarze, filtr kontraktow z data
-     w grze, "Moj klub" jako ustawienie, usuniety mnoznik `retention` i stala 900 mln.
-  2. Parsowanie raz (cache), walidacja schematu + raport wczytania, wiele plikow naraz z
-     rozpoznawaniem pozycji, dane demo (syntetyczne).
-  3. Obsluga kolumny z minutami (Min / Minuty), jesli jest w eksporcie z FM.
-  4. SCORE w z-score w obrebie pozycji, wagi normalizowane do sumy 1, skurczenie (shrinkage)
-     cech per 90 przy malej liczbie minut.
-  5. Nowy wynik dla bramkarzy (ZxG, odzyskane pilki, bezpieczenstwo podan).
+Najwazniejsze zmiany wzgledem wersji 2:
+  1. Zrodla danych: folder zapisow gry (automatycznie najnowszy zapis, sledzenie zmian),
+     wgrany plik zapisu kariery .fm, pliki CSV z gry (jak dotad) albo dane demo.
+     Jeden zapis .fm daje od razu wszystkie pozycje - bez eksportow i przypisywania plikow.
+  2. Poprawki modelu: korekta ligowa addytywna zamiast mnozenia T-score, najnizszy mnoznik dla
+     lig spoza tabeli (zamiast 1.0), statystyki puli wazone minutami, mocniejsze skurczenie cech
+     ilorazowych, sobowtor na skurczonych z-score'ach, cechy stylu poza radarem.
+  3. Poprawki danych i UI: widelki cen z dowolnym myslnikiem, place miesieczne, '1.234' w minutach,
+     komunikaty bledow nie znikaja, odpornosc na brakujace kolumny, data w grze z zapisu,
+     limit wierszy w tabeli, filtry bez ostrzezen Session State.
 
-Wymagania: streamlit, pandas, numpy, altair, plotly, matplotlib (scikit-learn nie jest juz potrzebny).
+Uruchomienie: streamlit run app.py  (Python >= 3.12, zaleznosci w requirements.txt)
 """
-import io
-import re
+import hashlib
+from datetime import datetime
+from pathlib import Path
 
 import altair as alt
 import matplotlib.colors as mcolors
@@ -24,6 +25,15 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from fm_moneyball.model import macierz_stylu, oblicz_score, percentyl_w_puli
+from fm_moneyball.schemat import raport_wczytania
+from fm_moneyball.stale import (KOLUMNY_PER_POZYCJA, KOLUMNY_UKRYTE, MAPOWANIE_NAZW_LIG, MERYTORYKA_WAG,
+                                NEUTRALNE, NIE_STATYSTYKI, NIZSZE_LEPSZE, POZYCJE)
+from fm_moneyball.zrodla import folder as folder_zapisow
+from fm_moneyball.zrodla.csv_fm import generuj_demo_csv, wczytaj_csv, wykryj_pozycje
+from fm_moneyball.zrodla.zapis_fm import (KURS_DOMYSLNY, PLIK_NAZW_ROZGRYWEK, OpcjeZapisu, wczytaj_zapis,
+                                          zapisz_nazwy_rozgrywek, zbuduj_mape_nazw_lig)
+
 # Konfiguracja strony
 st.set_page_config(
     page_title="FM26 Moneyball Dashboard",
@@ -31,17 +41,9 @@ st.set_page_config(
     layout="wide"
 )
 
-# Ukrywanie alertów po 5 sekundach, usuwanie ikon hiperłączy, poprawa odstępów w sidebarze oraz modyfikacja uploada
+# Usuwanie ikon hiperłączy, poprawa odstępów w sidebarze oraz modyfikacja uploada
 st.markdown("""
     <style>
-    [data-testid="stAlert"] {
-        animation: fadeOut 5s ease-in-out forwards;
-    }
-    @keyframes fadeOut {
-        0% { opacity: 1; height: auto; }
-        80% { opacity: 1; height: auto; }
-        100% { opacity: 0; height: 0; padding: 0; margin: 0; overflow: hidden; display: none; }
-    }
     a.header-anchor {
         display: none !important;
     }
@@ -105,534 +107,57 @@ def szeroki(funkcja, *args, **kwargs):
     return funkcja(*args, use_container_width=True, **kwargs)
 
 
-# =============================================================================
-# STALE I SLOWNIKI
-# =============================================================================
-POZYCJE = ["Bramkarz", "Środkowy Obrońca", "Boczny Obrońca", "Defensywny Pomocnik",
-           "Środkowy Pomocnik", "Skrzydłowy", "Napastnik"]
-
 WYBIERZ = "— wybierz —"
-
-# Slownik tlumaczen kolumn statystycznych (nazwa w pliku CSV -> nazwa w aplikacji)
-TLUMACZENIE_KOLUMN = {
-    "xA/90": "Oczekiwane asysty/90",
-    "KPzG/90": "Kluczowe podania z gry/90",
-    "Liczba goli na 90 min": "Liczba goli na 90 min",
-    "xG/strzał": "Oczekiwane gole na strzał",
-    "Skut (%)": "Skuteczność strzałów (%)",
-    "Ud Pres/90": "Udane próby pressingu/90",
-    "Prz/90": "Przechwyty/90",
-    "Odz Płk/90": "Odzyskane piłki/90",
-    "Str Płk/90": "Stracone piłki/90",
-    "Pod/90": "Próby podań/90",
-    "% Głw": "% wygranych pojedynków główkowych",
-    "Drb/90": "Liczba dryblingów/90",
-    "ZxG/90": "Uniknięte oczekiwane gole/90",
-    "Szacowana wartość": "Cena"
-}
-
-# Mozliwe nazwy kolumny z minutami w eksporcie z FM (zostanie zmieniona na "Minuty")
-NAZWY_KOLUMNY_MINUT = ["Min", "Minuty", "Rozegrane minuty", "Min."]
-
-# Kolumny liczbowe, ktore konwertujemy raz, przy wczytywaniu
-KOLUMNY_STATYSTYK = [v for v in TLUMACZENIE_KOLUMN.values() if v != "Cena"]
-
-# Kolumny, ktorych NIE traktujemy jako statystyk meczowych
-NIE_STATYSTYKI = {
-    'SCORE', 'Percentyl', 'Wiarygodność', 'Piłkarz', 'ID', 'Wiek', 'Klub', 'Liga', 'Pozycja', 'Cena',
-    'Preferowana noga', 'Kraj', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Płaca', 'Wygasa',
-    'Wygasa_Data', 'Minuty', 'Mnożnik_Ligi'
-}
-
-# Statystyki, w ktorych MNIEJ znaczy LEPIEJ (uzywane w radarze i wykresach Top 10)
-NIZSZE_LEPSZE = {'Stracone piłki/90', 'Strata piłek na podanie'}
-
-# Cechy uzywane w wyniku: nazwa -> (kierunek, wspolczynnik skurczenia)
-# kierunek: +1 = wiecej znaczy lepiej, -1 = mniej znaczy lepiej
-# skurczenie: 0 = bez skurczenia (statystyka nie jest "per 90"), 1.0 = standard, 2.0 = bardziej losowa
-CECHY = {
-    'Oczekiwane asysty/90': (1, 2.0),
-    'Kluczowe podania z gry/90': (1, 1.0),
-    'Liczba goli na 90 min': (1, 2.0),
-    'Oczekiwane gole na strzał': (1, 0.0),
-    'Skuteczność strzałów (%)': (1, 0.0),
-    'Udane próby pressingu/90': (1, 1.0),
-    'Przechwyty/90': (1, 1.0),
-    'Odzyskane piłki/90': (1, 1.0),
-    '% wygranych pojedynków główkowych': (1, 0.0),
-    'Uniknięte oczekiwane gole/90': (1, 2.0),
-    'Liczba dryblingów/90': (1, 1.0),
-    'Strata piłek na podanie': (-1, 1.0),
-}
-
-# Domyslne WAZNOSCI cech per pozycja (0-100). W obliczeniach sa normalizowane do sumy 1,
-# wiec liczy sie tylko ich wzajemna proporcja. To propozycja startowa - dostrój pod swoj styl.
-MERYTORYKA_WAG = {
-    "Bramkarz": {
-        'Uniknięte oczekiwane gole/90': 50, 'Odzyskane piłki/90': 20, 'Strata piłek na podanie': 30},
-    "Środkowy Obrońca": {
-        '% wygranych pojedynków główkowych': 15, 'Przechwyty/90': 20, 'Udane próby pressingu/90': 10,
-        'Kluczowe podania z gry/90': 10, 'Odzyskane piłki/90': 25, 'Strata piłek na podanie': 20},
-    "Boczny Obrońca": {
-        'Oczekiwane asysty/90': 30, 'Kluczowe podania z gry/90': 20, 'Przechwyty/90': 15,
-        'Odzyskane piłki/90': 10, 'Udane próby pressingu/90': 10, 'Strata piłek na podanie': 15},
-    "Defensywny Pomocnik": {
-        'Oczekiwane asysty/90': 10, 'Kluczowe podania z gry/90': 15, 'Przechwyty/90': 20,
-        'Odzyskane piłki/90': 25, 'Udane próby pressingu/90': 15,
-        '% wygranych pojedynków główkowych': 5, 'Strata piłek na podanie': 10},
-    "Środkowy Pomocnik": {
-        'Oczekiwane asysty/90': 25, 'Liczba goli na 90 min': 10, 'Kluczowe podania z gry/90': 20,
-        'Liczba dryblingów/90': 10, 'Odzyskane piłki/90': 10, 'Udane próby pressingu/90': 10,
-        'Strata piłek na podanie': 15},
-    "Skrzydłowy": {
-        'Oczekiwane asysty/90': 25, 'Liczba goli na 90 min': 20, 'Oczekiwane gole na strzał': 10,
-        'Kluczowe podania z gry/90': 15, 'Liczba dryblingów/90': 15, 'Udane próby pressingu/90': 5,
-        'Odzyskane piłki/90': 5, 'Strata piłek na podanie': 5},
-    "Napastnik": {
-        'Liczba goli na 90 min': 35, 'Oczekiwane gole na strzał': 10, 'Oczekiwane asysty/90': 15,
-        'Kluczowe podania z gry/90': 10, 'Liczba dryblingów/90': 10, 'Udane próby pressingu/90': 5,
-        'Odzyskane piłki/90': 5, 'Skuteczność strzałów (%)': 10},
-}
-
-KOLUMNY_PER_POZYCJA = {
-    "Bramkarz": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Cena', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Uniknięte oczekiwane gole/90'],
-    "Środkowy Obrońca": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Cena', 'Kluczowe podania z gry/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', '% wygranych pojedynków główkowych'],
-    "Boczny Obrońca": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90'],
-    "Defensywny Pomocnik": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', '% wygranych pojedynków główkowych'],
-    "Środkowy Pomocnik": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
-    "Skrzydłowy": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole na strzał', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
-    "Napastnik": ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Cena', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole na strzał', 'Skuteczność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90']
-}
-
-# Wskazowki do rozpoznawania pozycji po nazwie pliku (bez rozszerzenia, malymi literami).
-# "br" jest potwierdzone na Twoim pliku; pozostale skroty to ZALOZENIE - dopisz swoje nazwy plikow.
-WSKAZOWKI_NAZW_PLIKOW = {
-    "br": "Bramkarz", "bramkarz": "Bramkarz", "gk": "Bramkarz",
-    "so": "Środkowy Obrońca", "śo": "Środkowy Obrońca", "cb": "Środkowy Obrońca",
-    "bo": "Boczny Obrońca", "fb": "Boczny Obrońca", "po": "Boczny Obrońca", "lo": "Boczny Obrońca",
-    "dp": "Defensywny Pomocnik", "dm": "Defensywny Pomocnik",
-    "sp": "Środkowy Pomocnik", "śp": "Środkowy Pomocnik", "cm": "Środkowy Pomocnik",
-    "sk": "Skrzydłowy", "skrzydłowy": "Skrzydłowy", "w": "Skrzydłowy",
-    "n": "Napastnik", "nap": "Napastnik", "st": "Napastnik", "napastnik": "Napastnik",
-}
-
-# Mnozniki lig bazowe (wartosci heurystyczne - nie sa walidowane na danych)
-MNOZNIKI_LIG = {
-    "Premier League": 0.918,
-    "EFL Championship": 0.811,
-    "Liga Profesional de Fútbol": 0.809,
-    "Liga Profesional": 0.809,
-    "Primera Nacional": 0.749,
-    "Jupiler Pro League": 0.816,
-    "Profvoetbal 1A": 0.816,
-    "Challenger Pro League": 0.695,
-    "Profvoetbal 1B": 0.695,
-    "Série A": 0.826,
-    "Brasileirão": 0.826,
-    "Série B": 0.721,
-    "Brasileirão Série B": 0.721,
-    "Hrvatska nogometna liga": 0.792,
-    "HNL": 0.792,
-    "Prva nogometa liga": 0.673,
-    "1. NL": 0.673,
-    "Ligue 1": 0.856,
-    "Ligue 2": 0.758,
-    "LaLiga": 0.866,
-    "LaLiga 2": 0.777,
-    "Eredivisie": 0.783,
-    "Eerste Divisie": 0.66,
-    "J1 League": 0.777,
-    "J2 League": 0.695,
-    "Liga MX": 0.778,
-    "Liga Rozwojowa": 0.7,
-    "Liga de Expansión MX": 0.7,
-    "Bundesliga": 0.867,
-    "2. Bundesliga": 0.778,
-    "Ekstraklasa": 0.795,
-    "I liga": 0.686,
-    "1. Liga": 0.686,
-    "Liga Portugal": 0.814,
-    "Liga Portugal 2": 0.726,
-    "MLS": 0.784,
-    "Serie A": 0.86,
-    "Serie B": 0.759
-}
-
-# Slownik mapujacy wyswietlane nazwy lig w aplikacji
-MAPOWANIE_NAZW_LIG = {
-    "Premier League": "Premier League (ANG 1)",
-    "EFL Championship": "EFL Championship (ANG 2)",
-    "Liga Profesional de Fútbol": "Liga Profesional de Fútbol (ARG 1)",
-    "Liga Profesional": "Liga Profesional de Fútbol (ARG 1)",
-    "Primera Nacional": "Primera Nacional (ARG 2)",
-    "Jupiler Pro League": "Jupiler Pro League (BEL 1)",
-    "Profvoetbal 1A": "Jupiler Pro League (BEL 1)",
-    "Challenger Pro League": "Challenger Pro League (BEL 2)",
-    "Profvoetbal 1B": "Challenger Pro League (BEL 2)",
-    "Série A": "Série A (BRA 1)",
-    "Brasileirão": "Série A (BRA 1)",
-    "Série B": "Série B (BRA 2)",
-    "Brasileirão Série B": "Série B (BRA 2)",
-    "Hrvatska nogometna liga": "Hrvatska nogometna liga (CHO 1)",
-    "HNL": "Hrvatska nogometna liga (CHO 1)",
-    "Prva nogometa liga": "Prva nogometa liga (CHO 2)",
-    "1. NL": "Prva nogometa liga (CHO 2)",
-    "Ligue 1": "Ligue 1 (FRA 1)",
-    "Ligue 2": "Ligue 2 (FRA 2)",
-    "LaLiga": "LaLiga (HIS 1)",
-    "LaLiga 2": "LaLiga 2 (HIS 2)",
-    "Eredivisie": "Eredivisie (HOL 1)",
-    "Eerste Divisie": "Eerste Divisie (HOL 2)",
-    "J1 League": "J1 League (JAP 1)",
-    "J2 League": "J2 League (JAP 2)",
-    "Liga MX": "Liga MX (MEX 1)",
-    "Liga Rozwojowa": "Liga Rozwojowa (MEX 2)",
-    "Liga de Expansión MX": "Liga Rozwojowa (MEX 2)",
-    "Bundesliga": "Bundesliga (NIE 1)",
-    "2. Bundesliga": "2. Bundesliga (NIE 2)",
-    "Ekstraklasa": "Ekstraklasa (POL 1)",
-    "I liga": "I liga (POL 2)",
-    "1. Liga": "I liga (POL 2)",
-    "Liga Portugal": "Liga Portugal (POR 1)",
-    "Liga Portugal 2": "Liga Portugal 2 (POR 2)",
-    "MLS": "MLS (USA 1)",
-    "Serie A": "Serie A (WLO 1)",
-    "Serie B": "Serie B (WLO 2)"
-}
+ZRODLO_FOLDER = "Zapis gry (folder)"
+ZRODLO_FM = "Plik zapisu .fm"
+ZRODLO_CSV = "Pliki CSV"
+ZRODLO_DEMO = "Dane demo"
+CO_ILE_SEKUND = 30
 
 
 # =============================================================================
-# PARSERY (czyste funkcje, bez Streamlita)
-# =============================================================================
-def parse_age(val_str):
-    if pd.isna(val_str):
-        return 0
-    first_part = str(val_str).split('-')[0].strip()
-    try:
-        return int(first_part)
-    except (ValueError, TypeError):
-        return 0
-
-
-def _eur(tekst):
-    """'6,25 tys. €' -> 6250.0; '1,9 mln €' -> 1900000.0; '750 €' -> 750.0. Rzuca ValueError przy bledzie."""
-    t = str(tekst).replace('€', '').replace('\xa0', '').replace(' ', '').lower()
-    mnoznik = 1_000_000 if 'mln' in t else 1_000 if 'tys' in t else 1
-    t = re.sub(r'mln|tys\.?', '', t)
-    return float(t.replace(',', '.')) * mnoznik
-
-
-def parse_market_value(val_str):
-    """Szacowana wartosc -> srodek geometryczny widelek (EUR). 'Nie na sprzedaz' / brak -> NaN."""
-    if pd.isna(val_str) or 'sprzeda' in str(val_str).lower():
-        return np.nan
-    try:
-        wartosci = [_eur(p) for p in str(val_str).split(' - ')]
-    except ValueError:
-        return np.nan
-    lo, hi = wartosci[0], wartosci[-1]
-    return (lo * hi) ** 0.5 if lo > 0 else (lo + hi) / 2
-
-
-def parse_wages(val_str):
-    """Placa -> kwota roczna w EUR. Rozpoznaje 'tyg.', 'tydz', '/w' jako stawke tygodniowa."""
-    if pd.isna(val_str):
-        return np.nan
-    t = str(val_str).lower().split(' - ')[0]
-    tygodniowa = bool(re.search(r'tyg|tydz|/w', t))
-    t = re.sub(r'tyg\.?|tydz\.?|/w|/rok|/y', '', t)
-    try:
-        return _eur(t) * (52 if tygodniowa else 1)
-    except ValueError:
-        return np.nan
-
-
-def do_liczb(seria):
-    """Tekst z FM ('45 %', '0,35', '1 234') -> liczba; bledy -> NaN."""
-    oczyszczone = (seria.astype(str)
-                   .str.replace('\xa0', '', regex=False)
-                   .str.replace(' ', '', regex=False)
-                   .str.replace('%', '', regex=False)
-                   .str.replace(',', '.', regex=False)
-                   .str.strip())
-    return pd.to_numeric(oczyszczone, errors='coerce')
-
-
-# =============================================================================
-# WCZYTYWANIE I CZYSZCZENIE DANYCH (raz, w cache)
+# WCZYTYWANIE (cache)
 # =============================================================================
 @st.cache_data(show_spinner="Przetwarzanie pliku CSV...")
-def load_and_clean_data(plik_bajty):
-    try:
-        df = pd.read_csv(io.BytesIO(plik_bajty), sep=None, engine='python', dtype=str, encoding='utf-8-sig')
-    except UnicodeDecodeError:
-        df = pd.read_csv(io.BytesIO(plik_bajty), sep=None, engine='python', dtype=str, encoding='cp1250')
-
-    df.columns = df.columns.astype(str).str.replace('\ufeff', '', regex=False).str.strip()
-    df = df.rename(columns=TLUMACZENIE_KOLUMN)
-
-    # Kolumna z minutami (opcjonalna) -> 'Minuty'
-    for nazwa in NAZWY_KOLUMNY_MINUT:
-        if nazwa in df.columns and 'Minuty' not in df.columns:
-            df = df.rename(columns={nazwa: 'Minuty'})
-            break
-
-    if 'Piłkarz' not in df.columns:
-        raise ValueError("Brak kolumny 'Piłkarz' - czy to na pewno eksport z FM?")
-    df = df[df['Piłkarz'].notna()].copy()
-
-    if 'Wiek' in df.columns:
-        df['Wiek'] = df['Wiek'].apply(parse_age)
-        df = df[df['Wiek'] > 0]
-
-    # Cena i placa: NaN oznacza "brak danych / nie na sprzedaz" (a nie 0 EUR)
-    df['Wartość_Numeryczna'] = df['Cena'].apply(parse_market_value) if 'Cena' in df.columns else np.nan
-    df['Zarobki_Numeryczne'] = df['Płaca'].apply(parse_wages) if 'Płaca' in df.columns else np.nan
-
-    # Statystyki -> liczby (raz, tutaj)
-    for kol in KOLUMNY_STATYSTYK + ['Minuty']:
-        if kol in df.columns:
-            df[kol] = do_liczb(df[kol])
-
-    # Cecha pochodna: odsetek podan konczacych sie strata pilki (mniej = lepiej)
-    if 'Stracone piłki/90' in df.columns and 'Próby podań/90' in df.columns:
-        podania = df['Próby podań/90'].where(df['Próby podań/90'] > 0)
-        df['Strata piłek na podanie'] = df['Stracone piłki/90'] / podania
-
-    # Liga: mnoznik liczony na surowej nazwie, potem nazwa wyswietlana
-    if 'Liga' in df.columns:
-        liga_surowa = df['Liga'].astype(str).str.replace('\xa0', ' ', regex=False).str.strip()
-        df['Mnożnik_Ligi'] = liga_surowa.map(MNOZNIKI_LIG)
-        df['Liga_bez_mnoznika'] = df['Mnożnik_Ligi'].isna()
-        df['Mnożnik_Ligi'] = df['Mnożnik_Ligi'].fillna(1.0)
-        df['Liga'] = liga_surowa.map(MAPOWANIE_NAZW_LIG).fillna(liga_surowa)
-    else:
-        df['Mnożnik_Ligi'] = 1.0
-        df['Liga_bez_mnoznika'] = False
-
-    # Data wygasniecia kontraktu (format d.m.rrrr)
-    if 'Wygasa' in df.columns:
-        df['Wygasa_Data'] = pd.to_datetime(df['Wygasa'], dayfirst=True, errors='coerce')
-    else:
-        df['Wygasa_Data'] = pd.NaT
-
-    # Unikalny klucz zawodnika (nazwiska moga sie powtarzac)
-    czesci = df['Piłkarz'].astype(str).str.strip()
-    if 'Klub' in df.columns:
-        czesci = czesci + ' (' + df['Klub'].fillna('?').astype(str)
-        czesci = czesci + (', ' + df['Wiek'].astype(str) + ')' if 'Wiek' in df.columns else ')')
-    df['ID'] = czesci
-    numer = df.groupby('ID').cumcount() + 1
-    duplikaty = df['ID'].duplicated(keep=False)
-    df.loc[duplikaty, 'ID'] = df.loc[duplikaty, 'ID'] + ' #' + numer[duplikaty].astype(str)
-
-    return df.reset_index(drop=True)
-
-
-def wykryj_pozycje(nazwa_pliku, df):
-    """Probuje odgadnac pozycje: po kolumnie 'Pozycja' (BR = bramkarz) lub po nazwie pliku."""
-    if 'Pozycja' in df.columns:
-        kody = df['Pozycja'].dropna().astype(str).str.strip().str.upper()
-        if len(kody) and kody.str.startswith('BR').mean() > 0.9:
-            return "Bramkarz"
-    nazwa = re.sub(r'\.csv$', '', nazwa_pliku, flags=re.I).strip().lower()
-    nazwa = re.sub(r'[\s_\-]*\(?\d+\)?$', '', nazwa)   # "BR (1)" -> "br"
-    return WSKAZOWKI_NAZW_PLIKOW.get(nazwa)
-
-
-def raport_wczytania(df, pozycja):
-    """Zwraca liste (poziom, tekst) opisujaca jakosc wczytanych danych."""
-    wynik = []
-    wynik.append(("info", f"Liczba zawodników: {len(df)}"))
-    brakujace = [k for k in ('Piłkarz', 'Wiek', 'Klub', 'Liga') if k not in df.columns]
-    if brakujace:
-        wynik.append(("warn", f"Brak kolumn podstawowych: {', '.join(brakujace)}"))
-    brak_cech = [c for c in MERYTORYKA_WAG[pozycja] if c not in df.columns]
-    if brak_cech:
-        wynik.append(("warn", "Brak kolumn potrzebnych do wyniku (cechy pominięte): " + ", ".join(brak_cech)))
-    if 'Minuty' in df.columns and df['Minuty'].notna().any():
-        wynik.append(("info", "Znaleziono kolumnę z minutami - włączone skurczenie cech przy małej próbie."))
-    else:
-        wynik.append(("warn", "Brak kolumny z minutami (np. 'Min') - wynik bez korekty na małą próbę. "
-                              "Dodaj ją do widoku w FM i wyeksportuj ponownie."))
-    if 'Liga_bez_mnoznika' in df.columns and df['Liga_bez_mnoznika'].any():
-        nieznane = sorted(df.loc[df['Liga_bez_mnoznika'], 'Liga'].unique())
-        wynik.append(("warn", "Ligi bez zdefiniowanego mnożnika (przyjęto 1.0): " + ", ".join(nieznane)))
-    bez_ceny = int(df['Wartość_Numeryczna'].isna().sum())
-    if bez_ceny:
-        wynik.append(("info", f"Bez ceny (np. 'Nie na sprzedaż'): {bez_ceny} zawodników - nie są liczeni jako darmowi."))
-    if 'Płaca' in df.columns:
-        sprawdzone = int(df['Zarobki_Numeryczne'].notna().sum())
-        wynik.append(("info", f"Płace rozpoznane: {sprawdzone} z {len(df)}"))
-    powtorzone = int(df['Piłkarz'].duplicated(keep=False).sum())
-    if powtorzone:
-        wynik.append(("info", f"Zawodnicy o tych samych nazwiskach: {powtorzone} - rozróżniani po klubie i wieku (kolumna ID)."))
-    return wynik
-
-
-# =============================================================================
-# MODEL: WYNIK (SCORE) W Z-SCORE, ZE SKURCZENIEM PRZY MALEJ LICZBIE MINUT
-# =============================================================================
-def oblicz_z(df, nazwy_cech, k_baza):
-    """
-    Dla kazdej cechy liczy z-score w obrebie calej puli (df). Jesli dostepne sa minuty, cechy per 90
-    sa skurczone w strone sredniej puli: x* = (n90*x + k*srednia) / (n90 + k), gdzie n90 to liczba
-    pelnych meczow, a k = k_baza * wspolczynnik cechy. Odchylenie standardowe liczone jest na
-    surowych wartosciach, wiec skurczenie realnie przyciaga niepewnych zawodnikow do zera.
-    Zwraca (slownik z-score'ow, n90 lub None).
-    """
-    n90 = None
-    if 'Minuty' in df.columns and df['Minuty'].notna().any():
-        n90 = df['Minuty'] / 90.0
-        n90 = n90.fillna(n90.median())
-
-    z = {}
-    for nazwa in nazwy_cech:
-        if nazwa not in df.columns:
-            continue
-        x = df[nazwa].astype(float)
-        if x.notna().sum() < 2:
-            continue
-        srednia, odchylenie = x.mean(), x.std(ddof=0)
-        if not np.isfinite(odchylenie) or odchylenie == 0:
-            continue
-        kierunek, skurcz = CECHY.get(nazwa, (1, 0.0))
-        xs = x.fillna(srednia)
-        if n90 is not None and skurcz > 0 and k_baza > 0:
-            k = k_baza * skurcz
-            xs = (n90 * xs + k * srednia) / (n90 + k)
-        z[nazwa] = ((xs - srednia) / odchylenie * kierunek).clip(-3, 3)
-    return z, n90
-
-
-def oblicz_score(df, wagi, ignoruj_mnoznik, k_baza):
-    """
-    SCORE = 50 + 10 * (skladana z-score'ow - srednia) / odchylenie, czyli skala typu T-score:
-    50 = przecietny zawodnik na tej pozycji w wgranej probie, +10 = jedno odchylenie wyzej
-    (po wlaczeniu mnoznika ligowego wynik jest dodatkowo mnozony przez wspolczynnik ligi).
-    Wagi sa normalizowane do sumy 1. Zwraca (SCORE, Wiarygodnosc w %, lista pominietych cech).
-    """
-    nazwy = [n for n, w in wagi.items() if w > 0]
-    z, n90 = oblicz_z(df, nazwy, k_baza)
-    uzyte = [n for n in nazwy if n in z]
-    pominiete = [n for n in nazwy if n not in z]
-    suma = sum(wagi[n] for n in uzyte)
-
-    if not uzyte or suma <= 0:
-        return pd.Series(np.nan, index=df.index), pd.Series(np.nan, index=df.index), pominiete
-
-    kompozyt = sum(z[n] * (wagi[n] / suma) for n in uzyte)
-    odch = kompozyt.std(ddof=0)
-    if np.isfinite(odch) and odch > 0:
-        score = 50.0 + 10.0 * (kompozyt - kompozyt.mean()) / odch
-    else:
-        score = pd.Series(50.0, index=df.index)
-
-    if not ignoruj_mnoznik and 'Mnożnik_Ligi' in df.columns:
-        score = score * df['Mnożnik_Ligi']
-
-    if n90 is not None and k_baza > 0:
-        wiarygodnosc = n90 / (n90 + k_baza) * 100.0
-    else:
-        wiarygodnosc = pd.Series(np.nan, index=df.index)
-    return score, wiarygodnosc, pominiete
-
-
-def percentyl_w_puli(pula, wartosc):
-    """Percentyl (0-100, ranga srednia przy remisach) wartosci w puli."""
-    x = pula.dropna()
-    if x.empty or pd.isna(wartosc):
-        return 0.0
-    return float(((x < wartosc).mean() + 0.5 * (x == wartosc).mean()) * 100)
-
-
-def macierz_stylu(pula, kolumny):
-    """Macierz z-score'ow (braki = srednia puli, czyli 0; stale kolumny pomijane) do szukania sobowtora."""
-    kolumny_ok = {}
-    for c in kolumny:
-        x = pula[c].astype(float)
-        odch = x.std(ddof=0)
-        if not np.isfinite(odch) or odch == 0:
-            continue
-        kolumny_ok[c] = ((x.fillna(x.mean()) - x.mean()) / odch).clip(-3, 3)
-    return pd.DataFrame(kolumny_ok, index=pula.index)
-
-
-def wstaw_po(lista, nowy, po):
-    if nowy in lista:
-        return
-    i = lista.index(po) + 1 if po in lista else len(lista)
-    lista.insert(i, nowy)
-
-
-# =============================================================================
-# DANE DEMO (SYNTETYCZNE) - generowane w formacie zblizonym do eksportu z FM
-# =============================================================================
-def _fmt_eur(x):
-    if x >= 1_000_000:
-        return f"{x / 1_000_000:.1f}".replace('.', ',').replace(',0', '') + " mln €"
-    if x >= 1_000:
-        return f"{round(x / 1_000)} tys. €"
-    return f"{round(x)} €"
-
-
-def generuj_demo_csv(pozycja, n=150):
-    rng = np.random.default_rng(100 + POZYCJE.index(pozycja))
-    ligi = ["Premier League", "LaLiga", "Bundesliga", "Ekstraklasa", "Eredivisie", "Ligue 1"]
-    liga = rng.choice(ligi, n)
-    klub = [f"{l.split()[0]} FC {rng.integers(1, 9)}" for l in liga]
-    nazwy = [f"Demo {pozycja.split()[0]} {i:03d}" for i in range(n)]
-    nazwy[1] = nazwy[0]   # celowo dwa takie same nazwiska (test unikalnego ID)
-
-    generatory = {
-        'xA/90': lambda: rng.gamma(2, 0.05, n),
-        'KPzG/90': lambda: rng.gamma(2, 0.6, n),
-        'Liczba goli na 90 min': lambda: rng.gamma(1.2, 0.12, n),
-        'xG/strzał': lambda: np.clip(rng.normal(0.11, 0.04, n), 0.02, 0.5),
-        'Skut (%)': lambda: np.clip(rng.normal(45, 12, n), 0, 100),
-        'Ud Pres/90': lambda: rng.gamma(3, 1.2, n),
-        'Prz/90': lambda: rng.gamma(3, 0.5, n),
-        'Odz Płk/90': lambda: rng.gamma(6, 0.9, n),
-        'Str Płk/90': lambda: rng.gamma(5, 1.2, n),
-        'Pod/90': lambda: rng.gamma(8, 4, n),
-        '% Głw': lambda: np.clip(rng.normal(60, 15, n), 0, 100),
-        'Drb/90': lambda: rng.gamma(2, 0.9, n),
-        'ZxG/90': lambda: np.round(rng.normal(0.0, 0.25, n), 1),
-    }
-    aktywne = set(KOLUMNY_PER_POZYCJA[pozycja])
-    dane = {
-        'Piłkarz': nazwy,
-        'Wiek': rng.integers(18, 37, n).astype(str),
-        'Klub': klub,
-        'Liga': liga,
-        'Pozycja': ['BR' if pozycja == "Bramkarz" else pozycja] * n,
-        'Preferowana noga': rng.choice(["Wyłącznie prawonożny", "Wyłącznie lewonożny", "Obunożny"], n),
-    }
-    wartosc = np.exp(rng.normal(14.5, 1.5, n))
-    dane['Szacowana wartość'] = [
-        "Nie na sprzedaż" if rng.random() < 0.1 else f"{_fmt_eur(v * 0.7)} - {_fmt_eur(v * 1.6)}"
-        for v in wartosc
-    ]
-    dane['Płaca'] = [f"{_fmt_eur(v / 100)} tyg." for v in wartosc]
-    dane['Wygasa'] = [f"30.6.{rng.integers(2027, 2032)}" for _ in range(n)]
-    dane['Min'] = rng.integers(150, 3300, n).astype(str)
-    for surowa, polska in TLUMACZENIE_KOLUMN.items():
-        if polska == "Cena":
-            continue
-        if polska in aktywne:
-            wart = generatory[surowa]()
-            if '%' in surowa:
-                dane[surowa] = [f"{v:.0f} %" for v in wart]
-            else:
-                dane[surowa] = [f"{v:.2f}".replace('.', ',') for v in wart]
-        else:
-            dane[surowa] = ["0"] * n
-    return pd.DataFrame(dane).to_csv(sep=';', index=False).encode('utf-8-sig')
+def wczytaj_csv_cache(plik_bajty):
+    return wczytaj_csv(plik_bajty)
 
 
 @st.cache_data(show_spinner="Generowanie danych demo...")
 def demo_dane(pozycja):
-    return load_and_clean_data(generuj_demo_csv(pozycja))
+    return wczytaj_csv(generuj_demo_csv(pozycja))[0]
+
+
+def _wersja_nazw_lig():
+    try:
+        return PLIK_NAZW_ROZGRYWEK.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+@st.cache_data(show_spinner="Odczyt zapisu kariery (duży zapis może potrwać kilkadziesiąt sekund)...", max_entries=2)
+def wczytaj_zapis_cache(sciezka, rozmiar, mtime, opcje_krotka, wersja_nazw):
+    # rozmiar, mtime i wersja_nazw sa czescia klucza cache: zmiana pliku lub mapy nazw = nowy odczyt
+    return wczytaj_zapis(sciezka, OpcjeZapisu(*opcje_krotka))
+
+
+def zapisz_wgrany_plik(plik):
+    """Wgrany plik .fm -> sciezka na dysku (fmsave czyta z dysku). Zapisywany raz na wgranie."""
+    mapa = st.session_state.setdefault("wgrane_fm", {})
+    sciezka = mapa.get(plik.file_id)
+    if sciezka is None or not Path(sciezka).exists():
+        # Osobny podfolder: sprzatanie kopii z trybu folderu nie usunie wgranego pliku.
+        # Wczesniej wgrane zapisy (po kilkaset MB) sa usuwane - w danej chwili analizujemy jeden.
+        folder = folder_zapisow.folder_kopii() / "wgrane"
+        folder.mkdir(exist_ok=True)
+        for stary in folder.glob("*.fm"):
+            stary.unlink(missing_ok=True)
+        mapa.clear()
+        cel = folder / f"{plik.file_id}.fm"
+        with open(cel, "wb") as f:
+            f.write(plik.getbuffer())
+        mapa[plik.file_id] = sciezka = str(cel)
+    return sciezka
 
 
 # =============================================================================
@@ -644,85 +169,201 @@ def klucz(nazwa, pozycja, sygnatura):
     return f"{nazwa}_{pozycja}_{sygnatura}"
 
 
-def clear_filters(pozycja, sygnatura, min_a, max_a, max_p_mln):
-    st.session_state[klucz("search", pozycja, sygnatura)] = ""
-    st.session_state[klucz("ligi", pozycja, sygnatura)] = []
-    st.session_state[klucz("noga", pozycja, sygnatura)] = []
-    st.session_state[klucz("age", pozycja, sygnatura)] = (min_a, max_a)
-    st.session_state[klucz("price", pozycja, sygnatura)] = (0.0, float(max_p_mln))
-    st.session_state[klucz("bez_ceny", pozycja, sygnatura)] = True
-    st.session_state[klucz("ignore_mult", pozycja, sygnatura)] = False
-    k_kontrakt = klucz("contract", pozycja, sygnatura)
-    if k_kontrakt in st.session_state:
-        st.session_state[k_kontrakt] = False
-    for stat_name, default_val in MERYTORYKA_WAG.get(pozycja, {}).items():
-        k_wagi = f"weight_{pozycja}_{stat_name}"
-        if k_wagi in st.session_state:
-            st.session_state[k_wagi] = int(default_val)
+def wstaw_po(lista, nowy, po):
+    if nowy in lista:
+        return
+    i = lista.index(po) + 1 if po in lista else len(lista)
+    lista.insert(i, nowy)
 
 
-def wlacz_demo():
-    st.session_state["demo_aktywne"] = True
+def domyslnie(k, wartosc):
+    """Ustawia wartosc poczatkowa widzetu raz (widzet tworzony bez parametru value)."""
+    if k not in st.session_state:
+        st.session_state[k] = wartosc
 
 
-def wylacz_demo():
-    st.session_state["demo_aktywne"] = False
+FILTRY = ("search", "ligi", "noga", "age", "price", "bez_ceny", "ignore_mult", "contract", "data_gry",
+          "miesiace", "compare", "klon")
+
+
+def clear_filters(pozycja, sygnatura):
+    # Usuniecie stanu przywraca wartosci domyslne przy nastepnym przebiegu skryptu
+    for nazwa in FILTRY:
+        st.session_state.pop(klucz(nazwa, pozycja, sygnatura), None)
+    for stat_name in MERYTORYKA_WAG.get(pozycja, {}):
+        st.session_state.pop(f"weight_{pozycja}_{stat_name}", None)
+
+
+@st.fragment(run_every=CO_ILE_SEKUND)
+def obserwuj_folder(folder):
+    """Co 30 s sprawdza, czy gra zapisala nowszy stan; jesli tak - przeladowuje aplikacje."""
+    najnowszy = folder_zapisow.najnowszy_zapis(folder)
+    stan = (str(najnowszy.sciezka), najnowszy.mtime) if najnowszy else None
+    if stan != st.session_state.get("obserwowany_zapis"):
+        st.session_state["obserwowany_zapis"] = stan
+        st.rerun()
+    st.caption(f"Śledzenie zmian: sprawdzono o {datetime.now():%H:%M:%S}")
+
+
+def opcje_zapisu_ui():
+    with st.expander("Opcje odczytu zapisu", expanded=False):
+        rodzaj = st.radio("Statystyki z:", ["league", "overall"], key="opt_rodzaj", horizontal=True,
+                          format_func=lambda r: "Ligi" if r == "league" else "Wszystkich rozgrywek")
+        min_minut = st.number_input("Minimalna liczba minut w sezonie:", 0, 5000, 300, step=90, key="opt_min_minut")
+        kurs = st.number_input("Kurs waluty zapisu → EUR:", 0.01, 10.0, KURS_DOMYSLNY, step=0.01,
+                               format="%.3f", key="opt_kurs",
+                               help="Zapis przechowuje kwoty w walucie bazowej (najpewniej GBP). Domyślny kurs "
+                                    "odpowiada temu, co pokazuje gra w euro.")
+        naturalne = st.toggle("Zawodnik na wszystkich naturalnych pozycjach", value=False, key="opt_naturalne",
+                              help="Wyłączone: tylko na pozycji z najwyższą oceną.")
+        tylko_ligi = st.toggle("Tylko kluby przypisane do ligi krajowej", value=True, key="opt_tylko_ligi")
+    return (rodzaj, int(min_minut), float(kurs), naturalne, tylko_ligi)
+
+
+def nazwy_lig_ui(sciezka_zapisu):
+    with st.expander("Nazwy lig", expanded=False):
+        st.caption("Zapis nie zawiera nazw lig. Wgraj stare eksporty CSV z gry (z kolumnami Klub i Liga) - "
+                   "aplikacja dopasuje kluby i zapamięta nazwy lig (również dla kolejnych zapisów).")
+        pliki_csv = st.file_uploader("Eksporty CSV", type=["csv"], accept_multiple_files=True,
+                                     key="uploader_nazwy_lig", label_visibility="collapsed")
+        if pliki_csv and st.button("Rozpoznaj ligi", key="btn_nazwy_lig"):
+            ramki = []
+            for plik in pliki_csv:
+                try:
+                    ramki.append(wczytaj_csv_cache(plik.getvalue())[0])
+                except Exception as e:
+                    st.error(f"Nie udało się wczytać {plik.name}: {e}")
+            with st.spinner("Dopasowywanie klubów do lig..."):
+                mapa = zbuduj_mape_nazw_lig(sciezka_zapisu, ramki)
+            if mapa:
+                zapisz_nazwy_rozgrywek(mapa)
+                st.success(f"Rozpoznano {len(mapa)} lig: " + ", ".join(sorted(mapa.values())))
+            else:
+                st.warning("Nie udało się dopasować żadnej ligi - sprawdź, czy pliki mają kolumny Klub i Liga.")
 
 
 # =============================================================================
 # INTERFEJS
 # =============================================================================
-if "demo_aktywne" not in st.session_state:
-    st.session_state["demo_aktywne"] = False
-
 st.markdown("<div style='font-size: 2.7rem; font-weight: bold; margin-top: -3.5rem; margin-bottom: 1rem;'>FM26 Moneyball Dashboard</div>", unsafe_allow_html=True)
 
-# --- SIDEBAR: kontener na wybor pozycji (wypelniony po wczytaniu plikow) ---
+# --- SIDEBAR: kontener na wybor pozycji (wypelniony po wczytaniu danych) ---
 kontener_pozycji = st.sidebar.container()
 
-dane = {}      # pozycja -> DataFrame
-zrodla = {}    # pozycja -> nazwa pliku lub "DEMO"
+dane = {}        # pozycja -> DataFrame
+zrodla = {}      # pozycja -> opis zrodla ("DEMO", nazwa pliku)
+sygnatury = {}   # pozycja -> sygnatura danych (klucze widzetow)
+wynik_zapisu = None
 
 with st.sidebar:
     st.markdown("---")
-    st.markdown("<div style='font-size: 1.15rem; font-weight: 600; margin-bottom: 0.5rem;'>Dane (pliki CSV)</div>", unsafe_allow_html=True)
-    pliki = st.file_uploader("Wgraj pliki CSV", type=["csv"], accept_multiple_files=True,
-                             key="uploader_wiele", label_visibility="collapsed")
+    st.markdown("<div style='font-size: 1.15rem; font-weight: 600; margin-bottom: 0.5rem;'>Dane</div>", unsafe_allow_html=True)
+    zrodlo = st.radio("Źródło danych", [ZRODLO_FOLDER, ZRODLO_FM, ZRODLO_CSV, ZRODLO_DEMO],
+                      key="zrodlo", label_visibility="collapsed")
 
-    for plik in (pliki or []):
-        surowe = plik.getvalue()
-        try:
-            df_pliku = load_and_clean_data(surowe)
-        except Exception as e:
-            st.error(f"Nie udało się wczytać pliku {plik.name}: {e}")
-            continue
-        k_przyp = f"przypisanie_{plik.name}_{len(surowe)}"
-        if k_przyp not in st.session_state:
-            st.session_state[k_przyp] = wykryj_pozycje(plik.name, df_pliku) or WYBIERZ
-        wybor = st.selectbox(f"{plik.name} ({len(df_pliku)} zawodników) - pozycja:",
-                             [WYBIERZ] + POZYCJE, key=k_przyp)
-        if wybor != WYBIERZ:
-            if wybor in dane:
-                st.warning(f"Pozycja {wybor} jest przypisana do więcej niż jednego pliku - użyto {plik.name}.")
-            dane[wybor] = df_pliku
-            zrodla[wybor] = plik.name
+    if zrodlo in (ZRODLO_FOLDER, ZRODLO_FM):
+        opcje = opcje_zapisu_ui()
+        sciezka_zapisu, opis = None, None
 
-    if st.session_state["demo_aktywne"]:
-        for p in POZYCJE:
-            if p not in dane:
-                dane[p] = demo_dane(p)
-                zrodla[p] = "DEMO"
-        st.button("Usuń dane demo", on_click=wylacz_demo, key="btn_demo_off")
+        if zrodlo == ZRODLO_FOLDER:
+            domyslnie("folder_zapisow", str(folder_zapisow.domyslny_folder() or ""))
+            folder = st.text_input("Folder zapisów FM26:", key="folder_zapisow",
+                                   help="Domyślnie Dokumenty/Sports Interactive/Football Manager 26/games.")
+            pliki = folder_zapisow.lista_zapisow(folder) if folder else []
+            if not pliki:
+                st.warning("Nie znaleziono plików .fm w tym folderze. Wskaż folder 'games' z zapisami FM26 "
+                           "(aplikacja musi działać na komputerze z grą) albo wgraj plik .fm.")
+            else:
+                najnowszy = st.toggle("Zawsze najnowszy zapis", value=True, key="auto_najnowszy")
+                if najnowszy:
+                    wybrany = pliki[0]
+                else:
+                    wybrany = st.selectbox("Zapis:", pliki, key="wybrany_zapis",
+                                           format_func=lambda p: f"{p.nazwa} ({datetime.fromtimestamp(p.mtime):%d.%m %H:%M})")
+                st.caption(f"{wybrany.nazwa} · zapisany {datetime.fromtimestamp(wybrany.mtime):%d.%m.%Y %H:%M}")
+                if st.toggle("Śledź zmiany zapisów", value=True, key="sledz_zmiany"):
+                    st.session_state["obserwowany_zapis"] = (str(pliki[0].sciezka), pliki[0].mtime)
+                    obserwuj_folder(folder)
+                # Kopia powstaje raz na stan zapisu; sprawdzanie, czy gra wlasnie pisze plik, tylko po zmianie
+                stan_zapisu = (str(wybrany.sciezka), wybrany.mtime, wybrany.rozmiar)
+                ostatni = st.session_state.get("ostatni_stabilny")
+                if ostatni and not Path(ostatni[1]).exists():
+                    ostatni = None
+                if ostatni and ostatni[0] == stan_zapisu:
+                    sciezka_zapisu, opis = ostatni[1], ostatni[2]
+                elif folder_zapisow.czy_stabilny(wybrany.sciezka, odstep=0.5):
+                    kopia = folder_zapisow.bezpieczna_kopia(wybrany)
+                    sciezka_zapisu, opis = str(kopia), wybrany.nazwa
+                    st.session_state["ostatni_stabilny"] = (stan_zapisu, sciezka_zapisu, opis)
+                else:
+                    st.info("Gra właśnie zapisuje plik - pokazuję poprzedni stan.")
+                    if ostatni:
+                        sciezka_zapisu, opis = ostatni[1], ostatni[2]
+        else:
+            plik_fm = st.file_uploader("Wgraj plik zapisu .fm", type=["fm"], key="uploader_fm",
+                                       label_visibility="collapsed")
+            if plik_fm is not None:
+                sciezka_zapisu, opis = zapisz_wgrany_plik(plik_fm), plik_fm.name
+
+        if sciezka_zapisu:
+            stat = Path(sciezka_zapisu).stat()
+            try:
+                wynik_zapisu = wczytaj_zapis_cache(sciezka_zapisu, stat.st_size, stat.st_mtime, opcje,
+                                                   _wersja_nazw_lig())
+            except Exception as e:
+                st.error(f"Nie udało się odczytać zapisu {opis}: {e}")
+            if wynik_zapisu is not None:
+                for p, ramka in wynik_zapisu.dane.items():
+                    dane[p] = ramka
+                    zrodla[p] = opis
+                    sygnatury[p] = hashlib.md5(f"{stat.st_mtime}_{stat.st_size}_{opcje}".encode()).hexdigest()[:12]
+                st.caption(f"Data w grze: {wynik_zapisu.data_gry or '?'} · zawodników w analizie: "
+                           f"{wynik_zapisu.liczniki.get('w_aplikacji', 0)}")
+                for tekst in wynik_zapisu.ostrzezenia:
+                    st.warning(tekst)
+            nazwy_lig_ui(sciezka_zapisu)
+
+    elif zrodlo == ZRODLO_CSV:
+        pliki = st.file_uploader("Wgraj pliki CSV", type=["csv"], accept_multiple_files=True,
+                                 key="uploader_wiele", label_visibility="collapsed")
+        for plik in (pliki or []):
+            surowe = plik.getvalue()
+            try:
+                df_pliku, _ = wczytaj_csv_cache(surowe)
+            except Exception as e:
+                st.error(f"Nie udało się wczytać pliku {plik.name}: {e}")
+                continue
+            k_przyp = f"przypisanie_{plik.name}_{len(surowe)}"
+            domyslnie(k_przyp, wykryj_pozycje(plik.name, df_pliku) or WYBIERZ)
+            wybor = st.selectbox(f"{plik.name} ({len(df_pliku)} zawodników) - pozycja:",
+                                 [WYBIERZ] + POZYCJE, key=k_przyp)
+            if wybor != WYBIERZ:
+                if wybor in dane:
+                    st.warning(f"Pozycja {wybor} jest przypisana do więcej niż jednego pliku - użyto {plik.name}.")
+                dane[wybor] = df_pliku
+                zrodla[wybor] = plik.name
+                sygnatury[wybor] = hashlib.md5(surowe).hexdigest()[:12]
+
     else:
-        st.button("Wczytaj dane demo (syntetyczne)", on_click=wlacz_demo, key="btn_demo_on")
+        for p in POZYCJE:
+            dane[p] = demo_dane(p)
+            zrodla[p] = "DEMO"
+            sygnatury[p] = "demo"
 
     with st.expander("Ustawienia", expanded=False):
-        moj_klub = st.text_input("Mój klub (podświetlenie w tabelach):", value="Tottenham", key="moj_klub")
+        if wynik_zapisu is not None and wynik_zapisu.moj_klub and not st.session_state.get("moj_klub"):
+            st.session_state["moj_klub"] = wynik_zapisu.moj_klub
+        domyslnie("moj_klub", "")
+        moj_klub = st.text_input("Mój klub (podświetlenie w tabelach):", key="moj_klub")
         k_baza = st.slider(
             "Siła skurczenia przy małej próbie (mecze):", 0, 15, 5, key="k_baza",
-            help="Działa tylko, gdy plik zawiera minuty. Zawodnik z małą liczbą minut jest przyciągany do średniej "
+            help="Działa tylko, gdy dane zawierają minuty. Zawodnik z małą liczbą minut jest przyciągany do średniej "
                  "pozycji: im większa wartość, tym mocniej. 0 = wyłączone."
         )
+        pokaz_ukryte = st.toggle("Pokaż dane ukryte w grze (CA/PA)", value=False, key="pokaz_ukryte",
+                                 help="Tylko z pliku zapisu. To dane, których w grze nie widać bez pełnej wiedzy skautów.")
+        maks_wierszy = st.number_input("Maks. wierszy w tabeli:", 100, 20000, 1000, step=100, key="maks_wierszy",
+                                       help="Duża tabela z kolorowaniem renderuje się wolno; filtry działają na pełnych danych.")
     st.markdown("---")
 
 with kontener_pozycji:
@@ -730,33 +371,33 @@ with kontener_pozycji:
     pozycja_nazwa = st.radio(
         "Pozycja", POZYCJE,
         format_func=lambda p: f"{p} ({len(dane[p])})" if p in dane else p,
-        label_visibility="collapsed"
+        label_visibility="collapsed", key="pozycja"
     )
 
 df = dane.get(pozycja_nazwa)
 
 if df is None or df.empty:
-    st.info(f"Brak danych dla pozycji: {pozycja_nazwa}. Wgraj plik CSV w panelu bocznym "
-            "(po wgraniu wskaż, której pozycji dotyczy) albo użyj danych demo.")
-    with st.expander("Jak przygotować eksport z FM?", expanded=True):
+    st.info(f"Brak danych dla pozycji: {pozycja_nazwa}. Wybierz źródło danych w panelu bocznym.")
+    with st.expander("Skąd wziąć dane?", expanded=True):
         st.markdown(
-            "- Widok z kolumnami: **Piłkarz, Wiek, Klub, Liga, Pozycja, Preferowana noga, Szacowana wartość, "
-            "Płaca, Wygasa** oraz statystyki per 90 (xA, KPzG, gole, ZxG itd.).\n"
-            "- **Dodaj kolumnę z minutami** (np. *Min*) - dzięki niej wynik uwzględni niepewność przy małej próbie.\n"
-            "- Wyeksportuj widok do CSV osobno dla każdej pozycji i wgraj pliki (można kilka naraz)."
+            "- **Zapis gry (folder)** - aplikacja sama znajduje najnowszy zapis FM26 i odświeża się po każdym "
+            "zapisie w grze. Działa, gdy aplikacja jest uruchomiona na komputerze z grą.\n"
+            "- **Plik zapisu .fm** - wgraj plik kariery z folderu *Sports Interactive/Football Manager 26/games*.\n"
+            "- **Pliki CSV** - eksport widoku z gry (po jednym pliku na pozycję), z kolumną minut (*Min*).\n"
+            "- **Dane demo** - syntetyczne dane do wypróbowania aplikacji."
         )
     st.stop()
 
 if zrodla.get(pozycja_nazwa) == "DEMO":
     st.warning("Wyświetlane są syntetyczne dane demonstracyjne, a nie dane z Twojej gry.")
 
-sygnatura = f"{len(df)}_{int(df['Wiek'].sum()) if 'Wiek' in df.columns else 0}"
+sygnatura = sygnatury.get(pozycja_nazwa, "x")
 K = lambda nazwa: klucz(nazwa, pozycja_nazwa, sygnatura)
 
 # --- DYNAMICZNE FILTRY W SIDEBARZE ---
 zdefiniowana_kolejnosc = list(MAPOWANIE_NAZW_LIG.values())
 unikalne_ligi = df['Liga'].dropna().unique().tolist() if 'Liga' in df.columns else []
-dostepne_ligi = sorted(unikalne_ligi, key=lambda x: zdefiniowana_kolejnosc.index(x) if x in zdefiniowana_kolejnosc else 999)
+dostepne_ligi = sorted(unikalne_ligi, key=lambda x: (zdefiniowana_kolejnosc.index(x) if x in zdefiniowana_kolejnosc else 999, str(x)))
 dostepne_nogi = sorted(df['Preferowana noga'].dropna().unique()) if 'Preferowana noga' in df.columns else []
 
 min_age = int(df['Wiek'].min()) if 'Wiek' in df.columns else 15
@@ -771,6 +412,7 @@ liczba_bez_ceny = int(df['Wartość_Numeryczna'].isna().sum())
 
 with st.sidebar:
     st.markdown("### Filtry wyszukiwania")
+    domyslnie(K("ignore_mult"), False)
     ignore_mult = st.toggle("Ignoruj mnożnik ligowy", key=K("ignore_mult"),
                             help="Mnożniki lig są wartościami heurystycznymi (nie weryfikowanymi na danych).")
     search = st.text_input("Szukaj (Piłkarz / Klub):", key=K("search"))
@@ -784,17 +426,24 @@ with st.sidebar:
     if df['Wygasa_Data'].notna().any():
         filtr_kontraktu = st.checkbox("Tylko kontrakty wygasające wkrótce", key=K("contract"))
         if filtr_kontraktu:
-            data_gry = st.date_input(
-                "Data w grze:", value=df['Wygasa_Data'].min().date(), key=K("data_gry"),
-                help="Ustaw bieżącą datę z gry. Domyślnie wpisano najwcześniejszy koniec kontraktu z pliku."
-            )
-            miesiace = st.number_input("W ciągu (miesięcy):", min_value=1, max_value=36, value=6, key=K("miesiace"))
+            if wynik_zapisu is not None and wynik_zapisu.data_gry:
+                domyslnie(K("data_gry"), wynik_zapisu.data_gry)
+                pomoc = "Data w grze odczytana z zapisu."
+            else:
+                domyslnie(K("data_gry"), df['Wygasa_Data'].min().date())
+                pomoc = "Ustaw bieżącą datę z gry (CSV jej nie zawiera). Domyślnie: najwcześniejszy koniec kontraktu z pliku."
+            data_gry = st.date_input("Data w grze:", key=K("data_gry"), help=pomoc)
+            domyslnie(K("miesiace"), 6)
+            miesiace = st.number_input("W ciągu (miesięcy):", min_value=1, max_value=36, key=K("miesiace"))
 
-    age_filter = st.slider("Wiek:", min_age, max_age, (min_age, max_age), key=K("age"))
-    price_filter_mln = st.slider("Cena (mln €):", 0.0, float(max_price_mln), (0.0, float(max_price_mln)), key=K("price"))
+    domyslnie(K("age"), (min_age, max_age))
+    age_filter = st.slider("Wiek:", min_age, max_age, key=K("age"))
+    domyslnie(K("price"), (0.0, float(max_price_mln)))
+    price_filter_mln = st.slider("Cena (mln €):", 0.0, float(max_price_mln), key=K("price"))
     pokaz_bez_ceny = True
     if liczba_bez_ceny:
-        pokaz_bez_ceny = st.toggle(f"Uwzględnij zawodników bez ceny ({liczba_bez_ceny})", value=True, key=K("bez_ceny"),
+        domyslnie(K("bez_ceny"), True)
+        pokaz_bez_ceny = st.toggle(f"Uwzględnij zawodników bez ceny ({liczba_bez_ceny})", key=K("bez_ceny"),
                                    help="Zawodnicy oznaczeni jako 'Nie na sprzedaż' nie mają ceny i nie są traktowani jako darmowi.")
     price_min = price_filter_mln[0] * 1_000_000
     price_max = price_filter_mln[1] * 1_000_000 + 1   # +1 EUR chroni przed bledem zaokraglenia
@@ -817,10 +466,11 @@ with st.sidebar:
             st.caption("Udział po normalizacji - " + udzialy)
 
     szeroki(st.button, "Wyczyść filtry", key=f"btn_clear_{pozycja_nazwa}", on_click=clear_filters,
-            args=(pozycja_nazwa, sygnatura, min_age, max_age, max_price_mln))
+            args=(pozycja_nazwa, sygnatura))
 
 # --- RAPORT WCZYTANIA ---
 with st.expander("Raport wczytania danych", expanded=False):
+    st.caption(f"Źródło: {zrodla.get(pozycja_nazwa)}")
     for poziom, tekst in raport_wczytania(df, pozycja_nazwa):
         if poziom == "warn":
             st.warning(tekst)
@@ -882,11 +532,15 @@ if 'Płaca' in filtered_df.columns:
     wstaw_po(cols_to_show, 'Płaca', 'Cena')
 if 'Wygasa' in filtered_df.columns:
     wstaw_po(cols_to_show, 'Wygasa', 'Płaca' if 'Płaca' in cols_to_show else 'Cena')
+if pokaz_ukryte:
+    for kol in reversed(KOLUMNY_UKRYTE):
+        if kol in filtered_df.columns and filtered_df[kol].notna().any():
+            wstaw_po(cols_to_show, kol, 'Wiek')
 
 TEKSTOWE = ['Percentyl', 'Piłkarz', 'Klub', 'Liga', 'Pozycja', 'Cena', 'Płaca', 'Wygasa', 'Kraj', 'Preferowana noga']
 format_dict = {}
 for col in cols_to_show:
-    if col == 'SCORE' or col in ('Wiek', 'Minuty'):
+    if col == 'SCORE' or col in ('Wiek', 'Minuty', 'CA', 'PA'):
         format_dict[col] = '{:.0f}'
     elif col == 'Wiarygodność':
         format_dict[col] = '{:.0f}%'
@@ -904,7 +558,11 @@ def podswietl_moj_klub(row):
     return ['' for _ in row]
 
 
-df_style = filtered_df[cols_to_show].style.format(format_dict, na_rep="–")
+do_tabeli = filtered_df.head(int(maks_wierszy))
+if len(filtered_df) > len(do_tabeli):
+    st.caption(f"Pokazano {len(do_tabeli)} najlepszych z {len(filtered_df)} zawodników spełniających filtry "
+               "(limit w Ustawieniach).")
+df_style = do_tabeli[cols_to_show].style.format(format_dict, na_rep="–")
 df_style = df_style.apply(podswietl_moj_klub, axis=1)
 if 'SCORE' in cols_to_show:
     df_style = df_style.background_gradient(subset=['SCORE'], cmap=jasna_paleta)
@@ -915,10 +573,10 @@ col_config = {}
 if 'SCORE' in cols_to_show:
     col_config['SCORE'] = st.column_config.Column(
         "SCORE", alignment="center",
-        help="Skala typu T-score: 50 = przeciętny zawodnik na tej pozycji w wgranej próbie, +10 = jedno odchylenie standardowe wyżej. Przy włączonym mnożniku ligowym wartości są dodatkowo skalowane przez ligę (średnia spada poniżej 50).")
+        help="Skala typu T-score: 50 = przeciętny zawodnik na tej pozycji w próbie, +10 = jedno odchylenie standardowe wyżej. Przy włączonym mnożniku ligowym dodawana jest korekta 50 × (mnożnik − 1), np. −4 pkt dla Premier League, −16 dla I ligi.")
 if 'Percentyl' in cols_to_show:
     col_config['Percentyl'] = st.column_config.ProgressColumn(
-        "Percentyl", help="0-100: pozycja w wgranej próbie (nie w całej lidze).",
+        "Percentyl", help="0-100: pozycja w próbie (nie w całej lidze).",
         format="%.0f", min_value=0, max_value=100, width="small")
 if 'Wiarygodność' in cols_to_show:
     col_config['Wiarygodność'] = st.column_config.ProgressColumn(
@@ -937,15 +595,16 @@ zawodnicy_do_porownania = st.multiselect(
 )
 
 stat_cols = [c for c in dedykowane_kolumny if c not in NIE_STATYSTYKI and c in base_df.columns]
+radar_cols = [c for c in stat_cols if c not in NEUTRALNE]
 
 if len(zawodnicy_do_porownania) == 2:
     df_compare = filtered_df[filtered_df['ID'].isin(zawodnicy_do_porownania)]
-    if stat_cols:
+    if radar_cols:
         fig = go.Figure()
-        etykiety = [c + " (odwrócone)" if c in NIZSZE_LEPSZE else c for c in stat_cols]
+        etykiety = [c + " (odwrócone)" if c in NIZSZE_LEPSZE else c for c in radar_cols]
         for _, row in df_compare.iterrows():
             procenty = []
-            for c in stat_cols:
+            for c in radar_cols:
                 p = percentyl_w_puli(base_df[c], row[c])
                 procenty.append(100.0 - p if c in NIZSZE_LEPSZE else p)   # mniej strat = lepiej
             fig.add_trace(go.Scatterpolar(
@@ -965,6 +624,8 @@ if len(zawodnicy_do_porownania) == 2:
             showlegend=True, height=500, margin=dict(t=40, b=40, l=120, r=40)
         )
         szeroki(st.plotly_chart, fig)
+        if NEUTRALNE & set(stat_cols):
+            st.caption("Cechy stylu gry (np. liczba prób podań) nie są pokazane na radarze - więcej nie znaczy lepiej.")
     else:
         st.info("Brak szczegółowych statystyk meczowych do wygenerowania radaru.")
 elif len(zawodnicy_do_porownania) == 1:
@@ -974,13 +635,15 @@ elif len(zawodnicy_do_porownania) == 1:
 st.markdown("---")
 st.subheader("Znajdź sobowtóra", anchor=False)
 st.markdown("Wybierz zawodnika (np. gwiazdę swojej drużyny). Algorytm porówna profil statystyk per 90 minut "
-            "(podobieństwo kosinusowe w obrębie tej pozycji) i wskaże 5 najbardziej podobnych graczy spośród "
-            "widocznych w tabeli. Profil jest liczony na pełnej wgranej próbie, więc filtry nie zniekształcają wyniku.")
+            "(podobieństwo kosinusowe w obrębie tej pozycji, ze skurczeniem przy małej liczbie minut) i wskaże 5 "
+            "najbardziej podobnych graczy spośród widocznych w tabeli. Profil jest liczony na pełnej próbie, więc "
+            "filtry nie zniekształcają wyniku.")
 
+domyslnie(K("klon"), "")
 zawodnik_do_zastapienia = st.selectbox("Kogo chcesz zastąpić?", options=[""] + sorted(base_df['ID'].tolist()), key=K("klon"))
 
 if zawodnik_do_zastapienia:
-    macierz = macierz_stylu(base_df, stat_cols)
+    macierz = macierz_stylu(base_df, stat_cols, k_baza)
     if macierz.shape[1] < 2:
         st.info("Za mało zróżnicowanych kolumn liczbowych do porównania stylu gry.")
     else:
@@ -1011,17 +674,12 @@ if zawodnik_do_zastapienia:
         })
 
 # --- WYKRES: SCORE VS CENA ---
-tooltip_cols = [
-    alt.Tooltip('ID:N', title='Piłkarz'),
-    alt.Tooltip('Wiek:Q', title='Wiek', format='.0f'),
-    alt.Tooltip('Klub:N', title='Klub'),
-    alt.Tooltip('Cena:N', title='Cena'),
-    alt.Tooltip('SCORE:Q', title='SCORE', format='.0f'),
-    alt.Tooltip('Percentyl:Q', title='Percentyl', format='.0f'),
-    alt.Tooltip('Liga:N', title='Liga')
-]
-if 'Płaca' in filtered_df.columns:
-    tooltip_cols.append(alt.Tooltip('Płaca:N', title='Płaca'))
+# Tooltipy tylko z kolumn, ktore sa w danych (CSV moze nie miec np. klubu czy wieku)
+MOZLIWE_TOOLTIPY = [('ID', 'N', 'Piłkarz', None), ('Wiek', 'Q', 'Wiek', '.0f'), ('Klub', 'N', 'Klub', None),
+                    ('Cena', 'N', 'Cena', None), ('SCORE', 'Q', 'SCORE', '.0f'), ('Percentyl', 'Q', 'Percentyl', '.0f'),
+                    ('Liga', 'N', 'Liga', None), ('Płaca', 'N', 'Płaca', None)]
+tooltip_cols = [alt.Tooltip(f'{kol}:{typ}', title=tytul, **({'format': fmt} if fmt else {}))
+                for kol, typ, tytul, fmt in MOZLIWE_TOOLTIPY if kol in filtered_df.columns]
 
 chart_data = filtered_df[filtered_df['Wartość_Numeryczna'].notna()].head(30)
 if not chart_data.empty:
@@ -1029,14 +687,16 @@ if not chart_data.empty:
     st.subheader("Score vs Cena (Top 30, tylko zawodnicy z ceną)", anchor=False)
     min_score, max_score = float(chart_data['SCORE'].min()), float(chart_data['SCORE'].max())
     margines = (max_score - min_score) * 0.05 or 1.0
-    wykres = alt.Chart(chart_data).mark_circle(size=300).encode(
+    kodowanie = dict(
         x=alt.X('Wartość_Numeryczna:Q', title='Cena (€, środek widełek)', axis=alt.Axis(format='~s'),
                 scale=alt.Scale(zero=False)),
         y=alt.Y('SCORE:Q', title='Score', axis=alt.Axis(format='.0f'),
                 scale=alt.Scale(zero=False, domain=[min_score - margines, max_score + margines])),
-        color=alt.Color('Wiek:Q', scale=alt.Scale(scheme='viridis'), title='Wiek'),
         tooltip=tooltip_cols
-    ).properties(height=500)
+    )
+    if 'Wiek' in chart_data.columns:
+        kodowanie['color'] = alt.Color('Wiek:Q', scale=alt.Scale(scheme='viridis'), title='Wiek')
+    wykres = alt.Chart(chart_data).mark_circle(size=300).encode(**kodowanie).properties(height=500)
     szeroki(st.altair_chart, wykres.interactive())
 
 # --- TOP 10 W POSZCZEGÓLNYCH STATYSTYKACH ---

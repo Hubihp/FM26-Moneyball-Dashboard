@@ -1,5 +1,11 @@
 venv/
+.venv/
 __pycache__/
-.streamlit/
+.pytest_cache/
+.streamlit/*
+!.streamlit/config.toml
 *.csv
+!dane/nazwy_rozgrywek.csv
 *.xlsx
+*.fm
+raport_zapisu.json

@@ -1,7 +1,10 @@
-streamlit
-pandas
-altair
-numpy
-matplotlib
-plotly
-scikit-learn
+# Python >= 3.12 (wymog fmsave)
+streamlit>=1.40
+pandas>=2.2
+numpy>=1.26
+altair>=5
+plotly>=5
+matplotlib>=3.8
+# Odczyt plikow zapisu FM26 (.fm). Wersja przypieta, bo format zapisu jest odtwarzany
+# metoda inzynierii wstecznej - po aktualizacji gry sprawdz nowsza wersje fmsave.
+fmsave[pandas]==0.5.11
