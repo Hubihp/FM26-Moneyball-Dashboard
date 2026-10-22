@@ -8,8 +8,8 @@ import pytest
 
 fmsave = pytest.importorskip("fmsave")
 
-from fm_moneyball.zrodla.zapis_fm import (OpcjeZapisu, glowna_pozycja, grupy_pozycji, ligi_klubow,  # noqa: E402
-                                          mapa_nazw_z_csv, preferowana_noga, statystyki_kanoniczne,
+from fm_moneyball.zrodla.zapis_fm import (KandydatLigi, OpcjeZapisu, glowna_pozycja, grupy_pozycji,  # noqa: E402
+                                          kandydaci_lig, ligi_klubow, mapa_nazw_z_csv, preferowana_noga, statystyki_kanoniczne,
                                           sumuj_statystyki, zbuduj_ramki, zapisz_nazwy_rozgrywek,
                                           wczytaj_nazwy_rozgrywek)
 
@@ -76,7 +76,10 @@ def test_statystyki_per_90_i_odsetki():
     assert s["Oczekiwane gole na strzał"] == pytest.approx(0.125)
     assert s["Skuteczność strzałów (%)"] == pytest.approx(40)
     assert s["% wygranych pojedynków główkowych"] == pytest.approx(60)
+    # u zawodnika z pola brak pol bramkarskich -> brak danych (a nie 0)
     assert np.isnan(s["Skuteczność obron (%)"]) and np.isnan(s["Uniknięte oczekiwane gole/90"])
+    zero = statystyki_kanoniczne(sumuj_statystyki([wiersz_statystyk(1, expected_goals_prevented=0.0)], "league")[1])
+    assert np.isnan(zero["Uniknięte oczekiwane gole/90"])
 
 
 def test_bramkarz_ma_obrony():
@@ -147,17 +150,63 @@ def test_ligi_klubow():
     assert ligi[19].etykieta == "Rozgrywki #10"
 
 
-def test_mapa_nazw_z_csv(tmp_path):
+def _kluby(nazwy):
+    return [NS(uid=i, name=n, short_name=n, nation_id=1) for i, n in enumerate(nazwy, start=1)]
+
+
+def test_mapa_nazw_jeden_do_jednego_przy_awansach():
+    # 6 klubow gra dzis w Championship (id 12), 3 awansowaly do Premier League (id 11).
+    # Stare CSV podaje "EFL Championship" dla wszystkich 9, a klubow z Premier League nie zawiera.
+    kluby = _kluby([f"Klub {i}" for i in range(1, 10)])
+    kandydaci = {k.uid: [KandydatLigi(24, 12 if k.uid <= 6 else 11, 12 if k.uid <= 6 else 11)] for k in kluby}
+    csv = pd.DataFrame({"Klub": [k.name for k in kluby], "Liga": ["EFL Championship (ANG 2)"] * 9})
+    assert mapa_nazw_z_csv(kandydaci, kluby, [csv]) == {12: "EFL Championship"}
+
+
+def test_mapa_nazw_liga_stanowa_przegrywa_z_krajowa():
+    # 8 klubow Serie A (id 500) gra tez w dwoch ligach stanowych (id 901 i 902)
+    kluby = _kluby([f"Clube {i}" for i in range(1, 9)])
+    kandydaci = {k.uid: [KandydatLigi(16, 901 if k.uid <= 4 else 902, 901 if k.uid <= 4 else 902),
+                         KandydatLigi(20, 500, 500)] for k in kluby}
+    csv = pd.DataFrame({"Klub": [k.name for k in kluby], "Liga": ["Série A (BRA 1)"] * 8})
+    mapa = mapa_nazw_z_csv(kandydaci, kluby, [csv])
+    assert mapa == {500: "Série A"}
+    ligi = ligi_klubow([], [], kluby, nazwy=mapa, kandydaci=kandydaci)
+    assert all(l.competition_id == 500 and l.etykieta == "Série A" for l in ligi.values())
+
+
+def test_kandydaci_lig_bez_nazw_najwieksza_tabela():
+    kluby = [NS(uid=i, nation_id=1) for i in range(1, 21)]
+    tabele = [_tabela(901, list(range(1, 17))), _tabela(500, list(range(1, 21)))]
+    kandydaci = kandydaci_lig(tabele, [NS(id=901, database_id=9), NS(id=500, database_id=5)], kluby)
+    assert [k.competition_id for k in kandydaci[1]] == [500, 901]
+    assert ligi_klubow([], [], kluby, kandydaci=kandydaci)[1].etykieta == "Rozgrywki #5"
+    # gdy znamy nazwe tylko ligi stanowej, wygrywa ona (nazwana ma pierwszenstwo)
+    assert ligi_klubow([], [], kluby, nazwy={9: "Paulista"}, kandydaci=kandydaci)[1].competition_id == 901
+
+
+def test_mapa_nazw_z_csv_progi_i_dopasowanie_klubow():
     kluby = [NS(uid=1, name="Legia Warszawa", short_name="Legia"), NS(uid=2, name="Lech Poznań", short_name="Lech"),
-             NS(uid=3, name="Arsenal", short_name="Arsenal")]
-    liga_klubu = {1: NS(database_id=7), 2: NS(database_id=7), 3: NS(database_id=8)}
+             NS(uid=3, name="Arsenal", short_name="Arsenal"), NS(uid=4, name="Arsenal", short_name="Arsenal")]
+    kandydaci = {1: [KandydatLigi(18, 7, 7)], 2: [KandydatLigi(18, 7, 7)], 3: [KandydatLigi(20, 8, 8)]}
     csv = pd.DataFrame({"Klub": ["Legia", "Lech Poznań", "Arsenal"],
                         "Liga": ["Ekstraklasa (POL 1)", "Ekstraklasa (POL 1)", "Premier League (ANG 1)"]})
-    mapa = mapa_nazw_z_csv(liga_klubu, kluby, [csv])
-    assert mapa == {7: "Ekstraklasa"}          # Premier League ma tylko jeden glos
-    assert mapa_nazw_z_csv(liga_klubu, kluby, [csv], min_glosow=1) == {7: "Ekstraklasa", 8: "Premier League"}
+    # ten sam klub w dwoch plikach CSV glosuje raz; "Arsenal" jest niejednoznaczny
+    assert mapa_nazw_z_csv(kandydaci, kluby, [csv, csv]) == {7: "Ekstraklasa"}
+    assert mapa_nazw_z_csv(kandydaci, kluby, [csv], min_glosow=1) == {7: "Ekstraklasa"}
 
+
+def test_zapis_mapy_nowe_wpisy_wygrywaja(tmp_path):
     plik = tmp_path / "nazwy.csv"
-    zapisz_nazwy_rozgrywek({7: "Ekstraklasa"}, plik)
-    zapisz_nazwy_rozgrywek({7: "Inna", 8: "Premier League"}, plik)   # istniejace wpisy maja pierwszenstwo
-    assert wczytaj_nazwy_rozgrywek(plik) == {7: "Ekstraklasa", 8: "Premier League"}
+    zapisz_nazwy_rozgrywek({11: "EFL Championship", 16: "Ligue 1"}, plik)    # 11 nauczone blednie
+    wynik = zapisz_nazwy_rozgrywek({12: "EFL Championship", 22: "Bundesliga"}, plik)
+    assert wynik == {12: "EFL Championship", 16: "Ligue 1", 22: "Bundesliga"}
+    assert wczytaj_nazwy_rozgrywek(plik) == wynik
+
+
+def test_domyslna_mapa_nazw_pasuje_do_mnoznikow():
+    from fm_moneyball.stale import MNOZNIKI_LIG
+    from fm_moneyball.zrodla.zapis_fm import PLIK_NAZW_ROZGRYWEK
+    mapa = wczytaj_nazwy_rozgrywek(PLIK_NAZW_ROZGRYWEK)
+    assert mapa and all(nazwa in MNOZNIKI_LIG for nazwa in mapa.values())
+    assert len(set(mapa.values())) == len(mapa)

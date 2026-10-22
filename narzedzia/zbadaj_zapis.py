@@ -1,14 +1,16 @@
 """
 Diagnostyka pliku zapisu FM26 - uruchom lokalnie na swoim zapisie i odeslij wynik.
 
-    python narzedzia/zbadaj_zapis.py "C:/.../Football Manager 26/games/Kariera.fm" [eksport1.csv eksport2.csv ...]
+    python narzedzia/zbadaj_zapis.py "C:/.../Football Manager 26/games/Kariera.fm" [eksport1.csv ...] [--zapisz-nazwy]
 
 Wypisuje i zapisuje do pliku `raport_zapisu.json` (obok zapisu albo w biezacym folderze):
   - wersje gry, date w grze, czas odczytu kazdej czesci zapisu,
   - ile zawodnikow, klubow i lig udalo sie odczytac i przypisac,
   - pokrycie kolumn aplikacji (procent zawodnikow z wartoscia) dla kazdej pozycji,
   - probke Twojej kadry (do porownania z tym, co pokazuje gra),
-  - (opcjonalnie) nazwy lig rozpoznane ze starych eksportow CSV.
+  - liste lig z liczba klubow i przykladowymi klubami (do sprawdzenia przypisania),
+  - (opcjonalnie) nazwy lig rozpoznane ze starych eksportow CSV; z --zapisz-nazwy zapisuje je
+    do dane/nazwy_rozgrywek.csv, z ktorego korzysta aplikacja.
 Raport jest maly (kilkadziesiat KB), wiec mozna go wkleic lub wyslac zamiast calego zapisu.
 Skrypt niczego nie zmienia w zapisie.
 """
@@ -25,8 +27,9 @@ import pandas as pd  # noqa: E402
 
 from fm_moneyball.stale import KOLUMNY_PER_POZYCJA  # noqa: E402
 from fm_moneyball.zrodla.csv_fm import wczytaj_csv  # noqa: E402
-from fm_moneyball.zrodla.zapis_fm import (OpcjeZapisu, ligi_klubow, mapa_nazw_z_csv, sumuj_statystyki,  # noqa: E402
-                                          wczytaj_nazwy_rozgrywek, zbuduj_ramki)
+from fm_moneyball.zrodla.zapis_fm import (PLIK_NAZW_ROZGRYWEK, OpcjeZapisu, kandydaci_lig,  # noqa: E402
+                                          ligi_klubow, mapa_nazw_z_csv, sumuj_statystyki,
+                                          wczytaj_nazwy_rozgrywek, zapisz_nazwy_rozgrywek, zbuduj_ramki)
 
 KOLUMNY_PROBKI = ['Piłkarz', 'Wiek', 'Pozycja', 'Liga', 'Minuty', 'Cena', 'Płaca', 'Wygasa', 'CA', 'PA',
                   'Liczba goli na 90 min', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90',
@@ -49,6 +52,8 @@ def main():
     parser.add_argument("zapis", type=Path)
     parser.add_argument("csv", nargs="*", type=Path, help="stare eksporty CSV z gry (do rozpoznania nazw lig)")
     parser.add_argument("--wyjscie", type=Path, default=Path("raport_zapisu.json"))
+    parser.add_argument("--zapisz-nazwy", action="store_true",
+                        help=f"zapisz nazwy lig rozpoznane z CSV do {PLIK_NAZW_ROZGRYWEK.name}")
     args = parser.parse_args()
 
     raport = {"fmsave": fmsave.__version__, "rozmiar_mb": round(args.zapis.stat().st_size / 2**20, 1)}
@@ -75,8 +80,25 @@ def main():
             zarzadzane = list(zapis.managed_clubs())
     raport["ostrzezenia_fmsave"] = sorted({f"{w.category.__name__}: {w.message}"[:300] for w in zlapane})[:20]
 
+    kandydaci = kandydaci_lig(tabele, rozgrywki, kluby)
     nazwy = wczytaj_nazwy_rozgrywek()
-    liga_klubu = ligi_klubow(tabele, rozgrywki, kluby, nazwy)
+    if args.csv:
+        ramki_csv = []
+        for plik in args.csv:
+            try:
+                ramki_csv.append(wczytaj_csv(plik.read_bytes())[0])
+            except Exception as e:
+                print(f"Pominięto {plik.name}: {e}")
+        mapa = mapa_nazw_z_csv(kandydaci, kluby, ramki_csv)
+        raport["nazwy_lig_z_csv"] = {str(k): v for k, v in sorted(mapa.items())}
+        print(f"Rozpoznane nazwy lig z CSV ({len(mapa)}):", ", ".join(sorted(mapa.values())))
+        if args.zapisz_nazwy:
+            nazwy = zapisz_nazwy_rozgrywek(mapa)
+            print(f"Zapisano nazwy lig: {PLIK_NAZW_ROZGRYWEK}")
+        else:
+            nowe = set(mapa.values())
+            nazwy = {**{k: v for k, v in nazwy.items() if k not in mapa and v not in nowe}, **mapa}
+    liga_klubu = ligi_klubow(tabele, rozgrywki, kluby, nazwy, kandydaci=kandydaci)
     rodzaje = pd.Series([str(s.kind) for s in statystyki]).value_counts().to_dict()
     raport["liczniki"] = {
         "kluby": len(kluby), "zawodnicy": len(zawodnicy), "wiersze_statystyk": len(statystyki),
@@ -85,6 +107,17 @@ def main():
         "ligi_z_nazwa": len({l.competition_id for l in liga_klubu.values() if l.nazwa}),
     }
     print("Liczniki:", json.dumps(raport["liczniki"], ensure_ascii=False))
+
+    nazwa_klubu = {k.uid: k.name for k in kluby}
+    kluby_ligi = {}
+    for uid, liga in liga_klubu.items():
+        kluby_ligi.setdefault(liga.etykieta, []).append(nazwa_klubu.get(uid, "?"))
+    raport["ligi"] = {
+        etykieta: {"kluby": len(lista), "przyklady": sorted(lista)[:3]}
+        for etykieta, lista in sorted(kluby_ligi.items(), key=lambda e: -len(e[1]))}
+    print("\nLigi (liczba klubów, przykłady):")
+    for etykieta, opis in raport["ligi"].items():
+        print(f"  {etykieta}: {opis['kluby']} - {', '.join(opis['przyklady'])}")
 
     opcje = OpcjeZapisu()
     ramki = zbuduj_ramki(zawodnicy, sumuj_statystyki(statystyki, opcje.rodzaj_statystyk), liga_klubu, opcje)
@@ -106,17 +139,6 @@ def main():
         print(f"\nTwoja kadra ({moj}) - porównaj z ekranem w grze:")
         with pd.option_context("display.width", 250, "display.max_columns", 30):
             print(kadra[kolumny[:10]].to_string(index=False))
-
-    if args.csv:
-        ramki_csv = []
-        for plik in args.csv:
-            try:
-                ramki_csv.append(wczytaj_csv(plik.read_bytes())[0])
-            except Exception as e:
-                print(f"Pominięto {plik.name}: {e}")
-        mapa = mapa_nazw_z_csv(ligi_klubow(tabele, rozgrywki, kluby), kluby, ramki_csv)
-        raport["nazwy_lig_z_csv"] = {str(k): v for k, v in sorted(mapa.items())}
-        print(f"\nRozpoznane nazwy lig ({len(mapa)}):", ", ".join(sorted(mapa.values())))
 
     args.wyjscie.write_text(json.dumps(raport, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
     print(f"\nRaport zapisany: {args.wyjscie.resolve()}")

@@ -35,8 +35,10 @@ Ograniczenia:
 Aby sprawdzić, czy Twój zapis jest czytany poprawnie, uruchom:
 
 ```bash
-python narzedzia/zbadaj_zapis.py "<ścieżka do zapisu>.fm" [stare_eksporty.csv ...]
+python narzedzia/zbadaj_zapis.py "<ścieżka do zapisu>.fm" [stare_eksporty.csv ...] [--zapisz-nazwy]
 ```
+
+Z plikami CSV skrypt rozpozna nazwy lig. Opcja `--zapisz-nazwy` zapisze je do `dane/nazwy_rozgrywek.csv`, a raport pokaże przy każdej lidze kilka klubów, żeby łatwo było sprawdzić przypisanie. W repozytorium jest już mapa najpopularniejszych lig (Francja, Niemcy, Holandia, Włochy, Portugalia, Hiszpania, Argentyna, Meksyk, Japonia, MLS).
 
 Skrypt wypisze liczbę odczytanych zawodników i lig, pokrycie kolumn oraz próbkę Twojej kadry do porównania z ekranem gry. Zapisze też mały raport `raport_zapisu.json`.
 

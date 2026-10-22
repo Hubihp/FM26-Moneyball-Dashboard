@@ -184,10 +184,13 @@ def statystyki_kanoniczne(liczniki):
     wynik["Skuteczność strzałów (%)"] = _iloraz(liczniki.get("shots_on_target"), strzaly, 100.0)
     wynik["% wygranych pojedynków główkowych"] = _iloraz(
         liczniki.get("headers_won"), liczniki.get("aerial_challenges_attempted"), 100.0)
+    # Pola bramkarskie sa tylko u bramkarzy (u reszty None); bez nich xG zapobiegniete nie ma sensu
     obrony = [liczniki.get(p) for p in ("saves_held", "saves_parried", "saves_tipped")]
+    bramkarz = all(o is not None for o in obrony)
     wynik["Skuteczność obron (%)"] = (
-        _iloraz(sum(obrony), liczniki.get("shots_on_target_faced"), 100.0)
-        if all(o is not None for o in obrony) else np.nan)
+        _iloraz(sum(obrony), liczniki.get("shots_on_target_faced"), 100.0) if bramkarz else np.nan)
+    if not bramkarz:
+        wynik["Uniknięte oczekiwane gole/90"] = np.nan
     return wynik
 
 
@@ -250,18 +253,24 @@ def zbuduj_ramki(zawodnicy, liczniki_po_uid, liga_klubu, opcje):
     return {p: dopelnij_schemat(pd.DataFrame(w)) for p, w in wiersze.items() if w}
 
 
-def ligi_klubow(tabele, rozgrywki, kluby, nazwy=None, prog_krajowy=0.8):
+@dataclass(frozen=True)
+class KandydatLigi:
+    rozmiar: int
+    competition_id: int
+    database_id: int | None
+
+
+def kandydaci_lig(tabele, rozgrywki, kluby, prog_krajowy=0.8):
     """
-    Liga krajowa kazdego klubu: tabela ligowa, w ktorej wystepuje jego pierwsza druzyna.
+    Wszystkie krajowe tabele ligowe, w ktorych wystepuje pierwsza druzyna klubu.
     Tabele, w ktorych mniej niz `prog_krajowy` klubow pochodzi z jednego kraju, to rozgrywki
-    miedzynarodowe (np. faza ligowa pucharow) - sa pomijane. Gdy klub wystepuje w kilku tabelach
-    krajowych (np. grupa pucharu krajowego), wygrywa najwieksza.
-    Zwraca {club_uid: Liga}.
+    miedzynarodowe (np. faza ligowa pucharow) - sa pomijane. Klub moze miec kilku kandydatow:
+    np. w marcu kluby brazylijskie sa jednoczesnie w tabeli ligi stanowej i Serie A.
+    Zwraca {club_uid: [KandydatLigi, ...]} od najwiekszej tabeli.
     """
-    nazwy = nazwy or {}
     nacja = {k.uid: k.nation_id for k in kluby}
     baza = {r.id: r.database_id for r in rozgrywki}
-    najlepsze = {}
+    rozmiary = defaultdict(dict)   # club_uid -> competition_id -> najwieksza tabela tych rozgrywek
     for tabela in tabele:
         if tabela.competition_id is None:
             continue
@@ -273,13 +282,30 @@ def ligi_klubow(tabele, rozgrywki, kluby, nazwy=None, prog_krajowy=0.8):
         if ile / len(wiersze) < prog_krajowy:
             continue
         for w in wiersze:
-            obecne = najlepsze.get(w.club_uid)
-            if obecne is None or len(wiersze) > obecne[0]:
-                najlepsze[w.club_uid] = (len(wiersze), tabela.competition_id)
+            obecny = rozmiary[w.club_uid].get(tabela.competition_id, 0)
+            rozmiary[w.club_uid][tabela.competition_id] = max(obecny, len(wiersze))
+    return {
+        uid: sorted((KandydatLigi(r, comp, baza.get(comp)) for comp, r in per_comp.items()),
+                    key=lambda k: (-k.rozmiar, k.competition_id))
+        for uid, per_comp in rozmiary.items()
+    }
+
+
+def ligi_klubow(tabele, rozgrywki, kluby, nazwy=None, prog_krajowy=0.8, kandydaci=None):
+    """
+    Liga krajowa kazdego klubu. Sposrod kandydatow (`kandydaci_lig`) wygrywaja rozgrywki,
+    ktorych nazwe znamy z mapy (liga stanowa przegrywa wtedy z Serie A), a dopiero potem
+    najwieksza tabela (grupa pucharu krajowego przegrywa z liga). Zwraca {club_uid: Liga}.
+    """
+    nazwy = nazwy or {}
+    if kandydaci is None:
+        kandydaci = kandydaci_lig(tabele, rozgrywki, kluby, prog_krajowy)
     wynik = {}
-    for uid, (_, comp_id) in najlepsze.items():
-        db_id = baza.get(comp_id)
-        wynik[uid] = Liga(comp_id, db_id, nazwy.get(db_id) if db_id is not None else None)
+    for uid, lista in kandydaci.items():
+        nazwane = [k for k in lista if k.database_id in nazwy]
+        wybrany = (nazwane or lista)[0]
+        db_id = wybrany.database_id
+        wynik[uid] = Liga(wybrany.competition_id, db_id, nazwy.get(db_id) if db_id is not None else None)
     return wynik
 
 
@@ -291,33 +317,48 @@ def surowa_nazwa_ligi(wyswietlana):
     return wyswietlana
 
 
-def mapa_nazw_z_csv(liga_klubu, kluby, ramki_csv, min_glosow=2):
+def mapa_nazw_z_csv(kandydaci, kluby, ramki_csv, min_glosow=2, min_udzial=0.6):
     """
     Uczy sie nazw lig ze starych eksportow CSV: klub z CSV -> klub w zapisie (po nazwie) ->
-    id rozgrywek w bazie; nazwa ligi z CSV oddaje "glos" na to id. Zwraca {database_id: nazwa}.
+    rozgrywki, w ktorych klub teraz gra; nazwa ligi z CSV oddaje "glos" na kazde z nich.
+
+    Przypisanie jest jeden do jednego (kazda nazwa -> jedno id, kazde id -> jedna nazwa),
+    zachlannie od najwiekszej liczby glosow. Dzieki temu kilka klubow, ktore od czasu eksportu
+    awansowaly lub spadly (albo graja tez w lidze stanowej), nie nada swojej starej nazwy
+    innym rozgrywkom - te przegrywaja z rozgrywkami, w ktorych gra wiekszosc ligi.
+    Zwraca {database_id: nazwa}.
     """
     po_nazwie = defaultdict(set)
     for klub in kluby:
         for nazwa in {klub.name, klub.short_name}:
             if nazwa:
                 po_nazwie[nazwa.strip().lower()].add(klub.uid)
-    glosy = defaultdict(Counter)
+
+    pary = set()   # (club_uid, nazwa ligi) - klub glosuje raz, nawet gdy jest w kilku plikach CSV
     for ramka in ramki_csv:
         if 'Klub' not in ramka.columns or 'Liga' not in ramka.columns:
             continue
         for klub, liga in ramka[['Klub', 'Liga']].dropna().drop_duplicates().itertuples(index=False):
             uidy = po_nazwie.get(str(klub).strip().lower(), set())
-            if len(uidy) != 1:
-                continue   # brak lub niejednoznaczna nazwa klubu
-            liga_zapisu = liga_klubu.get(next(iter(uidy)))
-            if liga_zapisu is None or liga_zapisu.database_id is None:
-                continue
-            glosy[liga_zapisu.database_id][surowa_nazwa_ligi(str(liga))] += 1
-    mapa = {}
-    for db_id, licznik in glosy.items():
-        nazwa, ile = licznik.most_common(1)[0]
-        if ile >= min_glosow and ile / sum(licznik.values()) >= 0.6:
-            mapa[db_id] = nazwa
+            if len(uidy) == 1:   # brak lub niejednoznaczna nazwa klubu - pomijamy
+                pary.add((next(iter(uidy)), surowa_nazwa_ligi(str(liga))))
+
+    glosy = defaultdict(Counter)
+    for uid, nazwa in pary:
+        for kandydat in kandydaci.get(uid, ()):
+            if kandydat.database_id is not None:
+                glosy[kandydat.database_id][nazwa] += 1
+
+    propozycje = sorted(
+        ((ile, ile / sum(licznik.values()), db_id, nazwa)
+         for db_id, licznik in glosy.items() for nazwa, ile in licznik.items()),
+        key=lambda p: (-p[0], -p[1], p[2], p[3]))
+    mapa, zajete_nazwy = {}, set()
+    for ile, udzial, db_id, nazwa in propozycje:
+        if ile < min_glosow or udzial < min_udzial or db_id in mapa or nazwa in zajete_nazwy:
+            continue
+        mapa[db_id] = nazwa
+        zajete_nazwy.add(nazwa)
     return mapa
 
 
@@ -330,9 +371,15 @@ def wczytaj_nazwy_rozgrywek(sciezka=PLIK_NAZW_ROZGRYWEK):
 
 
 def zapisz_nazwy_rozgrywek(mapa, sciezka=PLIK_NAZW_ROZGRYWEK):
-    """Dopisuje nowe nazwy do pliku mapy (istniejace wpisy maja pierwszenstwo)."""
+    """
+    Laczy nowo nauczone nazwy z plikiem mapy. Nowe wpisy wygrywaja: stary wpis z tym samym id
+    albo z ta sama nazwa pod innym id (np. blednie nauczony wczesniej) jest usuwany.
+    """
     sciezka = Path(sciezka)
-    polaczona = {**mapa, **wczytaj_nazwy_rozgrywek(sciezka)}
+    nowe_nazwy = set(mapa.values())
+    stare = {db_id: nazwa for db_id, nazwa in wczytaj_nazwy_rozgrywek(sciezka).items()
+             if db_id not in mapa and nazwa not in nowe_nazwy}
+    polaczona = {**stare, **mapa}
     sciezka.parent.mkdir(parents=True, exist_ok=True)
     with open(sciezka, "w", encoding="utf-8", newline="") as plik:
         pisarz = csv.writer(plik)
@@ -403,5 +450,5 @@ def zbuduj_mape_nazw_lig(sciezka, ramki_csv):
     """Plik .fm + ramki ze starych eksportow CSV -> {database_id: nazwa ligi}."""
     with _otworz(sciezka) as zapis:
         kluby = list(zapis.clubs())
-        liga_klubu = ligi_klubow(zapis.league_tables(), zapis.competitions(), kluby)
-    return mapa_nazw_z_csv(liga_klubu, kluby, ramki_csv)
+        kandydaci = kandydaci_lig(zapis.league_tables(), zapis.competitions(), kluby)
+    return mapa_nazw_z_csv(kandydaci, kluby, ramki_csv)
