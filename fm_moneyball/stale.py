@@ -1,7 +1,7 @@
 """Stale i slowniki wspolne dla wszystkich zrodel danych i modelu."""
 
-POZYCJE = ["Bramkarz", "Środkowy Obrońca", "Boczny Obrońca", "Defensywny Pomocnik",
-           "Środkowy Pomocnik", "Skrzydłowy", "Napastnik"]
+POZYCJE = ["Bramkarz", "Środkowy Obrońca", "Boczny Obrońca", "Wahadłowy", "Defensywny Pomocnik",
+           "Środkowy Pomocnik", "Ofensywny Pomocnik", "Skrzydłowy", "Napastnik"]
 
 # Slownik tlumaczen kolumn statystycznych (nazwa w pliku CSV -> nazwa w aplikacji)
 TLUMACZENIE_KOLUMN = {
@@ -30,6 +30,9 @@ KOLUMNY_TYLKO_Z_ZAPISU = [
     "Podania progresywne/90",
     "Skuteczność obron (%)",
     "Celność strzałów (%)",
+    "Udane dośrodkowania/90",
+    "Stworzone 100% sytuacje/90",
+    "Sprinty/90",
 ]
 
 # Kolumny liczbowe, ktore konwertujemy raz, przy wczytywaniu
@@ -72,6 +75,9 @@ CECHY = {
     'Liczba dryblingów/90': (1, 1.0),
     'Podania progresywne/90': (1, 1.0),
     'Strata piłek na podanie': (-1, 1.0),
+    'Udane dośrodkowania/90': (1, 1.5),
+    'Stworzone 100% sytuacje/90': (1, 2.0),
+    'Sprinty/90': (1, 1.0),
 }
 
 # Domyslne WAZNOSCI cech per pozycja (0-100). W obliczeniach sa normalizowane do sumy 1,
@@ -88,6 +94,13 @@ MERYTORYKA_WAG = {
         'Oczekiwane asysty/90': 30, 'Kluczowe podania z gry/90': 20, 'Przechwyty/90': 15,
         'Odzyskane piłki/90': 10, 'Udane próby pressingu/90': 10, 'Strata piłek na podanie': 15,
         'Podania progresywne/90': 10},
+    # Wahadlowy: sam daje szerokosc w ustawieniu z trojka obroncow - glowny kreator z boku (xA,
+    # dosrodkowania), przenosi pilke (drybling, podania progresywne) i biega cala flanke (sprinty).
+    # Obrone asekuruje trzech stoperow, wiec czesc defensywna to 25% (u bocznego obroncy 50%).
+    "Wahadłowy": {
+        'Oczekiwane asysty/90': 25, 'Kluczowe podania z gry/90': 15, 'Udane dośrodkowania/90': 10,
+        'Liczba dryblingów/90': 10, 'Podania progresywne/90': 10, 'Sprinty/90': 5, 'Przechwyty/90': 10,
+        'Odzyskane piłki/90': 5, 'Udane próby pressingu/90': 5, 'Strata piłek na podanie': 5},
     "Defensywny Pomocnik": {
         'Oczekiwane asysty/90': 10, 'Kluczowe podania z gry/90': 15, 'Przechwyty/90': 20,
         'Odzyskane piłki/90': 25, 'Udane próby pressingu/90': 15,
@@ -97,6 +110,13 @@ MERYTORYKA_WAG = {
         'Oczekiwane asysty/90': 25, 'Liczba goli na 90 min': 10, 'Kluczowe podania z gry/90': 20,
         'Liczba dryblingów/90': 10, 'Odzyskane piłki/90': 10, 'Udane próby pressingu/90': 10,
         'Strata piłek na podanie': 15, 'Podania progresywne/90': 10},
+    # Ofensywny pomocnik ("dziesiatka"): tworzenie sytuacji (xA, kluczowe podania, 100% sytuacje = 55%)
+    # i zagrozenie z wejsc w pole karne (npxG zamiast losowych goli). Drybling = wyjscie spod presji
+    # miedzy liniami; strata pilek ma mala wage, bo ryzykowne podania naleza do tej roli.
+    "Ofensywny Pomocnik": {
+        'Oczekiwane asysty/90': 25, 'Kluczowe podania z gry/90': 20, 'Stworzone 100% sytuacje/90': 10,
+        'Oczekiwane gole bez karnych/90': 15, 'Liczba goli na 90 min': 5, 'Liczba dryblingów/90': 10,
+        'Podania progresywne/90': 5, 'Udane próby pressingu/90': 5, 'Strata piłek na podanie': 5},
     "Skrzydłowy": {
         'Oczekiwane asysty/90': 25, 'Liczba goli na 90 min': 15, 'Oczekiwane gole bez karnych/90': 10,
         'Oczekiwane gole na strzał': 10, 'Kluczowe podania z gry/90': 15, 'Liczba dryblingów/90': 15,
@@ -111,10 +131,12 @@ _PODSTAWA = ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Prefe
 KOLUMNY_PER_POZYCJA = {
     "Bramkarz": _PODSTAWA + ['Uniknięte oczekiwane gole/90', 'Skuteczność obron (%)', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90'],
     "Środkowy Obrońca": _PODSTAWA + ['Kluczowe podania z gry/90', 'Podania progresywne/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', '% wygranych pojedynków główkowych'],
-    "Boczny Obrońca": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Podania progresywne/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90'],
+    "Boczny Obrońca": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane dośrodkowania/90', 'Podania progresywne/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90'],
+    "Wahadłowy": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane dośrodkowania/90', 'Podania progresywne/90', 'Liczba dryblingów/90', 'Sprinty/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90'],
     "Defensywny Pomocnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Podania progresywne/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', '% wygranych pojedynków główkowych'],
     "Środkowy Pomocnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Podania progresywne/90', 'Liczba goli na 90 min', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
-    "Skrzydłowy": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Celność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
+    "Ofensywny Pomocnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Stworzone 100% sytuacje/90', 'Podania progresywne/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Celność strzałów (%)', 'Liczba dryblingów/90', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90'],
+    "Skrzydłowy": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane dośrodkowania/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Celność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
     "Napastnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Skuteczność strzałów (%)', 'Celność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
 }
 
@@ -125,6 +147,8 @@ WSKAZOWKI_NAZW_PLIKOW = {
     "bo": "Boczny Obrońca", "fb": "Boczny Obrońca", "po": "Boczny Obrońca", "lo": "Boczny Obrońca",
     "dp": "Defensywny Pomocnik", "dm": "Defensywny Pomocnik",
     "sp": "Środkowy Pomocnik", "śp": "Środkowy Pomocnik", "cm": "Środkowy Pomocnik",
+    "wah": "Wahadłowy", "lwah": "Wahadłowy", "pwah": "Wahadłowy", "wb": "Wahadłowy", "wahadłowy": "Wahadłowy",
+    "op": "Ofensywny Pomocnik", "am": "Ofensywny Pomocnik", "amc": "Ofensywny Pomocnik",
     "sk": "Skrzydłowy", "skrzydłowy": "Skrzydłowy", "w": "Skrzydłowy",
     "n": "Napastnik", "nap": "Napastnik", "st": "Napastnik", "napastnik": "Napastnik",
 }
@@ -168,7 +192,12 @@ MNOZNIKI_LIG = {
     "Liga Portugal 2": 0.726,
     "MLS": 0.784,
     "Serie A": 0.86,
-    "Serie B": 0.759
+    "Serie B": 0.759,
+    "Brasileirão Série C": 0.67,
+    "Primera A": 0.75,
+    "Primera B": 0.67,
+    "K League 1": 0.76,
+    "K League 2": 0.69,
 }
 
 # Mnoznik dla lig spoza tabeli: najnizszy znany (a nie 1.0, ktore premiowaloby nieznane,
@@ -214,5 +243,10 @@ MAPOWANIE_NAZW_LIG = {
     "Liga Portugal 2": "Liga Portugal 2 (POR 2)",
     "MLS": "MLS (USA 1)",
     "Serie A": "Serie A (WLO 1)",
-    "Serie B": "Serie B (WLO 2)"
+    "Serie B": "Serie B (WLO 2)",
+    "Brasileirão Série C": "Brasileirão Série C (BRA 3)",
+    "Primera A": "Primera A (KOL 1)",
+    "Primera B": "Primera B (KOL 2)",
+    "K League 1": "K League 1 (KOR 1)",
+    "K League 2": "K League 2 (KOR 2)",
 }

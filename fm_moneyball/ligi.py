@@ -1,18 +1,22 @@
 """
-Mnozniki lig ustawiane przez uzytkownika (dane/mnozniki_lig.csv: nazwa,mnoznik).
+Mnozniki lig ustawiane przez uzytkownika (plik CSV: nazwa,mnoznik).
 
-Uzupelniaja i nadpisuja wbudowana tabele MNOZNIKI_LIG - np. dla lig, ktorych w niej nie ma
-(K League, ligi kolumbijskie). Nazwy lig (id rozgrywek -> nazwa) sa w dane/nazwy_rozgrywek.csv.
+Uzupelniaja i nadpisuja wbudowana tabele MNOZNIKI_LIG - np. dla lig, ktorych w niej nie ma.
+Domyslne dodatki sa w dane/mnozniki_lig.csv (repozytorium), edycje uzytkownika w
+~/.fm_moneyball/mnozniki_lig.csv - poza repozytorium, wiec aktualizacja aplikacji ich nie kasuje.
+Nazwy lig (id rozgrywek -> nazwa) sa w nazwy_rozgrywek.csv (patrz zrodla/zapis_fm.py).
 """
 import csv
 from pathlib import Path
 
+from fm_moneyball.mapy import KATALOG_DANYCH, KATALOG_DOMOWY
 from fm_moneyball.stale import MNOZNIKI_LIG
 
-PLIK_MNOZNIKOW = Path(__file__).resolve().parents[1] / "dane" / "mnozniki_lig.csv"
+PLIK_MNOZNIKOW = KATALOG_DANYCH / "mnozniki_lig.csv"
+PLIK_MNOZNIKOW_UZYTKOWNIKA = KATALOG_DOMOWY / "mnozniki_lig.csv"
 
 
-def wczytaj_mnozniki_uzytkownika(sciezka=PLIK_MNOZNIKOW):
+def wczytaj_mnozniki_uzytkownika(sciezka=PLIK_MNOZNIKOW_UZYTKOWNIKA):
     sciezka = Path(sciezka)
     if not sciezka.is_file():
         return {}
@@ -28,7 +32,7 @@ def wczytaj_mnozniki_uzytkownika(sciezka=PLIK_MNOZNIKOW):
     return wynik
 
 
-def zapisz_mnoznik(nazwa, mnoznik, sciezka=PLIK_MNOZNIKOW):
+def zapisz_mnoznik(nazwa, mnoznik, sciezka=PLIK_MNOZNIKOW_UZYTKOWNIKA):
     """Dopisuje lub zmienia mnoznik ligi; None usuwa wpis (wraca wartosc wbudowana)."""
     sciezka = Path(sciezka)
     mnozniki = wczytaj_mnozniki_uzytkownika(sciezka)
@@ -45,5 +49,5 @@ def zapisz_mnoznik(nazwa, mnoznik, sciezka=PLIK_MNOZNIKOW):
     return mnozniki
 
 
-def wszystkie_mnozniki(sciezka=PLIK_MNOZNIKOW):
-    return {**MNOZNIKI_LIG, **wczytaj_mnozniki_uzytkownika(sciezka)}
+def wszystkie_mnozniki(sciezka=PLIK_MNOZNIKOW_UZYTKOWNIKA, domyslny=PLIK_MNOZNIKOW):
+    return {**MNOZNIKI_LIG, **wczytaj_mnozniki_uzytkownika(domyslny), **wczytaj_mnozniki_uzytkownika(sciezka)}

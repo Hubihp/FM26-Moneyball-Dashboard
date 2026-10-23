@@ -46,11 +46,13 @@ _sprawdz_srodowisko()
 
 import pandas as pd  # noqa: E402
 
+from fm_moneyball.kraje import nazwy_auto, podsumuj_kraje, wczytaj_nazwy_krajow  # noqa: E402
 from fm_moneyball.stale import KOLUMNY_PER_POZYCJA  # noqa: E402
 from fm_moneyball.zrodla.csv_fm import wczytaj_csv  # noqa: E402
-from fm_moneyball.zrodla.zapis_fm import (PLIK_NAZW_ROZGRYWEK, OpcjeZapisu, kandydaci_lig,  # noqa: E402
+from fm_moneyball.zrodla.zapis_fm import (PLIK_NAZW_UZYTKOWNIKA, OpcjeZapisu, kandydaci_lig,  # noqa: E402
                                           kandydaci_lig_z_terminarza, kluby_drugorzedne,
-                                          ligi_klubow, opis_tabeli, polacz_kandydatow, mapa_nazw_z_csv, sumuj_statystyki,
+                                          ligi_klubow, opis_tabeli, podsumuj_ligi, polacz_kandydatow, mapa_nazw_z_csv,
+                                          sumuj_statystyki,
                                           wczytaj_nazwy_rozgrywek, zapisz_nazwy_rozgrywek, zbuduj_ramki)
 
 KOLUMNY_PROBKI = ['Piłkarz', 'Wiek', 'Pozycja', 'Liga', 'Minuty', 'Cena', 'Płaca', 'Wygasa', 'CA', 'PA',
@@ -172,7 +174,7 @@ def main():
     parser.add_argument("--klub", action="append", default=[],
                         help="nazwa klubu do szczegolowej diagnozy przypisania ligi (mozna podac wiele razy)")
     parser.add_argument("--zapisz-nazwy", action="store_true",
-                        help=f"zapisz nazwy lig rozpoznane z CSV do {PLIK_NAZW_ROZGRYWEK.name}")
+                        help=f"zapisz nazwy lig rozpoznane z CSV do {PLIK_NAZW_UZYTKOWNIKA}")
     args = parser.parse_args()
 
     raport = {"fmsave": fmsave.__version__, "rozmiar_mb": round(args.zapis.stat().st_size / 2**20, 1)}
@@ -227,8 +229,9 @@ def main():
         raport["nazwy_lig_z_csv"] = {str(k): v for k, v in sorted(mapa.items())}
         print(f"Rozpoznane nazwy lig z CSV ({len(mapa)}):", ", ".join(sorted(mapa.values())))
         if args.zapisz_nazwy:
-            nazwy = zapisz_nazwy_rozgrywek(mapa)
-            print(f"Zapisano nazwy lig: {PLIK_NAZW_ROZGRYWEK}")
+            zapisz_nazwy_rozgrywek(mapa)
+            nazwy = wczytaj_nazwy_rozgrywek()
+            print(f"Zapisano nazwy lig: {PLIK_NAZW_UZYTKOWNIKA}")
         else:
             nowe = set(mapa.values())
             nazwy = {**{k: v for k, v in nazwy.items() if k not in mapa and v not in nowe}, **mapa}
@@ -273,6 +276,18 @@ def main():
         p: {k: round(float(d[k].notna().mean() * 100), 1) for k in KOLUMNY_PER_POZYCJA[p] if k in d.columns}
         for p, d in ramki.items()}
     print("Zawodnicy w analizie:", raport["zawodnicy_na_pozycji"])
+    naturalne = zbuduj_ramki(zawodnicy, sumuj_statystyki(statystyki, opcje.rodzaj_statystyk), liga_klubu,
+                             OpcjeZapisu(wszystkie_naturalne_pozycje=True))
+    raport["zawodnicy_na_pozycji_wszystkie_naturalne"] = {p: len(d) for p, d in naturalne.items()}
+    print("Ze wszystkimi naturalnymi pozycjami:", raport["zawodnicy_na_pozycji_wszystkie_naturalne"])
+
+    # Narodowosci: nazwy wyprowadzone z nazwanych lig i kraje, ktore trzeba nazwac recznie
+    nazwy_krajow = {**nazwy_auto(podsumuj_ligi(liga_klubu, kluby)), **wczytaj_nazwy_krajow()}
+    wszyscy_w_analizie = pd.concat(list(ramki.values())).drop_duplicates('UID') if ramki else None
+    kraje = podsumuj_kraje(wszyscy_w_analizie, nazwy_krajow)
+    raport["kraje_z_nazwa"] = {str(k["id"]): k["nazwa"] for k in kraje if k["nazwa"]}
+    raport["kraje_bez_nazwy"] = [k for k in kraje if not k["nazwa"]][:25]
+    print(f"Kraje z nazwą: {len(raport['kraje_z_nazwa'])}, bez nazwy: {sum(1 for k in kraje if not k['nazwa'])}")
 
     if zarzadzane:
         moj, moj_uid = zarzadzane[0].club_name, zarzadzane[0].club_uid

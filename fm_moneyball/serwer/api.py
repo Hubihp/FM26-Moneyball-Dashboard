@@ -13,7 +13,10 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import pandas as pd
+
 from fm_moneyball import analiza
+from fm_moneyball.kraje import podsumuj_kraje, wczytaj_nazwy_krajow, zapisz_nazwe_kraju
 from fm_moneyball.ligi import wszystkie_mnozniki, zapisz_mnoznik
 from fm_moneyball.stale import MNOZNIK_NIEZNANEJ_LIGI, MNOZNIKI_LIG, POZYCJE
 from fm_moneyball.zrodla import folder as folder_zapisow
@@ -47,6 +50,23 @@ class LigaModel(BaseModel):
     mnoznik: float | None = None
 
 
+class KrajModel(BaseModel):
+    nazwa: str | None = None
+
+
+class WpisListyModel(BaseModel):
+    klucz: str                  # UID z zapisu albo ID (CSV, demo)
+    pozycja: str
+    pilkarz: str = ""
+
+
+class ListaZyczenModel(BaseModel):
+    wpisy: list[WpisListyModel] = Field(default_factory=list)
+    wagi: dict[str, dict[str, float]] = Field(default_factory=dict)   # pozycja -> wagi (brak = domyslne)
+    ignoruj_mnoznik: bool = False
+    k_baza: float = 5
+
+
 class MojKlubModel(BaseModel):
     uid: int
 
@@ -60,6 +80,7 @@ class KadraModel(BaseModel):
 class FiltryModel(BaseModel):
     ligi: list[str] = Field(default_factory=list)
     nogi: list[str] = Field(default_factory=list)
+    kraje: list[str] = Field(default_factory=list)
     wiek: tuple[int, int] | None = None
     cena: tuple[float | None, float | None] | None = None
     bez_ceny: bool = True
@@ -210,7 +231,40 @@ def utworz_aplikacje(stan):
                 continue
             policzona, _ = policz(pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
             wynik.append(analiza.moja_kadra(pozycja, policzona, uid, data_gry()))
-        return {"klub": meta.get("moj_klub"), "pozycje": sorted(wynik, key=lambda p: -(p["luka"] or 0))}
+        # w kolejnosci POZYCJE: od bramkarza do napastnika (sortowanie po luce robi interfejs)
+        return {"klub": meta.get("moj_klub"), "pozycje": wynik}
+
+    @app.get("/api/kraje")
+    def kraje():
+        return {"kraje": podsumuj_kraje(stan.wszyscy_zawodnicy(), stan.nazwy_krajow,
+                                        set(wczytaj_nazwy_krajow(stan.plik_krajow)))}
+
+    @app.put("/api/kraje/{kraj_id}")
+    def zmien_kraj(kraj_id: int, z: KrajModel):
+        zapisz_nazwe_kraju(kraj_id, (z.nazwa or "").strip(), stan.plik_krajow)
+        stan.zastosuj_ligi()
+        return kraje()
+
+    @app.post("/api/lista-zyczen")
+    def lista_zyczen(z: ListaZyczenModel):
+        znalezieni, brak = [], []
+        for pozycja in dict.fromkeys(w.pozycja for w in z.wpisy):
+            wpisy = [w for w in z.wpisy if w.pozycja == pozycja]
+            df = stan.pula(pozycja) if pozycja in POZYCJE else None
+            if df is None or df.empty:
+                brak += [w.klucz for w in wpisy]
+                continue
+            policzona, _ = policz(pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
+            for w in wpisy:
+                wiersz = analiza.znajdz_zawodnika(policzona, w.klucz, w.pilkarz)
+                if wiersz.empty:
+                    brak.append(w.klucz)
+                else:
+                    znalezieni.append(wiersz.assign(**{'Pozycja na liście': pozycja}))
+        ramka = pd.concat(znalezieni, ignore_index=True) if znalezieni else pd.DataFrame()
+        return {"kolumny": analiza.kolumny_listy(ramka),
+                "wiersze": analiza.do_json(ramka, analiza.POLA_WIERSZA + ['Pozycja na liście']),
+                "nieznalezieni": brak}
 
     @app.post("/api/nazwy-lig")
     def naucz_nazw_lig(pliki: list[UploadFile] = File(...)):
@@ -259,6 +313,7 @@ def utworz_aplikacje(stan):
             "pozycja": pozycja, "liczba": len(df),
             "ligi": analiza.kolejnosc_lig(df['Liga'].dropna().unique().tolist()) if 'Liga' in df.columns else [],
             "nogi": sorted(df['Preferowana noga'].dropna().unique().tolist()) if 'Preferowana noga' in df.columns else [],
+            "kraje": df['Kraj'].dropna().value_counts().index.tolist() if 'Kraj' in df.columns else [],
             "wiek": [int(df['Wiek'].min()), int(df['Wiek'].max())] if 'Wiek' in df.columns else None,
             "cena_max": float(ceny.max()) if not ceny.empty else None,
             "minuty_max": int(df['Minuty'].max()) if 'Minuty' in df.columns and df['Minuty'].notna().any() else None,

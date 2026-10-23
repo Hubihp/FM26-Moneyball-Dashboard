@@ -18,7 +18,8 @@ def klient(tmp_path):
 
 def _stan(tmp_path, **kw):
     return Stan(plik_ustawien=tmp_path / "ustawienia.json", sledzenie=False, katalog_cache=tmp_path / "cache",
-                plik_nazw=tmp_path / "nazwy.csv", plik_mnoznikow=tmp_path / "mnozniki.csv", **kw)
+                plik_nazw=tmp_path / "nazwy.csv", plik_mnoznikow=tmp_path / "mnozniki.csv",
+                plik_krajow=tmp_path / "kraje.csv", **kw)
 
 
 def test_stan_po_wczytaniu_demo(klient):
@@ -124,8 +125,8 @@ def _sztuczny_zapis(tmp_path, monkeypatch, wywolania, przy_wczytaniu=None):
             przy_wczytaniu()
         dane, _ = modul._demo()
         return WynikZapisu(dane=dane, moj_klub="Premier FC 1", moj_klub_uid=1000, nazwa_zapisu="Kariera",
-                           ligi=[{"klucz": 11, "domyslna": "Rozgrywki #11", "nazwa": None, "liczba": 20,
-                                  "kluby": ["A", "B"]}])
+                           ligi=[{"klucz": 999011, "domyslna": "Rozgrywki #999011", "nazwa": None, "liczba": 20,
+                                  "kluby": ["A", "B"], "kraj": 5}])
     monkeypatch.setattr(modul, "wczytaj_zapis", atrapa)
     return plik
 
@@ -163,18 +164,18 @@ def test_ligi_edycja_nazwy_i_mnoznika(tmp_path, monkeypatch):
     stan = _stan(tmp_path)
     stan.ustaw_zrodlo("plik", plik=str(plik), w_tle=False)
     for df in stan.surowe.values():      # atrapa: wszyscy w lidze o kluczu 11 bez nazwy
-        df['Liga_klucz'] = 11
-        df['Liga_domyslna'] = "Rozgrywki #11"
+        df['Liga_klucz'] = 999011
+        df['Liga_domyslna'] = "Rozgrywki #999011"
     with TestClient(utworz_aplikacje(stan)) as k:
         ligi = k.get("/api/ligi").json()
-        assert ligi["ligi"][0]["klucz"] == 11 and ligi["ligi"][0]["nazwa"] is None
+        assert ligi["ligi"][0]["klucz"] == 999011 and ligi["ligi"][0]["nazwa"] is None
         assert "Premier League" in ligi["znane_nazwy"]
-        odp = k.put("/api/ligi/11", json={"nazwa": "K League 1", "mnoznik": 0.7}).json()
-        assert odp["ligi"][0]["nazwa"] == "K League 1" and odp["ligi"][0]["mnoznik"] == 0.7
+        odp = k.put("/api/ligi/999011", json={"nazwa": "Liga Testowa", "mnoznik": 0.7}).json()
+        assert odp["ligi"][0]["nazwa"] == "Liga Testowa" and odp["ligi"][0]["mnoznik"] == 0.7
         assert k.put("/api/ligi/999", json={"nazwa": "X"}).status_code == 404
         meta = k.get("/api/pozycja/Napastnik").json()
-        assert meta["ligi"] == ["K League 1"]
-    assert "K League 1" in (tmp_path / "nazwy.csv").read_text(encoding="utf-8")
+        assert meta["ligi"] == ["Liga Testowa"]
+    assert "Liga Testowa" in (tmp_path / "nazwy.csv").read_text(encoding="utf-8")
     assert "0.7" in (tmp_path / "mnozniki.csv").read_text(encoding="utf-8")
 
 
@@ -184,8 +185,10 @@ def test_moj_klub_i_moja_kadra(klient):
     assert stan["meta"]["moj_klub"] == "Premier FC 1"
     kadra = klient.post("/api/moja-kadra", json={}).json()
     assert kadra["klub"] == "Premier FC 1" and kadra["pozycje"]
-    luki = [p["luka"] or 0 for p in kadra["pozycje"]]
-    assert luki == sorted(luki, reverse=True)
+    # od bramkarza do napastnika
+    from fm_moneyball.stale import POZYCJE
+    kolejnosc = [POZYCJE.index(p["pozycja"]) for p in kadra["pozycje"]]
+    assert kolejnosc == sorted(kolejnosc)
     for p in kadra["pozycje"]:
         assert all(z["Klub_UID"] == uid for z in p["zawodnicy"])
     bez = klient.post("/api/ranking", json={"pozycja": "Napastnik",
@@ -211,3 +214,65 @@ def test_serwuje_zbudowany_frontend(klient):
     for sciezka in ("/", "/ranking/cokolwiek"):
         odp = klient.get(sciezka)
         assert odp.status_code == 200 and "<div id=\"root\">" in odp.text
+
+
+def test_nowe_pozycje_w_demo(klient):
+    stan = klient.get("/api/stan").json()
+    assert stan["pozycje"]["Wahadłowy"] == 150 and stan["pozycje"]["Ofensywny Pomocnik"] == 150
+    meta = klient.get("/api/pozycja/Ofensywny Pomocnik").json()
+    assert meta["wagi_domyslne"]["Oczekiwane asysty/90"] == 25
+    # cechy tylko z zapisu (100% sytuacje) sa pomijane w danych CSV/demo
+    assert "Stworzone 100% sytuacje/90" not in meta["wagi_domyslne"]
+
+
+def test_narodowosc_w_tabeli_i_filtr(klient):
+    meta = klient.get("/api/pozycja/Napastnik").json()
+    assert "Polska" in meta["kraje"]
+    wynik = klient.post("/api/ranking", json={"pozycja": "Napastnik", "filtry": {"kraje": ["Polska"]}}).json()
+    assert 0 < wynik["liczba"] < 150 and all(w["Kraj"] == "Polska" for w in wynik["wiersze"])
+    assert {"naglowek": "Narodowość", "pole": "Kraj"}.items() <= next(
+        k for k in wynik["kolumny"] if k["pole"] == "Kraj").items()
+
+
+def test_lista_zyczen_po_id(klient):
+    wiersze = klient.post("/api/ranking", json={"pozycja": "Napastnik"}).json()["wiersze"]
+    wpisy = [{"klucz": wiersze[3]["ID"], "pozycja": "Napastnik", "pilkarz": wiersze[3]["Piłkarz"]},
+             {"klucz": "nie ma takiego", "pozycja": "Bramkarz"},
+             {"klucz": "x", "pozycja": "Nieznana"}]
+    lista = klient.post("/api/lista-zyczen", json={"wpisy": wpisy}).json()
+    assert [w["ID"] for w in lista["wiersze"]] == [wiersze[3]["ID"]]
+    assert lista["wiersze"][0]["Pozycja na liście"] == "Napastnik"
+    assert lista["wiersze"][0]["SCORE"] == pytest.approx(wiersze[3]["SCORE"])
+    assert lista["nieznalezieni"] == ["nie ma takiego", "x"]
+    assert "Narodowość" in [k["naglowek"] for k in lista["kolumny"]]
+    pusta = klient.post("/api/lista-zyczen", json={"wpisy": []}).json()
+    assert pusta["wiersze"] == [] and pusta["nieznalezieni"] == []
+
+
+def test_lista_zyczen_po_uid_i_kraje(tmp_path, monkeypatch):
+    plik = _sztuczny_zapis(tmp_path, monkeypatch, [])
+    stan = _stan(tmp_path)
+    stan.ustaw_zrodlo("plik", plik=str(plik), w_tle=False)
+    for p, df in stan.surowe.items():      # atrapa zapisu: UID i narodowosc jak z fmsave
+        df['UID'] = range(len(df))
+        df['Kraj_ID'] = [5 if i % 2 else 6 for i in range(len(df))]
+    stan.zastosuj_ligi()
+    with TestClient(utworz_aplikacje(stan)) as k:
+        nap = stan.pula("Napastnik").iloc[7]
+        lista = k.post("/api/lista-zyczen", json={"wpisy": [
+            {"klucz": str(nap["UID"]), "pozycja": "Napastnik", "pilkarz": nap["Piłkarz"]},
+            {"klucz": str(nap["UID"]), "pozycja": "Napastnik", "pilkarz": "Ktoś inny"}]}).json()
+        assert [w["UID"] for w in lista["wiersze"]] == [int(nap["UID"])]
+        assert lista["nieznalezieni"] == [str(nap["UID"])]
+
+        kraje = k.get("/api/kraje").json()["kraje"]
+        assert {kr["id"] for kr in kraje} == {5, 6} and all(kr["nazwa"] is None for kr in kraje)
+        assert stan.pula("Napastnik")["Kraj"].iloc[1] == "Kraj #5"
+        kraje = k.put("/api/kraje/5", json={"nazwa": "Ghana"}).json()["kraje"]
+        assert next(kr for kr in kraje if kr["id"] == 5)["nazwa"] == "Ghana"
+        assert stan.pula("Napastnik")["Kraj"].iloc[1] == "Ghana"
+        # liga z nazwa nadaje nazwe krajowi (kraj 5 z atrapy ligi)
+        k.put("/api/ligi/999011", json={"nazwa": "K League 1"})
+        kraje = {kr["id"]: kr["nazwa"] for kr in k.get("/api/kraje").json()["kraje"]}
+        assert kraje[5] == "Ghana"           # reczna nazwa wygrywa z automatyczna
+    assert "Ghana" in (tmp_path / "kraje.csv").read_text(encoding="utf-8")

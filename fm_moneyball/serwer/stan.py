@@ -8,8 +8,8 @@ i sledzenie folderu zapisow.
   wynik wczytany dla starszego pokolenia jest odrzucany i wczytywanie rusza od nowa.
 - Odczytany zapis trafia do cache (~/.fm_moneyball/cache), wiec ponowne otwarcie tego samego
   stanu zapisu - takze po restarcie - jest natychmiastowe.
-- Nazwy i mnozniki lig sa nakladane po wczytaniu (schemat.ustaw_ligi), wiec ich edycja nie wymaga
-  ponownego odczytu zapisu.
+- Nazwy i mnozniki lig oraz nazwy krajow sa nakladane po wczytaniu (schemat.ustaw_ligi,
+  schemat.ustaw_kraje), wiec ich edycja nie wymaga ponownego odczytu zapisu.
 """
 import hashlib
 import json
@@ -21,19 +21,22 @@ from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 
-from fm_moneyball.ligi import PLIK_MNOZNIKOW, wszystkie_mnozniki
-from fm_moneyball.schemat import ustaw_ligi
+import pandas as pd
+
+from fm_moneyball.kraje import PLIK_KRAJOW_UZYTKOWNIKA, nazwy_auto, wczytaj_nazwy_krajow
+from fm_moneyball.ligi import PLIK_MNOZNIKOW_UZYTKOWNIKA, wszystkie_mnozniki
+from fm_moneyball.mapy import KATALOG_DOMOWY
+from fm_moneyball.schemat import ustaw_kraje, ustaw_ligi
 from fm_moneyball.stale import POZYCJE
 from fm_moneyball.zrodla import folder as folder_zapisow
 from fm_moneyball.zrodla.csv_fm import generuj_demo_csv, wczytaj_csv
-from fm_moneyball.zrodla.zapis_fm import (ETAPY_WCZYTYWANIA, PLIK_NAZW_ROZGRYWEK, OpcjeZapisu, wczytaj_nazwy_rozgrywek,
-                                         wczytaj_zapis)
+from fm_moneyball.zrodla.zapis_fm import (ETAPY_WCZYTYWANIA, PLIK_NAZW_UZYTKOWNIKA, OpcjeZapisu,
+                                         wczytaj_nazwy_rozgrywek, wczytaj_zapis)
 
 log = logging.getLogger("fm_moneyball")
 
-KATALOG_DOMOWY = Path.home() / ".fm_moneyball"
 CO_ILE_SPRAWDZAC = 15        # sekundy miedzy sprawdzeniami folderu zapisow
-WERSJA_CACHE = 3             # zmiana formatu wyniku = nowy klucz cache
+WERSJA_CACHE = 4             # zmiana formatu wyniku = nowy klucz cache
 ILE_W_CACHE = 3
 DEMO_DATA_GRY = date(2027, 1, 15)
 
@@ -71,12 +74,16 @@ def _demo():
 
 class Stan:
     def __init__(self, plik_ustawien=KATALOG_DOMOWY / "ustawienia.json", sledzenie=True,
-                 katalog_cache=KATALOG_DOMOWY / "cache", plik_nazw=PLIK_NAZW_ROZGRYWEK, plik_mnoznikow=PLIK_MNOZNIKOW):
+                 katalog_cache=KATALOG_DOMOWY / "cache", plik_nazw=PLIK_NAZW_UZYTKOWNIKA,
+                 plik_mnoznikow=PLIK_MNOZNIKOW_UZYTKOWNIKA, plik_krajow=PLIK_KRAJOW_UZYTKOWNIKA):
         self._blokada = threading.RLock()
         self._blokada_wczytywania = threading.Lock()
         self.plik_ustawien = Path(plik_ustawien) if plik_ustawien else None
         self.katalog_cache = Path(katalog_cache) if katalog_cache else None
+        # edycje uzytkownika (nakladane na mapy domyslne z dane/)
         self.plik_nazw, self.plik_mnoznikow = Path(plik_nazw), Path(plik_mnoznikow)
+        self.plik_krajow = Path(plik_krajow)
+        self.nazwy_krajow = {}         # nation_id -> nazwa (reczne + wyprowadzone z lig)
         self.konfig = self._wczytaj_ustawienia()
         self.surowe = {}               # ramki prosto ze zrodla (przed nalozeniem nazw lig)
         self.dane = {}
@@ -133,6 +140,15 @@ class Stan:
     def pula(self, pozycja):
         with self._blokada:
             return self.dane.get(pozycja)
+
+    def wszyscy_zawodnicy(self):
+        """Zawodnicy wszystkich pozycji bez powtorzen (zawodnik moze byc w kilku pulach) albo None."""
+        with self._blokada:
+            ramki = [df for df in self.dane.values() if not df.empty]
+        if not ramki:
+            return None
+        wszyscy = pd.concat(ramki, ignore_index=True)
+        return wszyscy.drop_duplicates('UID' if 'UID' in wszyscy.columns else 'ID')
 
     def ustaw_zrodlo(self, typ, folder=None, plik=None, sledz=None, opcje=None, wczytaj_przy_starcie=None,
                      w_tle=True):
@@ -337,6 +353,9 @@ class Stan:
 
     def _zastosuj_ligi(self):
         nazwy, mnozniki = wczytaj_nazwy_rozgrywek(self.plik_nazw), wszystkie_mnozniki(self.plik_mnoznikow)
-        self.dane = {p: ustaw_ligi(df, nazwy, mnozniki) for p, df in self.surowe.items()}
         for liga in self.ligi:
             liga["nazwa"] = nazwy.get(liga["klucz"]) if liga["klucz"] is not None else None
+        # kraj nazwanej ligi daje nazwe narodowosci; reczne nazwy wygrywaja
+        self.nazwy_krajow = {**nazwy_auto(self.ligi), **wczytaj_nazwy_krajow(self.plik_krajow)}
+        self.dane = {p: ustaw_kraje(ustaw_ligi(df, nazwy, mnozniki), self.nazwy_krajow)
+                     for p, df in self.surowe.items()}

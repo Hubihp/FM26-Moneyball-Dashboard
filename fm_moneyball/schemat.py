@@ -106,3 +106,15 @@ def raport_wczytania(df, pozycja, odrzucone=0):
     if powtorzone:
         wynik.append(("info", f"Zawodnicy o tych samych nazwiskach: {powtorzone} - rozróżniani po klubie i wieku (kolumna ID)."))
     return wynik
+
+
+def ustaw_kraje(df, nazwy):
+    """
+    Kolumna 'Kraj' (narodowosc) z 'Kraj_ID' ramki z zapisu: nazwa z mapy albo "Kraj #id".
+    Ramki bez 'Kraj_ID' (CSV, demo - maja wlasna kolumne 'Kraj') zwracane sa bez zmian.
+    """
+    if 'Kraj_ID' not in df.columns:
+        return df
+    df = df.copy()
+    df['Kraj'] = df['Kraj_ID'].map(lambda k: (nazwy.get(int(k)) or f"Kraj #{int(k)}") if pd.notna(k) else None)
+    return df

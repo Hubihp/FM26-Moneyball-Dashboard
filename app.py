@@ -31,8 +31,8 @@ from fm_moneyball.stale import (KOLUMNY_PER_POZYCJA, KOLUMNY_UKRYTE, MAPOWANIE_N
                                 NEUTRALNE, NIE_STATYSTYKI, NIZSZE_LEPSZE, POZYCJE)
 from fm_moneyball.zrodla import folder as folder_zapisow
 from fm_moneyball.zrodla.csv_fm import generuj_demo_csv, wczytaj_csv, wykryj_pozycje
-from fm_moneyball.zrodla.zapis_fm import (KURS_DOMYSLNY, PLIK_NAZW_ROZGRYWEK, OpcjeZapisu, wczytaj_zapis,
-                                          zapisz_nazwy_rozgrywek, zbuduj_mape_nazw_lig)
+from fm_moneyball.zrodla.zapis_fm import (KURS_DOMYSLNY, PLIK_NAZW_ROZGRYWEK, PLIK_NAZW_UZYTKOWNIKA, OpcjeZapisu,
+                                          wczytaj_zapis, zapisz_nazwy_rozgrywek, zbuduj_mape_nazw_lig)
 
 # Konfiguracja strony
 st.set_page_config(
@@ -129,10 +129,13 @@ def demo_dane(pozycja):
 
 
 def _wersja_nazw_lig():
-    try:
-        return PLIK_NAZW_ROZGRYWEK.stat().st_mtime
-    except OSError:
-        return 0.0
+    wersja = 0.0
+    for plik in (PLIK_NAZW_ROZGRYWEK, PLIK_NAZW_UZYTKOWNIKA):
+        try:
+            wersja += plik.stat().st_mtime
+        except OSError:
+            pass
+    return wersja
 
 
 @st.cache_data(show_spinner="Odczyt zapisu kariery (duży zapis może potrwać kilkadziesiąt sekund)...", max_entries=2)

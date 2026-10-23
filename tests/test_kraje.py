@@ -1,0 +1,59 @@
+"""Narodowosci: nazwy z lig, reczne nazwy, kolumna Kraj i filtr."""
+import pandas as pd
+
+from fm_moneyball import analiza
+from fm_moneyball.kraje import nazwy_auto, podsumuj_kraje, wczytaj_nazwy_krajow, zapisz_nazwe_kraju
+from fm_moneyball.ligi import wszystkie_mnozniki, zapisz_mnoznik
+from fm_moneyball.schemat import ustaw_kraje
+from fm_moneyball.stale import MERYTORYKA_WAG, KOLUMNY_PER_POZYCJA, POZYCJE
+
+
+def test_nazwy_krajow_z_lig():
+    ligi = [{"nazwa": "Ekstraklasa", "kraj": 7}, {"nazwa": "I liga", "kraj": 7},
+            {"nazwa": "K League 1", "kraj": 9}, {"nazwa": None, "kraj": 3},        # bez nazwy
+            {"nazwa": "Liga Testowa", "kraj": 4}, {"nazwa": "Serie A", "kraj": None}]
+    assert nazwy_auto(ligi) == {7: "Polska", 9: "Korea Płd."}
+
+
+def test_kolumna_kraj_i_filtr():
+    df = pd.DataFrame({"Piłkarz": ["A", "B", "C"], "Kraj_ID": [7, 3, None], "SCORE": [60, 50, 40]})
+    df = ustaw_kraje(df, {7: "Polska"})
+    assert list(df["Kraj"][:2]) == ["Polska", "Kraj #3"] and pd.isna(df["Kraj"][2])
+    widoczni = analiza.filtruj(df.assign(**{"Wartość_Numeryczna": 1.0}), analiza.Filtry(kraje=["Polska"]))
+    assert list(widoczni["Piłkarz"]) == ["A"]
+    # ramka bez Kraj_ID (CSV) - bez zmian
+    csv = pd.DataFrame({"Kraj": ["Anglia"]})
+    assert ustaw_kraje(csv, {}) is csv
+
+
+def test_reczne_nazwy_i_podsumowanie(tmp_path):
+    uzytkownika, domyslny = tmp_path / "u.csv", tmp_path / "d.csv"
+    zapisz_nazwe_kraju(3, "Szkocja", domyslny)
+    zapisz_nazwe_kraju(3, "Szkocja (poprawiona)", uzytkownika)
+    zapisz_nazwe_kraju(5, "Ghana", uzytkownika)
+    assert wczytaj_nazwy_krajow(uzytkownika, domyslny) == {3: "Szkocja (poprawiona)", 5: "Ghana"}
+    zapisz_nazwe_kraju(5, "", uzytkownika)        # pusta nazwa usuwa wpis
+    assert 5 not in wczytaj_nazwy_krajow(uzytkownika, domyslny)
+
+    zawodnicy = pd.DataFrame({"Piłkarz": ["A", "B", "C", "D"], "Klub": ["X", "Y", "Z", "X"],
+                              "Kraj_ID": [7, 7, 3, 8], "Wartość_Numeryczna": [1e6, 5e6, 2e6, None]})
+    kraje = podsumuj_kraje(zawodnicy, {7: "Polska"}, reczne={7})
+    assert [k["id"] for k in kraje] == [3, 8, 7]                 # bez nazwy najpierw
+    polska = kraje[-1]
+    assert polska["liczba"] == 2 and polska["reczna"] and polska["przyklady"] == ["B (Y)", "A (X)"]
+
+
+def test_mnozniki_uzytkownika_nad_domyslnymi(tmp_path):
+    uzytkownika, domyslny = tmp_path / "u.csv", tmp_path / "d.csv"
+    zapisz_mnoznik("Liga Testowa", 0.7, domyslny)
+    zapisz_mnoznik("Liga Testowa", 0.72, uzytkownika)
+    mnozniki = wszystkie_mnozniki(uzytkownika, domyslny)
+    assert mnozniki["Liga Testowa"] == 0.72 and mnozniki["Premier League"] == 0.918
+
+
+def test_nowe_pozycje_maja_wagi_i_kolumny():
+    for pozycja in ("Wahadłowy", "Ofensywny Pomocnik"):
+        assert pozycja in POZYCJE
+        wagi = MERYTORYKA_WAG[pozycja]
+        assert sum(wagi.values()) == 100
+        assert set(wagi) <= set(KOLUMNY_PER_POZYCJA[pozycja])

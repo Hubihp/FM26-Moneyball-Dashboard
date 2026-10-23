@@ -7,7 +7,7 @@ import pandas as pd
 
 from fm_moneyball.parsery import do_liczb, fmt_eur, parse_age, parse_market_value, parse_wages
 from fm_moneyball.schemat import dopelnij_schemat
-from fm_moneyball.stale import (KOLUMNY_PER_POZYCJA, KOLUMNY_STATYSTYK, NAZWY_KOLUMNY_MINUT, POZYCJE,
+from fm_moneyball.stale import (KOLUMNY_PER_POZYCJA, KOLUMNY_STATYSTYK, NAZWY_KOLUMNY_MINUT,
                                 TLUMACZENIE_KOLUMN, WSKAZOWKI_NAZW_PLIKOW)
 
 
@@ -68,8 +68,14 @@ def wykryj_pozycje(nazwa_pliku, df):
 # =============================================================================
 # DANE DEMO (SYNTETYCZNE) - generowane w formacie zblizonym do eksportu z FM
 # =============================================================================
+# Stale ziarna (kolejnosc sprzed dodania pozycji Wahadlowy i Ofensywny Pomocnik), zeby dane demo
+# istniejacych pozycji sie nie zmienialy
+ZIARNA_DEMO = {"Bramkarz": 0, "Środkowy Obrońca": 1, "Boczny Obrońca": 2, "Defensywny Pomocnik": 3,
+               "Środkowy Pomocnik": 4, "Skrzydłowy": 5, "Napastnik": 6, "Wahadłowy": 7, "Ofensywny Pomocnik": 8}
+
+
 def generuj_demo_csv(pozycja, n=150):
-    rng = np.random.default_rng(100 + POZYCJE.index(pozycja))
+    rng = np.random.default_rng(100 + ZIARNA_DEMO[pozycja])
     ligi = ["Premier League", "LaLiga", "Bundesliga", "Ekstraklasa", "Eredivisie", "Ligue 1"]
     liga = rng.choice(ligi, n)
     klub = [f"{l.split()[0]} FC {rng.integers(1, 9)}" for l in liga]
@@ -99,6 +105,9 @@ def generuj_demo_csv(pozycja, n=150):
         'Liga': liga,
         'Pozycja': ['BR' if pozycja == "Bramkarz" else pozycja] * n,
         'Preferowana noga': rng.choice(["Wyłącznie prawonożny", "Wyłącznie lewonożny", "Obunożny"], n),
+        # osobny generator, zeby nie zmieniac pozostalych danych demo
+        'Kraj': np.random.default_rng(500 + ZIARNA_DEMO[pozycja]).choice(
+            ["Polska", "Anglia", "Hiszpania", "Niemcy", "Francja", "Brazylia", "Argentyna", "Holandia"], n),
     }
     wartosc = np.exp(rng.normal(14.5, 1.5, n))
     dane['Szacowana wartość'] = [

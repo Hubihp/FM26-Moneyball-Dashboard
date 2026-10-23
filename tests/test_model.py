@@ -73,7 +73,7 @@ def test_ustaw_ligi_po_wczytaniu():
     df = dopelnij_schemat(pd.DataFrame({'Piłkarz': ['A', 'B', 'C'], 'Liga': ['Rozgrywki #32', 'Rozgrywki #9', 'Wolny agent'],
                                         'Liga_klucz': [32, 9, None],
                                         'Liga_domyslna': ['Rozgrywki #32', 'Rozgrywki #9', 'Wolny agent']}))
-    wynik = ustaw_ligi(df, {32: "Serie A", 9: "K League 1"}, {**MNOZNIKI_LIG, "K League 1": 0.7})
-    assert list(wynik['Liga']) == ["Serie A (WLO 1)", "K League 1", "Wolny agent"]
+    wynik = ustaw_ligi(df, {32: "Serie A", 9: "Liga Testowa"}, {**MNOZNIKI_LIG, "Liga Testowa": 0.7})
+    assert list(wynik['Liga']) == ["Serie A (WLO 1)", "Liga Testowa", "Wolny agent"]
     assert list(wynik['Mnożnik_Ligi']) == [MNOZNIKI_LIG["Serie A"], 0.7, MNOZNIK_NIEZNANEJ_LIGI]
     assert list(wynik['Liga_bez_mnoznika']) == [False, False, True]

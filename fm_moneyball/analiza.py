@@ -18,6 +18,7 @@ from fm_moneyball.stale import (KOLUMNY_PER_POZYCJA, KOLUMNY_UKRYTE, MAPOWANIE_N
 class Filtry:
     ligi: list = field(default_factory=list)
     nogi: list = field(default_factory=list)
+    kraje: list = field(default_factory=list)    # narodowosci (kolumna 'Kraj')
     wiek: tuple | None = None            # (min, max)
     cena: tuple | None = None            # (min, max) w EUR; None = bez ograniczen
     bez_ceny: bool = True                # czy pokazywac zawodnikow bez ceny ("Nie na sprzedaz")
@@ -125,6 +126,8 @@ def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
         wynik = wynik[wynik['Wartość_Numeryczna'].notna()]
     if filtry.ligi and 'Liga' in wynik.columns:
         wynik = wynik[wynik['Liga'].isin(filtry.ligi)]
+    if filtry.kraje and 'Kraj' in wynik.columns:
+        wynik = wynik[wynik['Kraj'].isin(filtry.kraje)]
     if filtry.nogi and 'Preferowana noga' in wynik.columns:
         wynik = wynik[wynik['Preferowana noga'].isin(filtry.nogi)]
     if filtry.min_minut and 'Minuty' in wynik.columns:
@@ -161,7 +164,9 @@ _FORMATY = {'SCORE': 'score', 'Percentyl': 'pasek', 'Wiarygodność': 'pasek', '
 # Kolumny prezentowane z pol liczbowych (sortowanie po liczbie, nie po tekscie)
 _POLA = {'Cena': ('Wartość_Numeryczna', 'eur'), 'Płaca': ('Zarobki_Numeryczne', 'eur_tyg'),
          'Wygasa': ('Wygasa_Data', 'data'), 'Koszt (3 lata)': ('Koszt', 'eur')}
-_TEKSTOWE = {'Piłkarz', 'Klub', 'Liga', 'Pozycja', 'Kraj', 'Preferowana noga', 'Okazje'}
+_TEKSTOWE = {'Piłkarz', 'Klub', 'Liga', 'Pozycja', 'Kraj', 'Preferowana noga', 'Okazje', 'Pozycja na liście'}
+# Naglowki inne niz nazwa kolumny w danych
+_NAGLOWKI = {'Kraj': 'Narodowość'}
 # Kolumny Moneyball (z wzbogac), nie sa statystykami meczowymi
 _MONEYBALL = {'Koszt (3 lata)', 'Opłacalność', 'Okazje', 'Ryzyko'}
 
@@ -192,13 +197,24 @@ def kolumny_tabeli(pozycja, pula, pokaz_ukryte=False):
             _wstaw_po(nazwy, kol, po)
         if pokaz_ukryte and 'Ryzyko' in pula.columns:
             _wstaw_po(nazwy, 'Ryzyko', 'Okazje')
-    kolumny = []
-    for nazwa in nazwy:
-        pole, fmt = _POLA.get(nazwa, (nazwa, _FORMATY.get(nazwa, 'tekst' if nazwa in _TEKSTOWE else 'dec1')))
-        kolumny.append({'naglowek': nazwa, 'pole': pole, 'format': fmt,
-                        'statystyka': nazwa not in NIE_STATYSTYKI and nazwa not in _MONEYBALL,
-                        'nizsze_lepsze': nazwa in NIZSZE_LEPSZE or nazwa == 'Ryzyko'})
-    return kolumny
+    return [_opis_kolumny(nazwa) for nazwa in nazwy]
+
+
+def _opis_kolumny(nazwa):
+    pole, fmt = _POLA.get(nazwa, (nazwa, _FORMATY.get(nazwa, 'tekst' if nazwa in _TEKSTOWE else 'dec1')))
+    return {'naglowek': _NAGLOWKI.get(nazwa, nazwa), 'pole': pole, 'format': fmt,
+            'statystyka': nazwa not in NIE_STATYSTYKI and nazwa not in _MONEYBALL and nazwa not in _TEKSTOWE,
+            'nizsze_lepsze': nazwa in NIZSZE_LEPSZE or nazwa == 'Ryzyko'}
+
+
+# Kolumny listy zyczen (zawodnicy z roznych pozycji - tylko kolumny wspolne)
+KOLUMNY_LISTY = ['SCORE', 'Piłkarz', 'Pozycja na liście', 'Wiek', 'Kraj', 'Klub', 'Liga', 'Cena', 'Płaca',
+                 'Wygasa', 'Koszt (3 lata)', 'Opłacalność', 'Okazje']
+
+
+def kolumny_listy(pula):
+    return [_opis_kolumny(n) for n in KOLUMNY_LISTY
+            if n == 'Pozycja na liście' or _POLA.get(n, (n,))[0] in pula.columns]
 
 
 def kolumny_statystyk(pozycja, pula):
@@ -225,7 +241,7 @@ def do_json(ramka, pola):
     return rekordy
 
 
-POLA_WIERSZA = ['ID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Wiek', 'Pozycja', 'Preferowana noga', 'Minuty',
+POLA_WIERSZA = ['ID', 'UID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Kraj', 'Wiek', 'Pozycja', 'Preferowana noga', 'Minuty',
                 'SCORE', 'Percentyl', 'Wiarygodność', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Wygasa_Data',
                 'Mnożnik_Ligi', 'Wypożyczony', 'Wypożyczenie_do', 'Wolny_agent', 'Lata_kontraktu', 'Koszt',
                 'Opłacalność', 'Okazje', 'Pareto']
@@ -280,6 +296,20 @@ def podobni(pozycja, pula, widoczni_idx, id_, k_baza=5, n=10):
     wyniki = pula.assign(Podobieństwo=podobienstwo)
     wyniki = wyniki[wyniki.index.isin(widoczni_idx) & (wyniki['ID'] != id_)]
     return wyniki.sort_values('Podobieństwo', ascending=False).head(n)
+
+
+def znajdz_zawodnika(pula, klucz, pilkarz=""):
+    """
+    Wiersz zawodnika z listy zyczen: po UID z zapisu (z kontrola nazwiska - uid moze sie roznic
+    miedzy karierami) albo po ID (CSV, demo). Pusta ramka, gdy nie ma.
+    """
+    if 'UID' in pula.columns and str(klucz).isdigit():
+        wynik = pula[pula['UID'] == int(klucz)]
+        if pilkarz:
+            wynik = wynik[wynik['Piłkarz'] == pilkarz]
+    else:
+        wynik = pula[pula['ID'] == klucz]
+    return wynik.head(1)
 
 
 # --- moja kadra -----------------------------------------------------------------------------------

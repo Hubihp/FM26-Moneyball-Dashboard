@@ -38,7 +38,8 @@ def wiersz_statystyk(uid, kind=fmsave.SeasonStatsKind.LEAGUE, **liczniki):
                 shots=20, shots_on_target=8, open_play_key_passes=10, pressures_completed=50, interceptions=9,
                 possession_won=40, possession_lost=60, passes_attempted=400, progressive_passes=30,
                 aerial_challenges_attempted=20, headers_won=12, dribbles=15, expected_goals_prevented=None,
-                saves_held=None, saves_parried=None, saves_tipped=None, shots_on_target_faced=None)
+                saves_held=None, saves_parried=None, saves_tipped=None, shots_on_target_faced=None,
+                crosses_completed=18, clear_cut_chances_created=4, high_intensity_sprints=90)
     baza.update(liczniki)
     return NS(player_uid=uid, kind=kind, **baza)
 
@@ -54,6 +55,18 @@ def test_pozycje():
     assert grupy_pozycji(pozycje(dc=20, dm=18), wszystkie_naturalne=True) == ["Środkowy Obrońca", "Defensywny Pomocnik"]
     assert grupy_pozycji(pozycje(amr=20, stc=20)) == ["Skrzydłowy"]     # remis -> kolejnosc kodow
     assert glowna_pozycja(NS(**{k: 0 for k in KODY})) is None
+    # nowe pule: specjalisci trafiaja do Wahadlowy / Ofensywny Pomocnik, przy remisie wygrywa pozycja klasyczna
+    assert grupy_pozycji(pozycje(wbl=20, dl=17)) == ["Wahadłowy"]
+    assert grupy_pozycji(pozycje(wbl=20, dl=20)) == ["Boczny Obrońca"]
+    assert grupy_pozycji(pozycje(wbl=20, dl=20), wszystkie_naturalne=True) == ["Boczny Obrońca", "Wahadłowy"]
+    assert grupy_pozycji(pozycje(amc=20, mc=16)) == ["Ofensywny Pomocnik"]
+    assert grupy_pozycji(pozycje(amc=20, mc=20)) == ["Środkowy Pomocnik"]
+
+
+def test_polskie_skroty_pozycji():
+    ramki = zbuduj_ramki([zawodnik(1, pozycje(wbl=20, dl=18, aml=18))],
+                         sumuj_statystyki([wiersz_statystyk(1)], "league"), {10: _liga()}, OpcjeZapisu())
+    assert ramki["Wahadłowy"].iloc[0]["Pozycja"] == "LO, LS, LWAH"
 
 
 @pytest.mark.parametrize("lewa, prawa, etykieta", [
@@ -78,6 +91,9 @@ def test_statystyki_per_90_i_odsetki():
     assert s["Skuteczność strzałów (%)"] == pytest.approx(15)     # gole / strzaly (jak "Skut (%)" w grze)
     assert s["Celność strzałów (%)"] == pytest.approx(40)         # celne / strzaly
     assert s["% wygranych pojedynków główkowych"] == pytest.approx(60)
+    assert s["Udane dośrodkowania/90"] == pytest.approx(1.8)
+    assert s["Stworzone 100% sytuacje/90"] == pytest.approx(0.4)
+    assert s["Sprinty/90"] == pytest.approx(9)
     # u zawodnika z pola brak pol bramkarskich -> brak danych (a nie 0)
     assert np.isnan(s["Skuteczność obron (%)"]) and np.isnan(s["Uniknięte oczekiwane gole/90"])
     zero = statystyki_kanoniczne(sumuj_statystyki([wiersz_statystyk(1, expected_goals_prevented=0.0)], "league")[1])
@@ -120,7 +136,7 @@ def test_zbuduj_ramki_filtry_i_kolumny():
     assert nap["Wartość_Numeryczna"] == 1_000_000 and nap["Cena"] == "1 mln €"
     assert nap["Zarobki_Numeryczne"] == 520_000 and nap["Płaca"] == "10 tys. € tyg."
     assert nap["Wygasa_Data"] == pd.Timestamp(2027, 6, 30) and nap["Wygasa"] == "30.6.2027"
-    assert nap["Preferowana noga"] == "Prawonożny" and nap["Pozycja"] == "STC"
+    assert nap["Preferowana noga"] == "Prawonożny" and nap["Pozycja"] == "N"
     obr = ramki["Środkowy Obrońca"].iloc[0]
     assert np.isnan(obr["Wartość_Numeryczna"]) and obr["Płaca"] is None
 
@@ -230,15 +246,23 @@ def test_zapis_mapy_nowe_wpisy_wygrywaja(tmp_path):
     zapisz_nazwy_rozgrywek({11: "EFL Championship", 16: "Ligue 1"}, plik)    # 11 nauczone blednie
     wynik = zapisz_nazwy_rozgrywek({12: "EFL Championship", 22: "Bundesliga"}, plik)
     assert wynik == {12: "EFL Championship", 16: "Ligue 1", 22: "Bundesliga"}
-    assert wczytaj_nazwy_rozgrywek(plik) == wynik
+    assert wczytaj_nazwy_rozgrywek(plik, domyslny=tmp_path / "brak.csv") == wynik
+    # plik uzytkownika nadpisuje mape domyslna
+    domyslna = tmp_path / "domyslna.csv"
+    zapisz_nazwy_rozgrywek({12: "Championship (stara)", 40: "MLS"}, domyslna)
+    assert wczytaj_nazwy_rozgrywek(plik, domyslny=domyslna) == {**wynik, 40: "MLS"}
 
 
 def test_domyslna_mapa_nazw_pasuje_do_mnoznikow():
     from fm_moneyball.stale import MNOZNIKI_LIG
     from fm_moneyball.zrodla.zapis_fm import PLIK_NAZW_ROZGRYWEK
-    mapa = wczytaj_nazwy_rozgrywek(PLIK_NAZW_ROZGRYWEK)
-    # jedna liga moze miec kilka id (np. dwie fazy ligi argentynskiej), ale kazda nazwa musi miec mnoznik
-    assert mapa and all(nazwa in MNOZNIKI_LIG for nazwa in mapa.values())
+    mapa = wczytaj_nazwy_rozgrywek(PLIK_NAZW_ROZGRYWEK, domyslny=PLIK_NAZW_ROZGRYWEK)
+    # jedna liga moze miec kilka id (np. dwie fazy ligi argentynskiej), ale kazda nazwa musi miec mnoznik;
+    # wyjatek: brazylijskie ligi bez nazwy w grze (nazwa zastepcza, mnoznik nieznanej ligi)
+    assert mapa and all(nazwa in MNOZNIKI_LIG or nazwa.startswith("Liga brazylijska (nieznana) #")
+                        for nazwa in mapa.values())
+    assert mapa[76] == mapa[77] == "Primera A" and mapa[66029602] == "K League 2"
+    assert mapa[309684] == mapa[102426] == "Brasileirão Série C" and mapa[313220].endswith("#313220")
 
 
 # --- liga z terminarza ---------------------------------------------------------------------------
@@ -326,7 +350,7 @@ def test_rozgrywki_bez_database_id_dostaja_klucz_kraju():
 def test_mapa_nazw_z_kluczem_ujemnym(tmp_path):
     plik = tmp_path / "nazwy.csv"
     zapisz_nazwy_rozgrywek({-131: "Jupiler Pro League", 32: "Serie A"}, plik)
-    assert wczytaj_nazwy_rozgrywek(plik) == {-131: "Jupiler Pro League", 32: "Serie A"}
+    assert wczytaj_nazwy_rozgrywek(plik, domyslny=tmp_path / "brak.csv") == {-131: "Jupiler Pro League", 32: "Serie A"}
 
 
 # --- wolni agenci, moj klub, dane ukryte, kontuzje, podsumowanie lig -------------------------------
@@ -349,10 +373,11 @@ def test_dane_ukryte_kontuzje_i_klucz_ligi():
     z = zawodnik(1, pozycje(stc=20),
                  attributes=NS(consistency=14, important_matches=9, injury_proneness=17, determination=12),
                  personality=NS(professionalism=18, ambition=11, adaptability=7),
-                 on_loan=True, loan_end=date(2032, 6, 30))
+                 on_loan=True, loan_end=date(2032, 6, 30), nation_id=44)
     ramki = zbuduj_ramki([z], sumuj_statystyki([wiersz_statystyk(1)], "league"), {10: _liga()}, OpcjeZapisu(),
                          kontuzje={1: 3})
     w = ramki["Napastnik"].iloc[0]
+    assert w["Kraj_ID"] == 44
     assert (w["Regularność"], w["Podatność na kontuzje"], w["Profesjonalizm"]) == (14, 17, 18)
     assert w["Kontuzje_2_lata"] == 3 and w["Wypożyczenie_do"] == pd.Timestamp(2032, 6, 30)
     assert w["Liga_klucz"] == 1 and w["Liga_domyslna"] == "Rozgrywki #1"
@@ -365,7 +390,8 @@ def test_policz_kontuzje_i_podsumowanie_lig():
                NS(kind="typed", player_uid=1, date=date(2031, 9, 1)),       # inny magazyn
                NS(kind="history", player_uid=2, date=date(2032, 1, 1))]
     assert policz_kontuzje(rekordy, DZIS) == {1: 1, 2: 1}
-    kluby = [NS(uid=i, name=f"Klub {i}") for i in range(1, 4)]
+    kluby = [NS(uid=i, name=f"Klub {i}", nation_id=n) for i, n in ((1, 7), (2, 7), (3, None))]
     ligi = podsumuj_ligi({1: Liga(5, 50, "Liga A"), 2: Liga(5, 50, "Liga A"), 3: Liga(6, None, None)}, kluby)
     assert ligi[0] == {"klucz": 50, "domyslna": "Rozgrywki #50", "nazwa": "Liga A", "liczba": 2,
-                       "kluby": ["Klub 1", "Klub 2"]}
+                       "kluby": ["Klub 1", "Klub 2"], "kraj": 7}
+    assert ligi[1]["kraj"] is None

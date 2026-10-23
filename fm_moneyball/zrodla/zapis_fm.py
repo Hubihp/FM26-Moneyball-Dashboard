@@ -10,20 +10,20 @@ testowac bez prawdziwego zapisu. Zapis nie zawiera nazw lig (gra bierze je z wla
 dlatego nazwy pochodza z mapy `dane/nazwy_rozgrywek.csv` (id rozgrywek w bazie -> nazwa),
 ktora mozna zbudowac automatycznie ze starych eksportow CSV (`zbuduj_mape_nazw_lig`).
 """
-import csv
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from fm_moneyball.mapy import KATALOG_DANYCH, KATALOG_DOMOWY, wczytaj_mape, zapisz_mape
 from fm_moneyball.parsery import fmt_eur
 from fm_moneyball.schemat import dopelnij_schemat
 from fm_moneyball.stale import MAPOWANIE_NAZW_LIG, POZYCJE
 
-PLIK_NAZW_ROZGRYWEK = Path(__file__).resolve().parents[2] / "dane" / "nazwy_rozgrywek.csv"
+PLIK_NAZW_ROZGRYWEK = KATALOG_DANYCH / "nazwy_rozgrywek.csv"
+PLIK_NAZW_UZYTKOWNIKA = KATALOG_DOMOWY / "nazwy_rozgrywek.csv"
 
 # Waluta bazowa zapisu nie jest waluta wyswietlana w grze. Autor fmsave zmierzyl, ze ekran gry
 # pokazuje kwoty ok. 1,157 razy wieksze niz zapisane (to odpowiada kursowi GBP -> EUR).
@@ -33,13 +33,20 @@ KURS_DOMYSLNY = 1.157
 POZYCJA_Z_KODU = {
     "gk": "Bramkarz",
     "dc": "Środkowy Obrońca", "sw": "Środkowy Obrońca",
-    "dl": "Boczny Obrońca", "dr": "Boczny Obrońca", "wbl": "Boczny Obrońca", "wbr": "Boczny Obrońca",
+    "dl": "Boczny Obrońca", "dr": "Boczny Obrońca",
+    "wbl": "Wahadłowy", "wbr": "Wahadłowy",
     "dm": "Defensywny Pomocnik",
-    "mc": "Środkowy Pomocnik", "amc": "Środkowy Pomocnik",
+    "mc": "Środkowy Pomocnik",
+    "amc": "Ofensywny Pomocnik",
     "ml": "Skrzydłowy", "mr": "Skrzydłowy", "aml": "Skrzydłowy", "amr": "Skrzydłowy",
     "stc": "Napastnik",
 }
-# Kolejnosc rozstrzygania remisow w ocenach pozycji
+# Kod pozycji z fmsave -> polski skrot (jak na boisku w aplikacji)
+SKROT_POZYCJI = {"gk": "BR", "dc": "ŚO", "sw": "ŚO", "dl": "LO", "dr": "PO", "wbl": "LWAH", "wbr": "PWAH",
+                 "dm": "DP", "mc": "ŚP", "amc": "OP", "ml": "LP", "mr": "PP", "aml": "LS", "amr": "PS",
+                 "stc": "N"}
+# Kolejnosc rozstrzygania remisow w ocenach pozycji (przy remisie wygrywa pozycja klasyczna:
+# DL/DR przed WB, MC przed AMC - do pul Wahadlowy i Ofensywny Pomocnik trafiaja specjalisci)
 KOLEJNOSC_KODOW = ("gk", "dc", "sw", "dr", "dl", "wbr", "wbl", "dm", "mc", "amc", "mr", "ml", "amr", "aml", "stc")
 OCENA_NATURALNA = 18   # pozycja "naturalna" w FM to ocena 18-20
 MAKS_KLUBOW_W_LIDZE = 40   # wieksza "tabela" to nie liga (np. zbiorcza tabela towarzyska)
@@ -54,7 +61,7 @@ POLA_LICZNIKOW = (
     "shots_on_target", "open_play_key_passes", "pressures_completed", "interceptions", "possession_won",
     "possession_lost", "passes_attempted", "progressive_passes", "aerial_challenges_attempted",
     "headers_won", "dribbles", "expected_goals_prevented", "saves_held", "saves_parried", "saves_tipped",
-    "shots_on_target_faced",
+    "shots_on_target_faced", "crosses_completed", "clear_cut_chances_created", "high_intensity_sprints",
 )
 
 # Kolumna w aplikacji -> licznik per 90
@@ -71,6 +78,9 @@ PER_90 = {
     "Podania progresywne/90": "progressive_passes",
     "Liczba dryblingów/90": "dribbles",
     "Uniknięte oczekiwane gole/90": "expected_goals_prevented",
+    "Udane dośrodkowania/90": "crosses_completed",
+    "Stworzone 100% sytuacje/90": "clear_cut_chances_created",
+    "Sprinty/90": "high_intensity_sprints",
 }
 
 
@@ -244,7 +254,9 @@ def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0):
         "Reputacja_klubu": getattr(zawodnik, "club_reputation", None),
         "Wypożyczenie_do": pd.Timestamp(koniec_wyp) if koniec_wyp else pd.NaT,
         "Kontuzje_2_lata": kontuzje,
-        "Pozycja": ", ".join(k.upper() for k in (zawodnik.natural_positions or ())) or None,
+        "Pozycja": ", ".join(dict.fromkeys(SKROT_POZYCJI.get(k, k.upper())
+                                           for k in (zawodnik.natural_positions or ()))) or None,
+        "Kraj_ID": getattr(zawodnik, "nation_id", None),
         "Preferowana noga": preferowana_noga(zawodnik.left_foot, zawodnik.right_foot),
         "Cena": fmt_eur(wartosc),
         "Wartość_Numeryczna": np.nan if wartosc is None else float(wartosc),
@@ -526,41 +538,24 @@ def mapa_nazw_z_csv(kandydaci, kluby, ramki_csv, min_glosow=2, min_udzial=0.6, m
     return mapa
 
 
-def wczytaj_nazwy_rozgrywek(sciezka=PLIK_NAZW_ROZGRYWEK):
-    """Mapa {klucz rozgrywek: nazwa} z pliku CSV `id,nazwa`. Akceptuje klucze ujemne (-kraj),
-    ktorych czytnik fmsave nie przyjmuje; pomija naglowek, puste i niepoprawne wiersze."""
-    sciezka = Path(sciezka)
-    if not sciezka.is_file():
-        return {}
-    mapa = {}
-    with open(sciezka, encoding="utf-8-sig", newline="") as plik:
-        for wiersz in csv.reader(plik):
-            if len(wiersz) < 2 or not wiersz[1].strip():
-                continue
-            try:
-                mapa[int(wiersz[0].strip())] = wiersz[1].strip()
-            except ValueError:
-                continue   # naglowek albo smiec
-    return mapa
-
-
-def zapisz_nazwy_rozgrywek(mapa, sciezka=PLIK_NAZW_ROZGRYWEK):
+def wczytaj_nazwy_rozgrywek(sciezka=PLIK_NAZW_UZYTKOWNIKA, domyslny=PLIK_NAZW_ROZGRYWEK):
     """
-    Laczy nowo nauczone nazwy z plikiem mapy. Nowe wpisy wygrywaja: stary wpis z tym samym id
+    Mapa {klucz rozgrywek: nazwa}: domyslna z repozytorium (dane/) nadpisana edycjami uzytkownika
+    (~/.fm_moneyball). Pliki CSV `id,nazwa`; klucze ujemne (-kraj) sa dozwolone.
+    """
+    return {**wczytaj_mape(domyslny), **wczytaj_mape(sciezka)}
+
+
+def zapisz_nazwy_rozgrywek(mapa, sciezka=PLIK_NAZW_UZYTKOWNIKA):
+    """
+    Dopisuje nazwy do pliku uzytkownika. Nowe wpisy wygrywaja: stary wpis z tym samym id
     albo z ta sama nazwa pod innym id (np. blednie nauczony wczesniej) jest usuwany.
+    Zwraca zawartosc pliku uzytkownika po zapisie.
     """
-    sciezka = Path(sciezka)
     nowe_nazwy = set(mapa.values())
-    stare = {db_id: nazwa for db_id, nazwa in wczytaj_nazwy_rozgrywek(sciezka).items()
+    stare = {db_id: nazwa for db_id, nazwa in wczytaj_mape(sciezka).items()
              if db_id not in mapa and nazwa not in nowe_nazwy}
-    polaczona = {**stare, **mapa}
-    sciezka.parent.mkdir(parents=True, exist_ok=True)
-    with open(sciezka, "w", encoding="utf-8", newline="") as plik:
-        pisarz = csv.writer(plik)
-        pisarz.writerow(["database_id", "nazwa"])
-        for db_id in sorted(polaczona):
-            pisarz.writerow([db_id, polaczona[db_id]])
-    return polaczona
+    return zapisz_mape({**stare, **mapa}, sciezka, ("database_id", "nazwa"))
 
 
 # =============================================================================
@@ -614,17 +609,25 @@ def policz_kontuzje(rekordy, data_gry, dni=730):
 
 
 def podsumuj_ligi(liga_klubu, kluby, limit=5):
-    """[{klucz, domyslna, nazwa, liczba, kluby}] - do edycji nazw i mnoznikow w aplikacji."""
+    """
+    [{klucz, domyslna, nazwa, liczba, kluby, kraj}] - do edycji nazw i mnoznikow w aplikacji.
+    `kraj` to dominujacy nation_id klubow ligi (z niego aplikacja nazywa kraje zawodnikow).
+    """
     nazwa_klubu = {k.uid: k.name for k in kluby}
+    kraj_klubu = {k.uid: getattr(k, "nation_id", None) for k in kluby}
     grupy = {}
     for uid, liga in liga_klubu.items():
         g = grupy.setdefault(liga.competition_id, {"klucz": liga.database_id,
                                                    "domyslna": Liga(liga.competition_id, liga.database_id, None).etykieta,
-                                                   "nazwa": liga.nazwa, "kluby": []})
+                                                   "nazwa": liga.nazwa, "kluby": [], "kraje": Counter()})
         g["kluby"].append(nazwa_klubu.get(uid) or "?")
+        if kraj_klubu.get(uid) is not None:
+            g["kraje"][kraj_klubu[uid]] += 1
     wynik = []
     for g in grupy.values():
-        wynik.append({**g, "liczba": len(g["kluby"]), "kluby": sorted(g["kluby"])[:limit]})
+        kraje = g.pop("kraje")
+        wynik.append({**g, "liczba": len(g["kluby"]), "kluby": sorted(g["kluby"])[:limit],
+                      "kraj": kraje.most_common(1)[0][0] if kraje else None})
     return sorted(wynik, key=lambda g: -g["liczba"])
 
 
