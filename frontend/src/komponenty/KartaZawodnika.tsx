@@ -33,8 +33,8 @@ const UKRYTE = ['Regularność', 'Ważne mecze', 'Podatność na kontuzje', 'Det
 export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubUid, ulubiona, przelaczUlubiona, zamknij,
   otworz, dodajDoPorownania }: Props) {
   const radar = useQuery({
-    queryKey: ['radar', wersja, zapytanie.pozycja, id],
-    queryFn: () => api.radar(zapytanie.pozycja, [id!]),
+    queryKey: ['radar', wersja, zapytanie.pozycja, id, zapytanie.filtry.kandydaci],
+    queryFn: () => api.radar(zapytanie.pozycja, [id!], zapytanie.filtry.kandydaci),
     enabled: !!id,
   });
   const podobni = useQuery({
@@ -57,7 +57,7 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
             {moj(w) && <Badge color="yellow" variant="filled">Twój zawodnik</Badge>}
             <Badge variant="light">{String(w['Klub'] ?? '–')}</Badge>
             <Badge variant="light" color="gray">{String(w['Liga'] ?? '–')}</Badge>
-            {w['Pozycja'] ? <Badge variant="outline">{String(w['Pozycja'])}</Badge> : null}
+            {w['Pozycja'] ? <Badge variant="outline">pozycje: {String(w['Pozycja'])}</Badge> : null}
             {w['Wypożyczony'] ? (
               <Badge color="orange">wypożyczony{w['Wypożyczenie_do'] ? ` do ${formatuj(w['Wypożyczenie_do'], 'data')}` : ''}</Badge>
             ) : null}
@@ -67,6 +67,14 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
               </Tooltip>
             ) : null}
             {okazje.map((o) => <Badge key={o} color="grape" variant="light">{o}</Badge>)}
+            {w['Kandydat'] ? (
+              <Tooltip label="Gra nominalnie na innej pozycji - wynik według kryteriów wybranej pozycji">
+                <Badge color="grape" variant="outline">
+                  kandydat do przekwalifikowania: z {String(w['Kandydat z pozycji'] ?? '?')}
+                  {typeof w['Ocena na pozycji'] === 'number' ? ` · ocena na pozycji ${w['Ocena na pozycji']}/20` : ''}
+                </Badge>
+              </Tooltip>
+            ) : null}
           </Group>
           <SimpleGrid cols={4}>
             <Pole etykieta="SCORE" wartosc={formatuj(w['SCORE'], 'score')} />

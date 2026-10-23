@@ -15,22 +15,25 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { useDebouncedValue, useLocalStorage } from '@mantine/hooks';
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDebouncedValue } from '@mantine/hooks';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api, type Filtry, type Stan, type Wiersz, type ZapytanieRankingu } from './api';
 import ListaZyczen from './komponenty/ListaZyczen';
 import { kluczZawodnika, usePamiec, type WpisListy } from './pamiec';
-import KartaZawodnika from './komponenty/KartaZawodnika';
+
 import Ligi from './komponenty/Ligi';
 import MojaKadra from './komponenty/MojaKadra';
 import Okazje from './komponenty/Okazje';
 import PanelBoczny, { PUSTE_FILTRY, type Ustawienia } from './komponenty/PanelBoczny';
 import PanelZrodla from './komponenty/PanelZrodla';
-import Porownanie from './komponenty/Porownanie';
+
 import TabelaRankingu from './komponenty/TabelaRankingu';
-import Wykresy from './komponenty/Wykresy';
+// Komponenty z wykresami (ECharts) ladowane dopiero przy pierwszym uzyciu
+const KartaZawodnika = lazy(() => import('./komponenty/KartaZawodnika'));
+const Porownanie = lazy(() => import('./komponenty/Porownanie'));
+const Wykresy = lazy(() => import('./komponenty/Wykresy'));
 
 const POZYCJE = ['Bramkarz', 'Środkowy Obrońca', 'Boczny Obrońca', 'Wahadłowy', 'Defensywny Pomocnik', 'Środkowy Pomocnik',
   'Ofensywny Pomocnik', 'Skrzydłowy', 'Napastnik'];
@@ -82,10 +85,9 @@ export default function App() {
   const pozycja = POZYCJE.includes(pozycjaZapisana) ? pozycjaZapisana : 'Napastnik';
   const [lista, setLista] = usePamiec<WpisListy[]>('fm-lista-zyczen', []);
   const ulubione = useMemo(() => new Set(lista.map((w) => w.klucz)), [lista]);
-  const [ustawienia, setUstawienia] = useLocalStorage<Ustawienia>({
-    key: 'fm-ustawienia', defaultValue: { k_baza: 5, ignoruj_mnoznik: false, pokaz_ukryte: false },
-  });
-  const [wagiWlasne, setWagiWlasne] = useLocalStorage<Record<string, Record<string, number>>>({ key: 'fm-wagi', defaultValue: {} });
+  const [ustawienia, setUstawienia] = usePamiec<Ustawienia>('fm-ustawienia',
+    { k_baza: 5, ignoruj_mnoznik: false, pokaz_ukryte: false });
+  const [wagiWlasne, setWagiWlasne] = usePamiec<Record<string, Record<string, number>>>('fm-wagi', {});
   const [filtryPozycji, setFiltryPozycji] = useState<Record<string, Filtry>>({});
   const [wybrani, setWybrani] = useState<Record<string, string[]>>({});
   const [karta, setKarta] = useState<string | null>(null);
@@ -130,10 +132,13 @@ export default function App() {
     queryKey: ['ranking', wersja, zapytanieOpoznione],
     queryFn: () => api.ranking(zapytanieOpoznione),
     enabled: gotowe && zapytanieOpoznione.pozycja === pozycja,
-    placeholderData: keepPreviousData,
+    // poprzedni wynik zostaje na ekranie tylko przy zmianie filtrow tej samej pozycji
+    placeholderData: (poprzedni) => (poprzedni?.pozycja === zapytanieOpoznione.pozycja ? poprzedni : undefined),
   });
+  // Tabela nigdy nie pokazuje wierszy innej pozycji niz wybrana (np. gdy odpowiedz jeszcze nie doszla)
+  const rankingPozycji = ranking.data?.pozycja === pozycja ? ranking.data : undefined;
 
-  const wiersze = ranking.data?.wiersze ?? [];
+  const wiersze = rankingPozycji?.wiersze ?? [];
   const wierszKarty = wiersze.find((w) => w['ID'] === karta) ?? (kartaWiersz?.['ID'] === karta ? kartaWiersz : undefined);
   const otworzKarte = (id: string, wiersz?: Wiersz) => {
     setKarta(id);
@@ -217,7 +222,7 @@ export default function App() {
           ustawienia={ustawienia}
           setUstawienia={setUstawienia}
           maMojKlub={!!s?.meta.moj_klub_uid}
-          pominiete={ranking.data?.pominiete ?? []}
+          pominiete={rankingPozycji?.pominiete ?? []}
         />
       </AppShell.Navbar>
 
@@ -246,7 +251,9 @@ export default function App() {
           <Tabs value={zakladka} onChange={setZakladka} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <Tabs.List px="md">
               <Tabs.Tab value="ranking">
-                Ranking {ranking.data ? `(${ranking.data.liczba} z ${ranking.data.liczba_wszystkich})` : ''}
+                Ranking {rankingPozycji ? `(${rankingPozycji.liczba} z ${rankingPozycji.liczba_wszystkich}` : ''}
+                {rankingPozycji?.liczba_kandydatow ? ` + ${rankingPozycji.liczba_kandydatow} kandydatów` : ''}
+                {rankingPozycji ? ')' : ''}
               </Tabs.Tab>
               <Tabs.Tab value="okazje">Okazje</Tabs.Tab>
               <Tabs.Tab value="lista">Lista życzeń {lista.length ? `(${lista.length})` : ''}</Tabs.Tab>
@@ -260,16 +267,23 @@ export default function App() {
             <Tabs.Panel value="ranking" style={{ flex: 1, minHeight: 0 }}>
               <Box p="sm" h="100%" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {ranking.error && <Alert color="red">{(ranking.error as Error).message}</Alert>}
-                {s?.meta.moj_klub && (
-                  <Text size="xs" c="dimmed">
-                    <span className="legenda-moj-klub" /> zawodnicy twojego klubu ({s.meta.moj_klub}) · kliknij nazwisko,
-                    aby otworzyć kartę · zaznacz do 4 zawodników do porównania
-                  </Text>
+                <Text size="xs" c="dimmed">
+                  {s?.meta.moj_klub && (
+                    <><span className="legenda-moj-klub" /> zawodnicy twojego klubu ({s.meta.moj_klub}) · </>
+                  )}
+                  {filtry.kandydaci && (
+                    <><span className="legenda-kandydat" /> kandydaci do przekwalifikowania z innych pozycji · </>
+                  )}
+                  kliknij nazwisko, aby otworzyć kartę · zaznacz do 4 zawodników do porównania
+                </Text>
+                {!rankingPozycji && !ranking.error && (
+                  <Center style={{ flex: 1 }}><Loader /></Center>
                 )}
-                {ranking.data && (
+                {rankingPozycji && (
                   <Box style={{ flex: 1, minHeight: 0 }}>
                   <TabelaRankingu
-                    kolumny={ranking.data.kolumny}
+                    key={pozycja}
+                    kolumny={rankingPozycji.kolumny}
                     wiersze={wiersze}
                     mojKlubUid={mojKlubUid}
                     naWybor={otworzKarte}
@@ -310,12 +324,18 @@ export default function App() {
               {zakladka === 'ligi' && <Ligi wersja={wersja} />}
             </Tabs.Panel>
             <Tabs.Panel value="porownanie" style={{ overflow: 'auto' }}>
-              <Porownanie pozycja={pozycja} wersja={wersja} wiersze={wiersze} wybrani={wybraniPozycji}
-                setWybrani={(ids) => setWybrani({ ...wybrani, [pozycja]: ids })} />
+              {zakladka === 'porownanie' && (
+                <Suspense fallback={<Loader m="md" />}>
+                  <Porownanie pozycja={pozycja} wersja={wersja} wiersze={wiersze} wybrani={wybraniPozycji}
+                    setWybrani={(ids) => setWybrani({ ...wybrani, [pozycja]: ids })} kandydaci={filtry.kandydaci} />
+                </Suspense>
+              )}
             </Tabs.Panel>
             <Tabs.Panel value="wykresy" style={{ overflow: 'auto' }}>
-              {ranking.data && (
-                <Wykresy wiersze={wiersze} kolumny={ranking.data.kolumny} mojKlubUid={mojKlubUid} naWybor={setKarta} />
+              {zakladka === 'wykresy' && rankingPozycji && (
+                <Suspense fallback={<Loader m="md" />}>
+                  <Wykresy wiersze={wiersze} kolumny={rankingPozycji.kolumny} mojKlubUid={mojKlubUid} naWybor={setKarta} />
+                </Suspense>
               )}
             </Tabs.Panel>
           </Tabs>
@@ -323,6 +343,8 @@ export default function App() {
       </AppShell.Main>
 
       <PanelZrodla otwarty={panelZrodla} zamknij={() => setPanelZrodla(false)} stan={s} />
+      {karta && (
+      <Suspense fallback={null}>
       <KartaZawodnika
         id={karta}
         wiersz={wierszKarty}
@@ -338,6 +360,8 @@ export default function App() {
           setWybrani({ ...wybrani, [pozycja]: nowi });
         }}
       />
+      </Suspense>
+      )}
     </AppShell>
   );
 }

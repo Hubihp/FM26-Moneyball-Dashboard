@@ -289,6 +289,7 @@ def test_kandydaci_do_przekwalifikowania(klient):
     # kandydaci nie zmieniaja wyniku zawodnikow pozycji
     assert nominalni == pytest.approx({w["ID"]: w["SCORE"] for w in zwykly["wiersze"]})
     assert kandydaci and all(w["SCORE"] >= 55 for w in kandydaci)
+    assert z_kandydatami["liczba_wszystkich"] == 150 and z_kandydatami["liczba_kandydatow"] == len(kandydaci)
     assert {w["Kandydat z pozycji"] for w in kandydaci} <= {"Środkowy Obrońca", "Wahadłowy", "Defensywny Pomocnik",
                                                             "Środkowy Pomocnik", "Ofensywny Pomocnik", "Skrzydłowy",
                                                             "Napastnik"}           # bez bramkarzy

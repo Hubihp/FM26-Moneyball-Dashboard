@@ -4,12 +4,19 @@ import { useQuery } from '@tanstack/react-query';
 import { api, type Wiersz } from '../api';
 import Wykres from './Wykres';
 
-type Props = { pozycja: string; wersja: number; wiersze: Wiersz[]; wybrani: string[]; setWybrani: (ids: string[]) => void };
+type Props = {
+  pozycja: string;
+  wersja: number;
+  wiersze: Wiersz[];
+  wybrani: string[];
+  setWybrani: (ids: string[]) => void;
+  kandydaci: boolean;
+};
 
-export default function Porownanie({ pozycja, wersja, wiersze, wybrani, setWybrani }: Props) {
+export default function Porownanie({ pozycja, wersja, wiersze, wybrani, setWybrani, kandydaci }: Props) {
   const radar = useQuery({
-    queryKey: ['radar', wersja, pozycja, wybrani],
-    queryFn: () => api.radar(pozycja, wybrani),
+    queryKey: ['radar', wersja, pozycja, wybrani, kandydaci],
+    queryFn: () => api.radar(pozycja, wybrani, kandydaci),
     enabled: wybrani.length > 0,
   });
   const nazwa = (id: string) => String(wiersze.find((w) => w['ID'] === id)?.['Piłkarz'] ?? id);

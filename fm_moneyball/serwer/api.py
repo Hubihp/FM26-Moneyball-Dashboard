@@ -175,6 +175,11 @@ def utworz_aplikacje(stan):
         widoczni = analiza.filtruj(policzona, filtry, data_gry(), stan.migawka()["meta"].get("moj_klub_uid"))
         return policzona, analiza.oznacz_pareto(widoczni), pominiete
 
+    def kandydat(ramka):
+        if 'Kandydat' not in ramka.columns:
+            return pd.Series(False, index=ramka.index)
+        return ramka['Kandydat'].fillna(False).astype(bool)
+
     # --- stan i zrodlo -------------------------------------------------------------------------
     @app.get("/api/stan")
     def pobierz_stan():
@@ -366,7 +371,9 @@ def utworz_aplikacje(stan):
             "pozycja": z.pozycja,
             "kolumny": kolumny,
             "wiersze": analiza.do_json(widoczni, analiza.pola_wiersza(z.pozycja, policzona, z.pokaz_ukryte)),
-            "liczba": len(widoczni), "liczba_wszystkich": len(policzona),
+            # liczby zawodnikow pozycji; kandydaci z innych pozycji osobno
+            "liczba": int((~kandydat(widoczni)).sum()), "liczba_wszystkich": int((~kandydat(policzona)).sum()),
+            "liczba_kandydatow": int(kandydat(widoczni).sum()),
             "pominiete": pominiete,
             "statystyki": analiza.kolumny_statystyk(z.pozycja, policzona),
         }

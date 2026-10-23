@@ -131,6 +131,9 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
             cellClassRules: { 'komorka-moj-klub': (p: { data?: Wiersz }) => czyMoj(p.data, mojKlubUid) },
           });
         }
+        if (k.pole === 'Kandydat z pozycji') {
+          Object.assign(def, { width: 170, cellClass: 'komorka-kandydat' });
+        }
         if (k.pole === 'Kraj') {
           def.width = 140;
         }
@@ -166,7 +169,12 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
   }, [ulubione]);
 
   const klasaWiersza = useMemo(
-    () => (p: RowClassParams<Wiersz>) => (czyMoj(p.data, mojKlubUid) ? 'wiersz-moj-klub' : undefined),
+    () => (p: RowClassParams<Wiersz>) => {
+      const klasy = [];
+      if (czyMoj(p.data, mojKlubUid)) klasy.push('wiersz-moj-klub');
+      if (p.data?.['Kandydat']) klasy.push('wiersz-kandydat');
+      return klasy.length ? klasy : undefined;
+    },
     [mojKlubUid],
   );
 

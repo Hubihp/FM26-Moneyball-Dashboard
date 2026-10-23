@@ -73,7 +73,10 @@ function WierszKraju({ kraj }: { kraj: Kraj }) {
     <Table.Tr>
       <Table.Td>
         <Text size="sm" fw={600}>{kraj.nazwa ?? `Kraj #${kraj.id}`}</Text>
-        <Text size="xs" c="dimmed">id {kraj.id}{kraj.nazwa && !kraj.reczna ? ' · nazwa z ligi' : ''}</Text>
+        <Text size="xs" c="dimmed">
+          id {kraj.id}
+          {kraj.zrodlo === 'liga' ? ' · nazwa z ligi' : kraj.zrodlo === 'kluby' ? ' · nazwa z klubów krajowych' : ''}
+        </Text>
       </Table.Td>
       <Table.Td>{kraj.liczba}</Table.Td>
       <Table.Td><Text size="xs">{kraj.przyklady.join(', ')}</Text></Table.Td>
@@ -104,8 +107,9 @@ function Kraje({ wersja }: { wersja: number }) {
         <Badge color="gray" variant="light">wszystkich: {kraje.data.kraje.length}</Badge>
       </Group>
       <Text size="sm" c="dimmed">
-        Zapis nie zawiera nazw krajów. Kraj nazwanej ligi dostaje nazwę automatycznie (np. kluby Ekstraklasy → Polska),
-        resztę rozpoznasz po przykładowych zawodnikach. Pusta nazwa przywraca nazwę automatyczną.
+        Zapis nie zawiera nazw krajów - aplikacja nadaje je sama: z nazwanych lig (zawodnicy Ekstraklasy → Polska) i ze
+        składów typowo krajowych klubów (np. Hibernian, Aberdeen → Szkocja). Jeśli jakiś kraj został bez nazwy albo nazwa
+        jest zła, możesz ją tu poprawić; pusta nazwa przywraca nazwę automatyczną.
       </Text>
       <Table striped highlightOnHover>
         <Table.Thead>

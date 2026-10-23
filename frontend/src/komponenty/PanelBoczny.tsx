@@ -40,7 +40,8 @@ type Props = {
 
 export const PUSTE_FILTRY: Filtry = {
   ligi: [], nogi: [], kraje: [], wiek: null, cena: null, bez_ceny: true, szukaj: '', kontrakt_mies: null, min_minut: 0,
-  bez_mojego_klubu: false, okazje: [], max_ryzyko: null, min_oplacalnosc: null,
+  bez_mojego_klubu: false, okazje: [], max_ryzyko: null, min_oplacalnosc: null, kandydaci: false,
+  min_score_kandydata: 60,
 };
 
 // Suwak ceny w skali pierwiastkowej: wiecej precyzji przy niskich kwotach
@@ -58,6 +59,21 @@ export default function PanelBoczny(p: Props) {
     <ScrollArea h="100%" type="auto" offsetScrollbars>
       <Stack gap="sm" pb="xl">
         <Boisko pozycja={p.pozycja} liczby={p.liczby} naWybor={p.setPozycja} />
+
+        <div>
+          <Tooltip multiline w={300} withArrow
+            label="Zawodnicy grający nominalnie na innych pozycjach, oceniani według kryteriów wybranej pozycji - kandydaci do przekwalifikowania w grze. Nie zmieniają wyników zawodników tej pozycji.">
+            <Switch label="Kandydaci z innych pozycji" checked={filtry.kandydaci}
+              onChange={(e) => zmien('kandydaci', e.currentTarget.checked)} />
+          </Tooltip>
+          {filtry.kandydaci && (
+            <>
+              <Text size="xs" mt={6}>Minimalny SCORE kandydata: {filtry.min_score_kandydata}</Text>
+              <Slider min={40} max={80} step={1} label={null} value={filtry.min_score_kandydata}
+                onChange={(v) => zmien('min_score_kandydata', v)} />
+            </>
+          )}
+        </div>
 
         <TextInput label="Szukaj (piłkarz / klub)" value={filtry.szukaj} onChange={(e) => zmien('szukaj', e.currentTarget.value)} />
 
@@ -112,7 +128,8 @@ export default function PanelBoczny(p: Props) {
         )}
 
         {meta?.kraje && meta.kraje.length > 0 && (
-          <MultiSelect label="Narodowość" placeholder="Dowolna" searchable clearable data={meta.kraje} value={filtry.kraje}
+          <MultiSelect label="Narodowość" placeholder="Dowolna" searchable clearable value={filtry.kraje}
+            data={meta.kraje.map((k) => ({ value: k.kraj, label: `${k.kraj} (${k.liczba})` }))}
             onChange={(v) => zmien('kraje', v)} />
         )}
 

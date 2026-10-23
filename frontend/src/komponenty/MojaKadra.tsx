@@ -77,7 +77,10 @@ export default function MojaKadra({ wersja, wagi, ustawienia, szukajNastepcy, ot
                 <Table.Tbody>
                   {p.zawodnicy.map((z) => (
                     <Table.Tr key={String(z['ID'])} style={{ cursor: 'pointer' }} onClick={() => otworz(p.pozycja, String(z['ID']), z)}>
-                      <Table.Td fw={600}>{String(z['Piłkarz'])}</Table.Td>
+                      <Table.Td>
+                        <Text size="sm" fw={600}>{String(z['Piłkarz'])}</Text>
+                        {z['Pozycja'] ? <Text size="xs" c="dimmed">pozycje: {String(z['Pozycja'])}</Text> : null}
+                      </Table.Td>
                       <Table.Td>{formatuj(z['Wiek'], 'int')}</Table.Td>
                       <Table.Td>{formatuj(z['SCORE'], 'score')}</Table.Td>
                       <Table.Td>{formatuj(z['Minuty'], 'int')}</Table.Td>

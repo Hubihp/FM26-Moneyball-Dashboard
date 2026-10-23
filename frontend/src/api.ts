@@ -54,7 +54,7 @@ export type MetaPozycji = {
   ma_ukryte: boolean;
   ma_ryzyko: boolean;
   okazje: string[];
-  kraje: string[];
+  kraje: { kraj: string; liczba: number }[];
 };
 
 export type Filtry = {
@@ -71,6 +71,8 @@ export type Filtry = {
   okazje: string[];
   max_ryzyko: number | null;
   min_oplacalnosc: number | null;
+  kandydaci: boolean;
+  min_score_kandydata: number;
 };
 
 export type ZapytanieRankingu = {
@@ -87,10 +89,12 @@ export type Kolumna = { naglowek: string; pole: string; format: Format; statysty
 export type Wiersz = Record<string, string | number | boolean | null>;
 
 export type Ranking = {
+  pozycja: string;
   kolumny: Kolumna[];
   wiersze: Wiersz[];
   liczba: number;
   liczba_wszystkich: number;
+  liczba_kandydatow: number;
   pominiete: string[];
   statystyki: string[];
 };
@@ -126,7 +130,14 @@ export type PozycjaKadry = {
 };
 export type Kadra = { klub: string | null; pozycje: PozycjaKadry[] };
 
-export type Kraj = { id: number; nazwa: string | null; reczna: boolean; liczba: number; przyklady: string[] };
+export type Kraj = {
+  id: number;
+  nazwa: string | null;
+  zrodlo: 'ręcznie' | 'liga' | 'kluby' | null;
+  reczna: boolean;
+  liczba: number;
+  przyklady: string[];
+};
 
 export type ListaZyczen = { kolumny: Kolumna[]; wiersze: Wiersz[]; nieznalezieni: string[] };
 
@@ -186,7 +197,7 @@ export const api = {
   przeladuj: () => post<Stan>('/api/przeladuj', {}),
   metaPozycji: (pozycja: string) => zadanie<MetaPozycji>(`/api/pozycja/${encodeURIComponent(pozycja)}`),
   ranking: (body: ZapytanieRankingu) => post<Ranking>('/api/ranking', body),
-  radar: (pozycja: string, ids: string[]) => post<Radar>('/api/radar', { pozycja, ids }),
+  radar: (pozycja: string, ids: string[], kandydaci = false) => post<Radar>('/api/radar', { pozycja, ids, kandydaci }),
   podobni: (body: ZapytanieRankingu & { id: string; n: number }) => post<{ wiersze: Wiersz[] }>('/api/podobni', body),
   nazwyLig: async (pliki: File[]) => {
     const dane = new FormData();

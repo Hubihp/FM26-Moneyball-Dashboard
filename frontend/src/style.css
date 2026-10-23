@@ -17,6 +17,29 @@ body {
   box-shadow: inset 4px 0 0 #fab005;
 }
 
+/* Kandydaci do przekwalifikowania (z innych pozycji): fioletowy pasek z lewej */
+.ag-pinned-left-cols-container .wiersz-kandydat {
+  box-shadow: inset 4px 0 0 #be4bdb;
+}
+
+.ag-pinned-left-cols-container .wiersz-moj-klub.wiersz-kandydat {
+  box-shadow: inset 4px 0 0 #fab005, inset 8px 0 0 #be4bdb;
+}
+
+.komorka-kandydat {
+  color: #e599f7;
+}
+
+.legenda-kandydat {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: rgba(190, 75, 219, 0.25);
+  box-shadow: inset 3px 0 0 #be4bdb;
+  vertical-align: middle;
+}
+
 .komorka-moj-klub {
   color: #fcc419;
 }
