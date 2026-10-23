@@ -1,0 +1,67 @@
+# Buduje FM26Moneyball.exe (Windows) i publikuje go w wydaniu "najnowsza":
+# https://github.com/Hubihp/FM26-Moneyball-Dashboard/releases/download/najnowsza/FM26Moneyball.exe
+name: Plik exe dla Windows
+
+on:
+  push:
+    branches: [claude/optimistic-lamport-we8t1j]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: exe
+  cancel-in-progress: true
+
+jobs:
+  exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Biblioteki
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas numpy "fmsave[pandas]==0.5.11" fastapi uvicorn python-multipart pyinstaller
+
+      - name: Budowanie exe
+        run: pyinstaller --noconfirm fm26_moneyball.spec
+
+      - name: Test dymny (start, interfejs, API)
+        shell: pwsh
+        run: |
+          $proces = Start-Process -FilePath "dist\FM26Moneyball.exe" -ArgumentList "--bez-przegladarki" -PassThru
+          $ok = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            Start-Sleep -Seconds 2
+            try {
+              $stan = Invoke-WebRequest -Uri "http://127.0.0.1:8765/api/stan" -UseBasicParsing
+              $strona = Invoke-WebRequest -Uri "http://127.0.0.1:8765/" -UseBasicParsing
+              if ($stan.StatusCode -eq 200 -and $strona.Content -match 'id="root"') { $ok = $true; break }
+            } catch { }
+          }
+          Stop-Process -Id $proces.Id -Force
+          if (-not $ok) { Write-Error "Aplikacja nie odpowiada"; exit 1 }
+          Write-Host "Aplikacja odpowiada poprawnie"
+
+      - name: Przesuniecie tagu najnowsza
+        run: |
+          git tag -f najnowsza
+          git push -f origin najnowsza
+
+      - name: Wydanie
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: najnowsza
+          name: FM26 Moneyball - najnowsza wersja
+          body: |
+            Pobierz FM26Moneyball.exe i uruchom dwuklikiem - nie trzeba instalowac Pythona.
+            Aplikacja otworzy sie w przegladarce; zamkniecie czarnego okna konczy jej dzialanie.
+            Wersja z commita ${{ github.sha }}.
+          files: dist/FM26Moneyball.exe
+          make_latest: true

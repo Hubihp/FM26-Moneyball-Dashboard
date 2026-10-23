@@ -11,3 +11,5 @@ __pycache__/
 raport_zapisu.json
 frontend/node_modules/
 kraje_bez_nazwy.txt
+build/
+dist/

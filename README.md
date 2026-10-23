@@ -57,6 +57,14 @@ Dośrodkowania, 100% sytuacje i sprinty pochodzą tylko z zapisu gry. Przy impor
 3. Zainstaluj biblioteki: `py -m pip install -r requirements.txt`. Na każdym nowym komputerze trzeba to zrobić raz.
 4. Uruchom aplikację: `py -m fm_moneyball` (w folderze projektu). Przeglądarka otworzy się sama. Okno PowerShella musi pozostać otwarte, a `Ctrl+C` kończy pracę aplikacji.
 
+### Wersja .exe (bez instalowania Pythona)
+
+Pobierz [FM26Moneyball.exe](https://github.com/Hubihp/FM26-Moneyball-Dashboard/releases/download/najnowsza/FM26Moneyball.exe) i uruchom go dwuklikiem. Otworzy się czarne okno z adresem aplikacji i przeglądarka; zamknięcie okna kończy działanie aplikacji. Ponowny dwuklik, gdy aplikacja już działa, tylko otwiera przeglądarkę.
+
+- Plik nie jest podpisany certyfikatem, więc przy pierwszym uruchomieniu Windows SmartScreen może ostrzec o nieznanym wydawcy: kliknij „Więcej informacji”, a potem „Uruchom mimo to”.
+- Start trwa kilka sekund dłużej niż przy `py -m fm_moneyball`, bo program rozpakowuje się do folderu tymczasowego.
+- Aktualizacja: pobierz nowy plik z tego samego linku. Plik buduje się automatycznie po każdej zmianie w kodzie (GitHub Actions). Ustawienia, nazwy lig i krajów oraz cache są w `%USERPROFILE%\.fm_moneyball`, więc zostają.
+
 ### Aktualizacja
 
 - **Bez gita (folder z ZIP-a):** zamknij aplikację (Ctrl+C w jej oknie) i kliknij dwukrotnie `aktualizuj.bat` w folderze aplikacji. Skrypt pobierze najnowszą wersję z GitHuba, podmieni pliki i doinstaluje brakujące biblioteki. Twoje nazwy lig i krajów, ustawienia oraz cache są w `%USERPROFILE%\.fm_moneyball` i zostają bez zmian.
@@ -122,6 +130,8 @@ frontend/                  interfejs React + TypeScript (Vite, Mantine, AG Grid,
 app.py                     poprzedni interfejs (Streamlit)
 tests/                     testy (pytest)
 ```
+
+Plik .exe: `pip install pyinstaller && pyinstaller fm26_moneyball.spec` (na Windows; wynik w `dist/`).
 
 Testy: `python -m pip install -r requirements-dev.txt && python -m pytest`
 
