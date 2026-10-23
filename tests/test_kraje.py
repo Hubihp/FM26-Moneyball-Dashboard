@@ -80,3 +80,16 @@ def test_kraje_z_klubow_kotwic():
     assert wynik[30] == "Szkocja" and wynik[40] == "Czechy"
     # "Olimpia" to dwa kluby (dwa kraje) - jeden glos na kraj ponizej progu 70%, wiec bez nazwy
     assert 50 not in wynik and 51 not in wynik
+
+
+def test_domyslna_mapa_krajow():
+    import csv
+
+    from fm_moneyball.kraje import PLIK_KRAJOW
+    with open(PLIK_KRAJOW, encoding="utf-8") as plik:
+        wiersze = list(csv.reader(plik))[1:]
+    ids = [int(w[0]) for w in wiersze]
+    nazwy = [w[1].strip() for w in wiersze]
+    assert len(ids) == len(set(ids)) and all(nazwy) and len(nazwy) == len(set(nazwy))
+    mapa = dict(zip(ids, nazwy))
+    assert mapa[33] == "Nigeria" and mapa[173] == "Turcja" and mapa[176] == "Serbia" and mapa[207] == "Montserrat"

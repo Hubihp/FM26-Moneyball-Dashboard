@@ -126,7 +126,7 @@ def _sztuczny_zapis(tmp_path, monkeypatch, wywolania, przy_wczytaniu=None):
         dane, _ = modul._demo()
         return WynikZapisu(dane=dane, moj_klub="Premier FC 1", moj_klub_uid=1000, nazwa_zapisu="Kariera",
                            ligi=[{"klucz": 999011, "domyslna": "Rozgrywki #999011", "nazwa": None, "liczba": 20,
-                                  "kluby": ["A", "B"], "kraj": 5}])
+                                  "kluby": ["A", "B"], "kraj": 9005}])
     monkeypatch.setattr(modul, "wczytaj_zapis", atrapa)
     return plik
 
@@ -256,7 +256,7 @@ def test_lista_zyczen_po_uid_i_kraje(tmp_path, monkeypatch):
     stan.ustaw_zrodlo("plik", plik=str(plik), w_tle=False)
     for p, df in stan.surowe.items():      # atrapa zapisu: UID i narodowosc jak z fmsave
         df['UID'] = range(len(df))
-        df['Kraj_ID'] = [5 if i % 2 else 6 for i in range(len(df))]
+        df['Kraj_ID'] = [9005 if i % 2 else 9006 for i in range(len(df))]
     stan.zastosuj_ligi()
     with TestClient(utworz_aplikacje(stan)) as k:
         nap = stan.pula("Napastnik").iloc[7]
@@ -267,15 +267,15 @@ def test_lista_zyczen_po_uid_i_kraje(tmp_path, monkeypatch):
         assert lista["nieznalezieni"] == [str(nap["UID"])]
 
         kraje = k.get("/api/kraje").json()["kraje"]
-        assert {kr["id"] for kr in kraje} == {5, 6} and all(kr["nazwa"] is None for kr in kraje)
-        assert stan.pula("Napastnik")["Kraj"].iloc[1] == "Kraj #5"
-        kraje = k.put("/api/kraje/5", json={"nazwa": "Ghana"}).json()["kraje"]
-        assert next(kr for kr in kraje if kr["id"] == 5)["nazwa"] == "Ghana"
+        assert {kr["id"] for kr in kraje} == {9005, 9006} and all(kr["nazwa"] is None for kr in kraje)
+        assert stan.pula("Napastnik")["Kraj"].iloc[1] == "Kraj #9005"
+        kraje = k.put("/api/kraje/9005", json={"nazwa": "Ghana"}).json()["kraje"]
+        assert next(kr for kr in kraje if kr["id"] == 9005)["nazwa"] == "Ghana"
         assert stan.pula("Napastnik")["Kraj"].iloc[1] == "Ghana"
         # liga z nazwa nadaje nazwe krajowi (kraj 5 z atrapy ligi)
         k.put("/api/ligi/999011", json={"nazwa": "K League 1"})
         kraje = {kr["id"]: kr["nazwa"] for kr in k.get("/api/kraje").json()["kraje"]}
-        assert kraje[5] == "Ghana"           # reczna nazwa wygrywa z automatyczna
+        assert kraje[9005] == "Ghana"           # reczna nazwa wygrywa z automatyczna
     assert "Ghana" in (tmp_path / "kraje.csv").read_text(encoding="utf-8")
 
 
