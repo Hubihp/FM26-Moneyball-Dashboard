@@ -36,7 +36,8 @@ Ograniczenia:
 - **Nazwy lig.** Zapis nie zawiera nazw lig, tylko ich identyfikatory. Wgraj stare eksporty CSV w sekcji „Nazwy lig” w panelu bocznym: aplikacja dopasuje kluby i zapisze nazwy w `dane/nazwy_rozgrywek.csv`. Identyfikatory są wspólne dla wszystkich zapisów FM26. Ligi bez nazwy są pokazywane jako „Rozgrywki #id” i dostają najniższy mnożnik ligowy.
 - **Waluta.** Kwoty są zapisane w walucie bazowej. Domyślny kurs 1,157 odpowiada temu, co gra pokazuje w euro. Można go zmienić w „Opcjach odczytu zapisu”.
 - **Ceny.** Zapis zawiera rzeczywistą wartość transferową z gry. Gra pokazuje zamiast niej widełki zależne od wiedzy skautów (np. 80–325 tys. € przy wartości 315 tys. €). Dlatego ceny z zapisu są zwykle wyższe niż przy imporcie CSV, który brał środek widełek.
-- **Ligi z sezonem kalendarzowym** (np. Brazylia). Przed startem sezonu krajowego kluby grają tylko w ligach stanowych, więc są przypisane do nich (jako „Rozgrywki #id”). Właściwą ligę dostaną, gdy jej tabela pojawi się w zapisie.
+- **Liga klubu** to rozgrywki, w których jego pierwsza drużyna gra najwięcej kolejek ligowych w bieżącym sezonie (z terminarza, łącznie z kolejkami zaplanowanymi). Dzięki temu np. kluby brazylijskie mają Série A także wtedy, gdy trwają jeszcze ligi stanowe. Drużyny kobiece (kluby o tej samej nazwie co męskie) i ich rozgrywki są pomijane.
+- **Ligi bez identyfikatora w bazie** (np. belgijska Jupiler Pro League) dostają w mapie nazw klucz zastępczy `-numer_kraju` (np. `-131,Jupiler Pro League`).
 - **Dane ukryte.** Zapis zawiera dane, których w grze nie widać bez pełnej wiedzy skautów (CA/PA). Domyślnie są ukryte; włączysz je w Ustawieniach.
 
 ## Diagnostyka zapisu
@@ -47,7 +48,7 @@ Aby sprawdzić, czy Twój zapis jest czytany poprawnie, uruchom:
 python narzedzia/zbadaj_zapis.py "<ścieżka do zapisu>.fm" [stare_eksporty.csv ...] [--zapisz-nazwy]
 ```
 
-Z plikami CSV skrypt rozpozna nazwy lig. Opcja `--zapisz-nazwy` zapisze je do `dane/nazwy_rozgrywek.csv`, a raport pokaże przy każdej lidze kilka klubów, żeby łatwo było sprawdzić przypisanie. W repozytorium jest już mapa najpopularniejszych lig (Anglia, Francja, Niemcy, Holandia, Włochy, Portugalia, Hiszpania, Argentyna, Meksyk, Japonia, MLS). Opcja `--klub "Nazwa klubu"` (można podać kilka razy) wypisze wszystkie tabele, w których występuje klub. Pomaga to zrozumieć, skąd wzięło się jego przypisanie do ligi.
+Z plikami CSV skrypt rozpozna nazwy lig. Opcja `--zapisz-nazwy` zapisze je do `dane/nazwy_rozgrywek.csv`, a raport pokaże przy każdej lidze kilka klubów, żeby łatwo było sprawdzić przypisanie. W repozytorium jest już mapa najpopularniejszych lig: Anglia, Francja, Niemcy, Holandia, Włochy, Portugalia, Hiszpania, Belgia, Polska, Chorwacja, Brazylia, Argentyna, Meksyk, Japonia i MLS. Opcja `--klub "Nazwa klubu"` (można podać kilka razy) wypisze wszystkie tabele, w których występuje klub. Pomaga to zrozumieć, skąd wzięło się jego przypisanie do ligi.
 
 Skrypt wypisze liczbę odczytanych zawodników i lig, pokrycie kolumn oraz próbkę Twojej kadry do porównania z ekranem gry. Zapisze też mały raport `raport_zapisu.json`.
 

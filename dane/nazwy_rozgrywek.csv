@@ -1,4 +1,6 @@
 database_id,nazwa
+-131,Jupiler Pro League
+2,Challenger Pro League
 11,Premier League
 12,EFL Championship
 16,Ligue 1
@@ -15,8 +17,16 @@ database_id,nazwa
 67,LaLiga
 68,LaLiga 2
 74,Liga Profesional de Fútbol
+75,Liga Profesional de Fútbol
 84,Liga MX
 102422,Primera Nacional
+102423,Série A
 102428,J1 League
 102429,J2 League
+107191,Série B
+115424,J2 League
+129558,Ekstraklasa
+129559,I liga
+129645,Hrvatska nogometna liga
+129646,Prva nogometa liga
 2000017075,Liga Rozwojowa

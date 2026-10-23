@@ -93,6 +93,8 @@ class Liga:
     def etykieta(self):
         if self.nazwa:
             return self.nazwa
+        if self.database_id is not None and self.database_id < 0:
+            return f"Liga krajowa #{-self.database_id}"
         return f"Rozgrywki #{self.database_id if self.database_id is not None else self.competition_id}"
 
 
@@ -281,6 +283,18 @@ def opis_tabeli(tabela, nacja):
     return wiersze, kraj, ile / len(wiersze)
 
 
+def klucz_rozgrywek(baza, competition_id, kraj):
+    """
+    Klucz rozgrywek w mapie nazw: id z bazy gry, a gdy go brak (np. liga belgijska w FM26 ma
+    database_id = None) - zastepczy klucz -kraj. Jest staly miedzy zapisami tej samej bazy, wiec
+    taka lige tez mozna nazwac w dane/nazwy_rozgrywek.csv (np. "-131,Jupiler Pro League").
+    """
+    db_id = baza.get(competition_id)
+    if db_id is None and kraj is not None:
+        return -kraj
+    return db_id
+
+
 def kluby_drugorzedne(kluby):
     """
     Kluby, dla ktorych istnieje inny klub o tej samej nazwie i kraju z nizszym uid. W FM26 to
@@ -352,7 +366,7 @@ def kandydaci_lig_z_terminarza(mecze, rozgrywki, kluby, data_gry=None, prog_kraj
             krajowe[comp] = kraj
     wynik = {}
     for uid, licznik in mecze_klubu.items():
-        lista = [KandydatLigi(ile, comp, baza.get(comp), krajowe[comp])
+        lista = [KandydatLigi(ile, comp, klucz_rozgrywek(baza, comp, krajowe[comp]), krajowe[comp])
                  for comp, ile in licznik.items() if comp in krajowe]
         if lista:
             wynik[uid] = sorted(lista, key=lambda k: (-k.rozmiar, k.competition_id))
@@ -386,7 +400,8 @@ def kandydaci_lig(tabele, rozgrywki, kluby, prog_krajowy=0.8, drugorzedne=None):
             obecny = rozmiary[w.club_uid].get(tabela.competition_id, (0, kraj))
             rozmiary[w.club_uid][tabela.competition_id] = (max(obecny[0], len(wiersze)), kraj)
     return {
-        uid: sorted((KandydatLigi(r, comp, baza.get(comp), kraj) for comp, (r, kraj) in per_comp.items()),
+        uid: sorted((KandydatLigi(r, comp, klucz_rozgrywek(baza, comp, kraj), kraj)
+                     for comp, (r, kraj) in per_comp.items()),
                     key=lambda k: (-k.rozmiar, k.competition_id))
         for uid, per_comp in rozmiary.items()
     }
@@ -475,11 +490,21 @@ def mapa_nazw_z_csv(kandydaci, kluby, ramki_csv, min_glosow=2, min_udzial=0.6, m
 
 
 def wczytaj_nazwy_rozgrywek(sciezka=PLIK_NAZW_ROZGRYWEK):
+    """Mapa {klucz rozgrywek: nazwa} z pliku CSV `id,nazwa`. Akceptuje klucze ujemne (-kraj),
+    ktorych czytnik fmsave nie przyjmuje; pomija naglowek, puste i niepoprawne wiersze."""
     sciezka = Path(sciezka)
     if not sciezka.is_file():
         return {}
-    import fmsave
-    return dict(fmsave.read_competition_names(sciezka))
+    mapa = {}
+    with open(sciezka, encoding="utf-8-sig", newline="") as plik:
+        for wiersz in csv.reader(plik):
+            if len(wiersz) < 2 or not wiersz[1].strip():
+                continue
+            try:
+                mapa[int(wiersz[0].strip())] = wiersz[1].strip()
+            except ValueError:
+                continue   # naglowek albo smiec
+    return mapa
 
 
 def zapisz_nazwy_rozgrywek(mapa, sciezka=PLIK_NAZW_ROZGRYWEK):

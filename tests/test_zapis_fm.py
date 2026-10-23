@@ -236,8 +236,8 @@ def test_domyslna_mapa_nazw_pasuje_do_mnoznikow():
     from fm_moneyball.stale import MNOZNIKI_LIG
     from fm_moneyball.zrodla.zapis_fm import PLIK_NAZW_ROZGRYWEK
     mapa = wczytaj_nazwy_rozgrywek(PLIK_NAZW_ROZGRYWEK)
+    # jedna liga moze miec kilka id (np. dwie fazy ligi argentynskiej), ale kazda nazwa musi miec mnoznik
     assert mapa and all(nazwa in MNOZNIKI_LIG for nazwa in mapa.values())
-    assert len(set(mapa.values())) == len(mapa)
 
 
 # --- liga z terminarza ---------------------------------------------------------------------------
@@ -303,3 +303,26 @@ def test_klub_uid_w_ramce():
     ramki = zbuduj_ramki([zawodnik(1, pozycje(stc=20))], sumuj_statystyki([wiersz_statystyk(1)], "league"),
                          {10: _liga()}, OpcjeZapisu())
     assert ramki["Napastnik"].iloc[0]["Klub_UID"] == 10
+
+
+# --- rozgrywki bez database_id (np. liga belgijska) ------------------------------------------------
+def test_rozgrywki_bez_database_id_dostaja_klucz_kraju():
+    belgia = [NS(uid=i, name=f"Club {i}", short_name=f"C{i}", nation_id=131) for i in range(1, 19)]
+    mecze = _kolejki(0, [k.uid for k in belgia], 34)
+    tabele = [_tabela(0, [k.uid for k in belgia])]
+    rozgrywki = [NS(id=0, database_id=None)]
+    z_terminarza = kandydaci_lig_z_terminarza(mecze, rozgrywki, belgia, DZIS)
+    z_tabel = kandydaci_lig(tabele, rozgrywki, belgia)
+    assert z_terminarza[1][0].database_id == -131 and z_tabel[1][0].database_id == -131
+    liga = ligi_klubow([], [], belgia, nazwy={-131: "Jupiler Pro League"}, kandydaci=z_terminarza)[1]
+    assert liga.etykieta == "Jupiler Pro League"
+    assert ligi_klubow([], [], belgia, kandydaci=z_terminarza)[1].etykieta == "Liga krajowa #131"
+    # uczenie z CSV nazywa takze lige bez database_id
+    csv = pd.DataFrame({"Klub": [k.name for k in belgia], "Liga": ["Jupiler Pro League (BEL 1)"] * 18})
+    assert mapa_nazw_z_csv(z_terminarza, belgia, [csv]) == {-131: "Jupiler Pro League"}
+
+
+def test_mapa_nazw_z_kluczem_ujemnym(tmp_path):
+    plik = tmp_path / "nazwy.csv"
+    zapisz_nazwy_rozgrywek({-131: "Jupiler Pro League", 32: "Serie A"}, plik)
+    assert wczytaj_nazwy_rozgrywek(plik) == {-131: "Jupiler Pro League", 32: "Serie A"}
