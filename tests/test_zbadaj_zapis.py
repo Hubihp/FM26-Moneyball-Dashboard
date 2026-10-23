@@ -46,3 +46,17 @@ def test_porownanie_lig_terminarz_vs_tabele():
     assert wynik["liczniki"] == {"zgodne": 1, "rozne": 1, "tylko_tabele": 1}
     assert wynik["przyklady"] == [{"klub": "Klub 2", "rodzaj": "rozne", "tabele": "Rozgrywki #9",
                                    "terminarz": "Serie A", "mecze": 30}]
+
+
+def test_lista_krajow_do_sprawdzenia():
+    def gracz(i, kraj, rep, klub="Klub"):
+        return NS(name=f"Gracz {i}", club_name=klub, age=20 + i, nation_id=kraj,
+                  reputation=NS(current=rep), transfer_value=1000 * i)
+    zawodnicy = ([gracz(i, 7, rep=i * 10) for i in range(1, 8)] + [gracz(10 + i, 3, rep=5) for i in range(2)]
+                 + [gracz(20, 9, rep=99, klub=None), gracz(21, None, rep=1)])
+    linie = zbadaj.lista_krajow(zawodnicy, {9: "Polska"}, {9: "liga"})
+    bez_nazwy = linie[1:linie.index("")]
+    assert [l.split(" | ")[0] for l in bez_nazwy] == ["7", "3"]           # wg liczby zawodnikow
+    assert bez_nazwy[0].startswith("7 | 7 | Gracz 7 (Klub, 27); Gracz 6")    # najbardziej znani pierwsi
+    assert bez_nazwy[0].count(";") == 4                                     # 5 przykladow
+    assert linie[-1] == "9 | Polska | liga | Gracz 20 (bez klubu, 40)"

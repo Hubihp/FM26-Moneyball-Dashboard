@@ -165,6 +165,72 @@ def opisz_klub(nazwa, kluby, tabele, liga_klubu, nacja, baza, mecze=(), data_gry
     return wynik
 
 
+def _znany(zawodnik):
+    """Klucz sortowania 'najbardziej znanych': reputacja biezaca, potem wartosc transferowa."""
+    reputacja = getattr(getattr(zawodnik, "reputation", None), "current", None) or 0
+    return (reputacja, getattr(zawodnik, "transfer_value", None) or 0)
+
+
+def lista_krajow(zawodnicy, nazwy, zrodla=None, przyklady=5, kontrolne=2):
+    """
+    Zawodnicy zapisu -> linie tekstu: najpierw kraje bez nazwy (wszystkie, wg liczby zawodnikow),
+    kazdy z kilkoma najbardziej znanymi zawodnikami do sprawdzenia narodowosci w internecie;
+    potem kontrolnie kraje z nazwa (zrodlo nazwy + 2 zawodnikow).
+    """
+    zrodla = zrodla or {}
+    po_kraju = {}
+    for z in zawodnicy:
+        if getattr(z, "nation_id", None) is not None:
+            po_kraju.setdefault(z.nation_id, []).append(z)
+
+    def opis(z):
+        return f"{z.name} ({getattr(z, 'club_name', None) or 'bez klubu'}, {getattr(z, 'age', None) or '?'})"
+
+    kolejnosc = sorted(po_kraju, key=lambda k: -len(po_kraju[k]))
+    linie = ["# KRAJE BEZ NAZWY: id | zawodnikow | najbardziej znani zawodnicy (klub, wiek)"]
+    for kraj in kolejnosc:
+        if nazwy.get(kraj):
+            continue
+        znani = sorted(po_kraju[kraj], key=_znany, reverse=True)[:przyklady]
+        linie.append(f"{kraj} | {len(po_kraju[kraj])} | " + "; ".join(opis(z) for z in znani))
+    linie.append("")
+    linie.append("# KRAJE Z NAZWA (kontrolnie): id | nazwa | zrodlo | zawodnicy")
+    for kraj in kolejnosc:
+        if not nazwy.get(kraj):
+            continue
+        znani = sorted(po_kraju[kraj], key=_znany, reverse=True)[:kontrolne]
+        linie.append(f"{kraj} | {nazwy[kraj]} | {zrodla.get(kraj, '?')} | " + "; ".join(opis(z) for z in znani))
+    return linie
+
+
+def tryb_kraje(sciezka, wyjscie=Path("kraje_bez_nazwy.txt")):
+    """Szybki tryb --kraje: tylko to, co potrzebne do nazw krajow (bez statystyk i kontuzji)."""
+    import fmsave
+    from fm_moneyball.zrodla.zapis_fm import kandydaci_lig_lacznie
+
+    print(f"Odczyt zapisu {sciezka.name} (tylko kraje)...")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with fmsave.open(sciezka) as zapis:
+            kluby = list(zapis.clubs())
+            kandydaci = kandydaci_lig_lacznie(zapis, kluby, zapis.info.game_date)
+            liga_klubu = ligi_klubow([], [], kluby, wczytaj_nazwy_rozgrywek(), kandydaci=kandydaci)
+            zawodnicy = list(zapis.players())
+    zrodla = {}
+    nazwy = {}
+    for zrodlo, mapa in (("kluby", kraje_z_kotwic(kluby, zawodnicy)),
+                         ("liga", nazwy_auto(podsumuj_ligi(liga_klubu, kluby,
+                                                           narodowosci=narodowosci_lig(zawodnicy, liga_klubu)))),
+                         ("ręcznie", wczytaj_nazwy_krajow())):
+        nazwy.update(mapa)
+        zrodla.update(dict.fromkeys(mapa, zrodlo))
+    linie = lista_krajow(zawodnicy, nazwy, zrodla)
+    wyjscie.write_text("\n".join(linie) + "\n", encoding="utf-8")
+    print("\n".join(linie[:15]))
+    print(f"...\nZapisano: {wyjscie.resolve()}  (wklej jego zawartosc do czatu)")
+    return linie
+
+
 def main():
     import fmsave
 
@@ -174,9 +240,14 @@ def main():
     parser.add_argument("--wyjscie", type=Path, default=Path("raport_zapisu.json"))
     parser.add_argument("--klub", action="append", default=[],
                         help="nazwa klubu do szczegolowej diagnozy przypisania ligi (mozna podac wiele razy)")
+    parser.add_argument("--kraje", action="store_true",
+                        help="tylko lista krajow bez nazwy z najbardziej znanymi zawodnikami (kraje_bez_nazwy.txt)")
     parser.add_argument("--zapisz-nazwy", action="store_true",
                         help=f"zapisz nazwy lig rozpoznane z CSV do {PLIK_NAZW_UZYTKOWNIKA}")
     args = parser.parse_args()
+    if args.kraje:
+        tryb_kraje(args.zapis)
+        return
 
     raport = {"fmsave": fmsave.__version__, "rozmiar_mb": round(args.zapis.stat().st_size / 2**20, 1)}
     czasy = raport["czasy_s"] = {}
