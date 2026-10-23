@@ -11,6 +11,8 @@ type Props = {
   zapytanie: ZapytanieRankingu;
   wersja: number;
   mojKlubUid: number | null | undefined;
+  ulubiona: boolean;
+  przelaczUlubiona: () => void;
   zamknij: () => void;
   otworz: (id: string) => void;
   dodajDoPorownania: (id: string) => void;
@@ -28,7 +30,8 @@ function Pole({ etykieta, wartosc }: { etykieta: string; wartosc: string }) {
 const UKRYTE = ['Regularność', 'Ważne mecze', 'Podatność na kontuzje', 'Determinacja', 'Profesjonalizm', 'Ambicja',
   'Adaptacja'];
 
-export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubUid, zamknij, otworz, dodajDoPorownania }: Props) {
+export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubUid, ulubiona, przelaczUlubiona, zamknij,
+  otworz, dodajDoPorownania }: Props) {
   const radar = useQuery({
     queryKey: ['radar', wersja, zapytanie.pozycja, id],
     queryFn: () => api.radar(zapytanie.pozycja, [id!]),
@@ -93,7 +96,12 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
             </>
           )}
 
-          <Button variant="light" onClick={() => dodajDoPorownania(id)}>Dodaj do porównania</Button>
+          <Group grow>
+            <Button variant="light" onClick={() => dodajDoPorownania(id)}>Dodaj do porównania</Button>
+            <Button variant={ulubiona ? 'filled' : 'light'} color="yellow" onClick={przelaczUlubiona} disabled={!wiersz}>
+              {ulubiona ? 'Usuń z listy życzeń' : 'Dodaj do listy życzeń'}
+            </Button>
+          </Group>
 
           <Title order={5}>Profil statystyk (percentyl w pozycji)</Title>
           {radar.isLoading && <Loader size="sm" />}

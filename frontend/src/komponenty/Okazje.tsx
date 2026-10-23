@@ -19,10 +19,12 @@ type Props = {
   wersja: number;
   mojKlubUid: number | null | undefined;
   naWybor: (id: string, wiersz?: Wiersz) => void;
+  ulubione: Set<string>;
+  przelaczUlubione: (wiersz: Wiersz) => void;
 };
 
 // Ranking zawodnikow z okazjami transferowymi (filtry z panelu bocznego dalej obowiazuja)
-export default function Okazje({ zapytanie, okazje, wersja, mojKlubUid, naWybor }: Props) {
+export default function Okazje({ zapytanie, okazje, wersja, mojKlubUid, naWybor, ulubione, przelaczUlubione }: Props) {
   const [wybrane, setWybrane] = useState<string[]>(okazje.filter((o) => o !== 'kontrakt ≤ 6 mies.'));
   const pelne: ZapytanieRankingu = {
     ...zapytanie,
@@ -56,7 +58,7 @@ export default function Okazje({ zapytanie, okazje, wersja, mojKlubUid, naWybor 
           <Text size="sm">Znaleziono: {ranking.data.liczba}</Text>
           <Box style={{ flex: 1, minHeight: 300 }}>
             <TabelaRankingu kolumny={ranking.data.kolumny} wiersze={ranking.data.wiersze} mojKlubUid={mojKlubUid}
-              naWybor={naWybor} />
+              naWybor={naWybor} ulubione={ulubione} przelaczUlubione={przelaczUlubione} />
           </Box>
         </>
       )}

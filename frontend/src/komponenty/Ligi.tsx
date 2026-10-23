@@ -1,8 +1,8 @@
-import { Alert, Autocomplete, Badge, Button, Group, Loader, NumberInput, Stack, Table, Text } from '@mantine/core';
+import { Alert, Autocomplete, Badge, Button, Group, Loader, NumberInput, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { api, type Liga, type Ligi as DaneLig } from '../api';
+import { api, type Kraj, type Liga, type Ligi as DaneLig } from '../api';
 
 function WierszLigi({ liga, dane }: { liga: Liga; dane: DaneLig }) {
   const klient = useQueryClient();
@@ -56,6 +56,75 @@ function WierszLigi({ liga, dane }: { liga: Liga; dane: DaneLig }) {
   );
 }
 
+function WierszKraju({ kraj }: { kraj: Kraj }) {
+  const klient = useQueryClient();
+  const [nazwa, setNazwa] = useState(kraj.reczna ? kraj.nazwa ?? '' : '');
+  const [zapisuje, setZapisuje] = useState(false);
+  const zapisz = async () => {
+    setZapisuje(true);
+    try {
+      await api.zmienKraj(kraj.id, nazwa.trim());
+      await klient.invalidateQueries({ queryKey: ['stan'] });
+    } finally {
+      setZapisuje(false);
+    }
+  };
+  return (
+    <Table.Tr>
+      <Table.Td>
+        <Text size="sm" fw={600}>{kraj.nazwa ?? `Kraj #${kraj.id}`}</Text>
+        <Text size="xs" c="dimmed">id {kraj.id}{kraj.nazwa && !kraj.reczna ? ' · nazwa z ligi' : ''}</Text>
+      </Table.Td>
+      <Table.Td>{kraj.liczba}</Table.Td>
+      <Table.Td><Text size="xs">{kraj.przyklady.join(', ')}</Text></Table.Td>
+      <Table.Td miw={200}>
+        <TextInput size="xs" placeholder={kraj.nazwa ?? 'Nazwa kraju'} value={nazwa} onChange={(e) => setNazwa(e.currentTarget.value)} />
+      </Table.Td>
+      <Table.Td>
+        <Button size="xs" onClick={zapisz} loading={zapisuje} disabled={nazwa.trim() === (kraj.reczna ? kraj.nazwa ?? '' : '')}>
+          Zapisz
+        </Button>
+      </Table.Td>
+    </Table.Tr>
+  );
+}
+
+// Narodowosci: zapis nie zawiera nazw krajow - czesc wynika z nazwanych lig, reszte wpisuje uzytkownik
+function Kraje({ wersja }: { wersja: number }) {
+  const kraje = useQuery({ queryKey: ['kraje', wersja], queryFn: api.kraje });
+  const [wszystkie, setWszystkie] = useState(false);
+  if (!kraje.data || kraje.data.kraje.length === 0) return null;
+  const bezNazwy = kraje.data.kraje.filter((k) => !k.nazwa);
+  const widoczne = wszystkie ? kraje.data.kraje : bezNazwy.slice(0, 30);
+  return (
+    <Stack mt="xl">
+      <Group gap="xs">
+        <Title order={4}>Narodowości</Title>
+        <Badge color={bezNazwy.length ? 'yellow' : 'teal'} variant="light">bez nazwy: {bezNazwy.length}</Badge>
+        <Badge color="gray" variant="light">wszystkich: {kraje.data.kraje.length}</Badge>
+      </Group>
+      <Text size="sm" c="dimmed">
+        Zapis nie zawiera nazw krajów. Kraj nazwanej ligi dostaje nazwę automatycznie (np. kluby Ekstraklasy → Polska),
+        resztę rozpoznasz po przykładowych zawodnikach. Pusta nazwa przywraca nazwę automatyczną.
+      </Text>
+      <Table striped highlightOnHover>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Kraj</Table.Th><Table.Th>Zawodników</Table.Th><Table.Th>Najdrożsi zawodnicy</Table.Th>
+            <Table.Th>Nazwa</Table.Th><Table.Th />
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {widoczne.map((k) => <WierszKraju key={`${k.id}-${k.nazwa ?? ''}`} kraj={k} />)}
+        </Table.Tbody>
+      </Table>
+      <Button variant="subtle" size="xs" onClick={() => setWszystkie(!wszystkie)}>
+        {wszystkie ? 'Pokaż tylko kraje bez nazwy' : 'Pokaż wszystkie kraje (także z nazwą)'}
+      </Button>
+    </Stack>
+  );
+}
+
 // Edycja nazw i mnoznikow lig wykrytych w zapisie (zapis nie zawiera nazw rozgrywek)
 export default function Ligi({ wersja }: { wersja: number }) {
   const ligi = useQuery({ queryKey: ['ligi', wersja], queryFn: api.ligi });
@@ -91,6 +160,7 @@ export default function Ligi({ wersja }: { wersja: number }) {
           ))}
         </Table.Tbody>
       </Table>
+      <Kraje wersja={wersja} />
     </Stack>
   );
 }

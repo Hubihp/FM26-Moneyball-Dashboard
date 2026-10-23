@@ -17,6 +17,7 @@ import {
 } from '@mantine/core';
 
 import type { Filtry, MetaPozycji } from '../api';
+import Boisko from './Boisko';
 import { eur } from '../format';
 
 export type Ustawienia = { k_baza: number; ignoruj_mnoznik: boolean; pokaz_ukryte: boolean };
@@ -38,7 +39,7 @@ type Props = {
 };
 
 export const PUSTE_FILTRY: Filtry = {
-  ligi: [], nogi: [], wiek: null, cena: null, bez_ceny: true, szukaj: '', kontrakt_mies: null, min_minut: 0,
+  ligi: [], nogi: [], kraje: [], wiek: null, cena: null, bez_ceny: true, szukaj: '', kontrakt_mies: null, min_minut: 0,
   bez_mojego_klubu: false, okazje: [], max_ryzyko: null, min_oplacalnosc: null,
 };
 
@@ -56,13 +57,7 @@ export default function PanelBoczny(p: Props) {
   return (
     <ScrollArea h="100%" type="auto" offsetScrollbars>
       <Stack gap="sm" pb="xl">
-        <Select
-          label="Pozycja"
-          value={p.pozycja}
-          onChange={(v) => v && p.setPozycja(v)}
-          allowDeselect={false}
-          data={p.pozycje.map((poz) => ({ value: poz, label: `${poz} (${p.liczby[poz] ?? 0})` }))}
-        />
+        <Boisko pozycja={p.pozycja} liczby={p.liczby} naWybor={p.setPozycja} />
 
         <TextInput label="Szukaj (piłkarz / klub)" value={filtry.szukaj} onChange={(e) => zmien('szukaj', e.currentTarget.value)} />
 
@@ -114,6 +109,11 @@ export default function PanelBoczny(p: Props) {
             <Slider min={0} max={100} step={5} label={null} value={filtry.max_ryzyko ?? 100}
               onChange={(v) => zmien('max_ryzyko', v >= 100 ? null : v)} />
           </div>
+        )}
+
+        {meta?.kraje && meta.kraje.length > 0 && (
+          <MultiSelect label="Narodowość" placeholder="Dowolna" searchable clearable data={meta.kraje} value={filtry.kraje}
+            onChange={(v) => zmien('kraje', v)} />
         )}
 
         <MultiSelect label="Lepsza noga" placeholder="Dowolna" clearable data={meta?.nogi ?? []} value={filtry.nogi}

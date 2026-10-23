@@ -54,11 +54,13 @@ export type MetaPozycji = {
   ma_ukryte: boolean;
   ma_ryzyko: boolean;
   okazje: string[];
+  kraje: string[];
 };
 
 export type Filtry = {
   ligi: string[];
   nogi: string[];
+  kraje: string[];
   wiek: [number, number] | null;
   cena: [number | null, number | null] | null;
   bez_ceny: boolean;
@@ -124,6 +126,10 @@ export type PozycjaKadry = {
 };
 export type Kadra = { klub: string | null; pozycje: PozycjaKadry[] };
 
+export type Kraj = { id: number; nazwa: string | null; reczna: boolean; liczba: number; przyklady: string[] };
+
+export type ListaZyczen = { kolumny: Kolumna[]; wiersze: Wiersz[]; nieznalezieni: string[] };
+
 async function zadanie<T>(url: string, init?: RequestInit): Promise<T> {
   const odp = await fetch(url, init);
   if (!odp.ok) {
@@ -162,6 +168,19 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nazwa, mnoznik }),
     }),
+  kraje: () => zadanie<{ kraje: Kraj[] }>('/api/kraje'),
+  zmienKraj: (id: number, nazwa: string) =>
+    zadanie<{ kraje: Kraj[] }>(`/api/kraje/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nazwa }),
+    }),
+  listaZyczen: (body: {
+    wpisy: { klucz: string; pozycja: string; pilkarz: string }[];
+    wagi: Record<string, Record<string, number>>;
+    ignoruj_mnoznik: boolean;
+    k_baza: number;
+  }) => post<ListaZyczen>('/api/lista-zyczen', body),
   mojaKadra: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number }) =>
     post<Kadra>('/api/moja-kadra', body),
   przeladuj: () => post<Stan>('/api/przeladuj', {}),

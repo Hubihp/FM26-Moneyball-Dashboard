@@ -57,3 +57,112 @@ body {
   position: relative;
   padding-left: 4px;
 }
+
+/* Boisko do wyboru pozycji */
+.boisko {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 0.74;
+  border-radius: 8px;
+  border: 1px solid #424242;
+  background: repeating-linear-gradient(180deg, #1d2a22 0 12.5%, #203027 12.5% 25%);
+  overflow: hidden;
+}
+
+.boisko-linia-srodkowa {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.boisko-kolo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26%;
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.boisko-pole {
+  position: absolute;
+  left: 25%;
+  width: 50%;
+  height: 12%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.boisko-pole-gora {
+  top: -1px;
+}
+
+.boisko-pole-dol {
+  bottom: -1px;
+}
+
+.boisko-miejsce {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-width: 38px;
+  height: 38px;
+  padding: 0 4px;
+  border-radius: 19px;
+  border: 1px solid #5c5c5c;
+  background: #2e2e2e;
+  color: #c9c9c9;
+  font: 700 11px/1 Inter, system-ui, sans-serif;
+  cursor: pointer;
+  transition: background 120ms, box-shadow 120ms, transform 120ms;
+}
+
+.boisko-miejsce:hover:not(:disabled) {
+  background: #3b3b3b;
+  transform: translate(-50%, -50%) scale(1.08);
+}
+
+.boisko-miejsce.wybrane {
+  background: #12b886;
+  border-color: #63e6be;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(18, 184, 134, 0.35), 0 0 14px rgba(18, 184, 134, 0.6);
+}
+
+.boisko-miejsce.wybrane:hover {
+  background: #12b886;
+}
+
+.boisko-miejsce.puste {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.boisko-miejsce:focus-visible {
+  outline: 2px solid #63e6be;
+  outline-offset: 2px;
+}
+
+/* Gwiazdka listy zyczen */
+.gwiazdka {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #696969;
+  cursor: pointer;
+}
+
+.gwiazdka:hover {
+  color: #fcc419;
+}
+
+.gwiazdka.aktywna {
+  color: #fab005;
+}

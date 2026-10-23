@@ -20,6 +20,8 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api, type Filtry, type Stan, type Wiersz, type ZapytanieRankingu } from './api';
+import ListaZyczen from './komponenty/ListaZyczen';
+import { kluczZawodnika, usePamiec, type WpisListy } from './pamiec';
 import KartaZawodnika from './komponenty/KartaZawodnika';
 import Ligi from './komponenty/Ligi';
 import MojaKadra from './komponenty/MojaKadra';
@@ -30,7 +32,8 @@ import Porownanie from './komponenty/Porownanie';
 import TabelaRankingu from './komponenty/TabelaRankingu';
 import Wykresy from './komponenty/Wykresy';
 
-const POZYCJE = ['Bramkarz', 'Środkowy Obrońca', 'Boczny Obrońca', 'Defensywny Pomocnik', 'Środkowy Pomocnik', 'Skrzydłowy', 'Napastnik'];
+const POZYCJE = ['Bramkarz', 'Środkowy Obrońca', 'Boczny Obrońca', 'Wahadłowy', 'Defensywny Pomocnik', 'Środkowy Pomocnik',
+  'Ofensywny Pomocnik', 'Skrzydłowy', 'Napastnik'];
 
 // Zdarzenia serwera (SSE): nowa wersja danych albo zmiana statusu wczytywania -> odswiezenie stanu
 function useZdarzeniaSerwera() {
@@ -73,7 +76,12 @@ export default function App() {
   useZdarzeniaSerwera();
   const klient = useQueryClient();
   const [panelZrodla, setPanelZrodla] = useState(false);
-  const [pozycja, setPozycja] = useLocalStorage({ key: 'fm-pozycja', defaultValue: 'Napastnik' });
+  // Pozycja w zwyklym stanie zapamietywanym w localStorage (bez synchronizacji miedzy kartami
+  // przegladarki) - zmienia sie tylko po kliknieciu uzytkownika
+  const [pozycjaZapisana, setPozycja] = usePamiec('fm-pozycja', 'Napastnik');
+  const pozycja = POZYCJE.includes(pozycjaZapisana) ? pozycjaZapisana : 'Napastnik';
+  const [lista, setLista] = usePamiec<WpisListy[]>('fm-lista-zyczen', []);
+  const ulubione = useMemo(() => new Set(lista.map((w) => w.klucz)), [lista]);
   const [ustawienia, setUstawienia] = useLocalStorage<Ustawienia>({
     key: 'fm-ustawienia', defaultValue: { k_baza: 5, ignoruj_mnoznik: false, pokaz_ukryte: false },
   });
@@ -140,6 +148,17 @@ export default function App() {
     setPozycja(poz);
     setFiltryPozycji({ ...filtryPozycji, [poz]: { ...(filtryPozycji[poz] ?? PUSTE_FILTRY), bez_mojego_klubu: true } });
     setZakladka('ranking');
+  };
+  // Gwiazdka: dodaje zawodnika z pozycja, w ktorej jest teraz ogladany, albo usuwa go z listy
+  const przelaczUlubione = (w: Wiersz, poz: string = pozycja) => {
+    const klucz = kluczZawodnika(w);
+    if (ulubione.has(klucz)) setLista(lista.filter((x) => x.klucz !== klucz));
+    else {
+      setLista([...lista, {
+        klucz, pozycja: poz, pilkarz: String(w['Piłkarz'] ?? ''), klub: String(w['Klub'] ?? ''),
+        dodano: new Date().toISOString(),
+      }]);
+    }
   };
   const zmienMojKlub = async (uid: string | null) => {
     if (!uid) return;
@@ -230,6 +249,7 @@ export default function App() {
                 Ranking {ranking.data ? `(${ranking.data.liczba} z ${ranking.data.liczba_wszystkich})` : ''}
               </Tabs.Tab>
               <Tabs.Tab value="okazje">Okazje</Tabs.Tab>
+              <Tabs.Tab value="lista">Lista życzeń {lista.length ? `(${lista.length})` : ''}</Tabs.Tab>
               {mojKlubUid !== null && mojKlubUid !== undefined && <Tabs.Tab value="kadra">Moja kadra</Tabs.Tab>}
               <Tabs.Tab value="porownanie">Porównanie {wybraniPozycji.length ? `(${wybraniPozycji.length})` : ''}</Tabs.Tab>
               <Tabs.Tab value="wykresy">Wykresy</Tabs.Tab>
@@ -254,6 +274,8 @@ export default function App() {
                     mojKlubUid={mojKlubUid}
                     naWybor={otworzKarte}
                     naZaznaczenie={(ids) => setWybrani({ ...wybrani, [pozycja]: ids.slice(0, 4) })}
+                    ulubione={ulubione}
+                    przelaczUlubione={przelaczUlubione}
                   />
                   </Box>
                 )}
@@ -262,7 +284,17 @@ export default function App() {
             <Tabs.Panel value="okazje" style={{ flex: 1, minHeight: 0 }}>
               {zakladka === 'okazje' && meta.data && (
                 <Okazje zapytanie={zapytanieOpoznione} okazje={meta.data.okazje} wersja={wersja} mojKlubUid={mojKlubUid}
-                  naWybor={otworzKarte} />
+                  naWybor={otworzKarte} ulubione={ulubione} przelaczUlubione={przelaczUlubione} />
+              )}
+            </Tabs.Panel>
+            <Tabs.Panel value="lista" style={{ flex: 1, minHeight: 0 }}>
+              {zakladka === 'lista' && (
+                <ListaZyczen lista={lista} setLista={setLista} wersja={wersja} wagi={wagiWlasne} ustawienia={ustawienia}
+                  mojKlubUid={mojKlubUid}
+                  naWybor={(poz, id, wiersz) => {
+                    setPozycja(poz);
+                    otworzKarte(id, wiersz);
+                  }} />
               )}
             </Tabs.Panel>
             <Tabs.Panel value="kadra" style={{ overflow: 'auto' }}>
@@ -297,11 +329,13 @@ export default function App() {
         zapytanie={zapytanie}
         wersja={wersja}
         mojKlubUid={mojKlubUid}
+        ulubiona={!!wierszKarty && ulubione.has(kluczZawodnika(wierszKarty))}
+        przelaczUlubiona={() => wierszKarty && przelaczUlubione(wierszKarty)}
         zamknij={() => setKarta(null)}
         otworz={setKarta}
         dodajDoPorownania={(id) => {
-          const lista = wybraniPozycji.includes(id) ? wybraniPozycji : [...wybraniPozycji, id].slice(-4);
-          setWybrani({ ...wybrani, [pozycja]: lista });
+          const nowi = wybraniPozycji.includes(id) ? wybraniPozycji : [...wybraniPozycji, id].slice(-4);
+          setWybrani({ ...wybrani, [pozycja]: nowi });
         }}
       />
     </AppShell>
