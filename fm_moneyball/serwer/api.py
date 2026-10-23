@@ -5,6 +5,8 @@ Uruchomienie: `python -m fm_moneyball` (patrz fm_moneyball/__main__.py).
 """
 import asyncio
 import json
+import threading
+from collections import OrderedDict
 from datetime import date
 from pathlib import Path
 
@@ -16,7 +18,7 @@ from pydantic import BaseModel, Field
 import pandas as pd
 
 from fm_moneyball import analiza
-from fm_moneyball.kraje import podsumuj_kraje, wczytaj_nazwy_krajow, zapisz_nazwe_kraju
+from fm_moneyball.kraje import podsumuj_kraje, zapisz_nazwe_kraju
 from fm_moneyball.ligi import wszystkie_mnozniki, zapisz_mnoznik
 from fm_moneyball.stale import MNOZNIK_NIEZNANEJ_LIGI, MNOZNIKI_LIG, POZYCJE
 from fm_moneyball.zrodla import folder as folder_zapisow
@@ -24,6 +26,17 @@ from fm_moneyball.zrodla.csv_fm import wczytaj_csv
 from fm_moneyball.zrodla.zapis_fm import KURS_DOMYSLNY, zapisz_nazwy_rozgrywek, zbuduj_mape_nazw_lig
 
 KATALOG_STATIC = Path(__file__).resolve().parent / "static"
+ILE_POLICZONYCH = 24        # tyle policzonych pul (pozycja x ustawienia) trzymamy w pamieci
+
+
+class ZasobyZCache(StaticFiles):
+    """Pliki zbudowanego frontendu (nazwy z hashem) - przegladarka moze je trzymac na stale."""
+
+    async def get_response(self, path, scope):
+        odpowiedz = await super().get_response(path, scope)
+        if odpowiedz.status_code == 200:
+            odpowiedz.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return odpowiedz
 
 
 # --- modele zapytan -----------------------------------------------------------------------------
@@ -91,6 +104,8 @@ class FiltryModel(BaseModel):
     okazje: list[str] = Field(default_factory=list)
     max_ryzyko: int | None = None
     min_oplacalnosc: float | None = None
+    kandydaci: bool = False
+    min_score_kandydata: float = 60
 
 
 class RankingModel(BaseModel):
@@ -105,6 +120,7 @@ class RankingModel(BaseModel):
 class RadarModel(BaseModel):
     pozycja: str
     ids: list[str]
+    kandydaci: bool = False     # szukaj zawodnikow takze poza pula (kandydaci do przekwalifikowania)
 
 
 class PodobniModel(RankingModel):
@@ -128,15 +144,33 @@ def utworz_aplikacje(stan):
         tekst = stan.migawka()["meta"].get("data_gry")
         return date.fromisoformat(tekst) if tekst else None
 
-    def policz(pozycja, wagi, ignoruj_mnoznik, k_baza):
+    # Policzone pule (SCORE + kolumny Moneyball) dla ostatnich ustawien: zmiana samych filtrow,
+    # sortowania czy karta zawodnika nie przeliczaja modelu. Klucz zawiera wersje danych.
+    policzone = OrderedDict()
+    blokada_policzonych = threading.Lock()
+
+    def policz(pozycja, wagi, ignoruj_mnoznik, k_baza, kandydaci=False):
         df = pula(pozycja)
         wagi = wagi if wagi is not None else analiza.wagi_domyslne(pozycja, df)
         wagi = {k: v for k, v in wagi.items() if k in df.columns}
-        policzona, pominiete = analiza.policz_wynik(df, wagi, ignoruj_mnoznik, k_baza)
-        return analiza.wzbogac(policzona, data_gry()), pominiete
+        klucz = (stan.wersja, pozycja, json.dumps(wagi, sort_keys=True), ignoruj_mnoznik, k_baza, kandydaci)
+        with blokada_policzonych:
+            if klucz in policzone:
+                policzone.move_to_end(klucz)
+                return policzone[klucz]
+        odniesienie = None
+        if kandydaci:
+            df, odniesienie = analiza.dolacz_kandydatow(df, stan.wszyscy_zawodnicy(), pozycja)
+        policzona, pominiete = analiza.policz_wynik(df, wagi, ignoruj_mnoznik, k_baza, odniesienie)
+        wynik = (analiza.wzbogac(policzona, data_gry()), pominiete)
+        with blokada_policzonych:
+            policzone[klucz] = wynik
+            while len(policzone) > ILE_POLICZONYCH:
+                policzone.popitem(last=False)
+        return wynik
 
     def wynik_i_filtr(z: RankingModel):
-        policzona, pominiete = policz(z.pozycja, z.wagi, z.ignoruj_mnoznik, z.k_baza)
+        policzona, pominiete = policz(z.pozycja, z.wagi, z.ignoruj_mnoznik, z.k_baza, z.filtry.kandydaci)
         filtry = analiza.Filtry(**z.filtry.model_dump())
         widoczni = analiza.filtruj(policzona, filtry, data_gry(), stan.migawka()["meta"].get("moj_klub_uid"))
         return policzona, analiza.oznacz_pareto(widoczni), pominiete
@@ -236,8 +270,7 @@ def utworz_aplikacje(stan):
 
     @app.get("/api/kraje")
     def kraje():
-        return {"kraje": podsumuj_kraje(stan.wszyscy_zawodnicy(), stan.nazwy_krajow,
-                                        set(wczytaj_nazwy_krajow(stan.plik_krajow)))}
+        return {"kraje": podsumuj_kraje(stan.wszyscy_zawodnicy(), stan.nazwy_krajow, stan.zrodla_krajow)}
 
     @app.put("/api/kraje/{kraj_id}")
     def zmien_kraj(kraj_id: int, z: KrajModel):
@@ -313,7 +346,8 @@ def utworz_aplikacje(stan):
             "pozycja": pozycja, "liczba": len(df),
             "ligi": analiza.kolejnosc_lig(df['Liga'].dropna().unique().tolist()) if 'Liga' in df.columns else [],
             "nogi": sorted(df['Preferowana noga'].dropna().unique().tolist()) if 'Preferowana noga' in df.columns else [],
-            "kraje": df['Kraj'].dropna().value_counts().index.tolist() if 'Kraj' in df.columns else [],
+            "kraje": [{"kraj": k, "liczba": int(n)} for k, n in df['Kraj'].dropna().value_counts().items()]
+                      if 'Kraj' in df.columns else [],
             "wiek": [int(df['Wiek'].min()), int(df['Wiek'].max())] if 'Wiek' in df.columns else None,
             "cena_max": float(ceny.max()) if not ceny.empty else None,
             "minuty_max": int(df['Minuty'].max()) if 'Minuty' in df.columns and df['Minuty'].notna().any() else None,
@@ -329,6 +363,7 @@ def utworz_aplikacje(stan):
         policzona, widoczni, pominiete = wynik_i_filtr(z)
         kolumny = analiza.kolumny_tabeli(z.pozycja, policzona, z.pokaz_ukryte)
         return {
+            "pozycja": z.pozycja,
             "kolumny": kolumny,
             "wiersze": analiza.do_json(widoczni, analiza.pola_wiersza(z.pozycja, policzona, z.pokaz_ukryte)),
             "liczba": len(widoczni), "liczba_wszystkich": len(policzona),
@@ -338,7 +373,7 @@ def utworz_aplikacje(stan):
 
     @app.post("/api/radar")
     def radar(z: RadarModel):
-        return analiza.radar(z.pozycja, pula(z.pozycja), z.ids)
+        return analiza.radar(z.pozycja, pula(z.pozycja), z.ids, stan.wszyscy_zawodnicy() if z.kandydaci else None)
 
     @app.post("/api/podobni")
     def podobni(z: PodobniModel):
@@ -349,13 +384,15 @@ def utworz_aplikacje(stan):
 
     # --- frontend ------------------------------------------------------------------------------
     if (KATALOG_STATIC / "index.html").is_file():
-        app.mount("/assets", StaticFiles(directory=KATALOG_STATIC / "assets"), name="assets")
+        app.mount("/assets", ZasobyZCache(directory=KATALOG_STATIC / "assets"), name="assets")
 
         @app.get("/{sciezka:path}", include_in_schema=False)
         def frontend(sciezka: str):
             plik = KATALOG_STATIC / sciezka
             if sciezka and plik.is_file() and KATALOG_STATIC in plik.resolve().parents:
                 return FileResponse(plik)
-            return FileResponse(KATALOG_STATIC / "index.html")
+            # bez cache: po aktualizacji aplikacji przegladarka musi pobrac nowy interfejs
+            # (pliki w assets/ maja hash w nazwie, wiec moga byc trzymane dlugo)
+            return FileResponse(KATALOG_STATIC / "index.html", headers={"Cache-Control": "no-cache"})
 
     return app

@@ -227,7 +227,8 @@ def test_nowe_pozycje_w_demo(klient):
 
 def test_narodowosc_w_tabeli_i_filtr(klient):
     meta = klient.get("/api/pozycja/Napastnik").json()
-    assert "Polska" in meta["kraje"]
+    kraje = {k["kraj"]: k["liczba"] for k in meta["kraje"]}
+    assert kraje["Polska"] > 0 and sum(kraje.values()) == 150
     wynik = klient.post("/api/ranking", json={"pozycja": "Napastnik", "filtry": {"kraje": ["Polska"]}}).json()
     assert 0 < wynik["liczba"] < 150 and all(w["Kraj"] == "Polska" for w in wynik["wiersze"])
     assert {"naglowek": "Narodowość", "pole": "Kraj"}.items() <= next(
@@ -276,3 +277,51 @@ def test_lista_zyczen_po_uid_i_kraje(tmp_path, monkeypatch):
         kraje = {kr["id"]: kr["nazwa"] for kr in k.get("/api/kraje").json()["kraje"]}
         assert kraje[5] == "Ghana"           # reczna nazwa wygrywa z automatyczna
     assert "Ghana" in (tmp_path / "kraje.csv").read_text(encoding="utf-8")
+
+
+def test_kandydaci_do_przekwalifikowania(klient):
+    zwykly = klient.post("/api/ranking", json={"pozycja": "Boczny Obrońca"}).json()
+    z_kandydatami = klient.post("/api/ranking", json={
+        "pozycja": "Boczny Obrońca", "filtry": {"kandydaci": True, "min_score_kandydata": 55}}).json()
+    assert z_kandydatami["pozycja"] == "Boczny Obrońca"
+    nominalni = {w["ID"]: w["SCORE"] for w in z_kandydatami["wiersze"] if not w["Kandydat"]}
+    kandydaci = [w for w in z_kandydatami["wiersze"] if w["Kandydat"]]
+    # kandydaci nie zmieniaja wyniku zawodnikow pozycji
+    assert nominalni == pytest.approx({w["ID"]: w["SCORE"] for w in zwykly["wiersze"]})
+    assert kandydaci and all(w["SCORE"] >= 55 for w in kandydaci)
+    assert {w["Kandydat z pozycji"] for w in kandydaci} <= {"Środkowy Obrońca", "Wahadłowy", "Defensywny Pomocnik",
+                                                            "Środkowy Pomocnik", "Ofensywny Pomocnik", "Skrzydłowy",
+                                                            "Napastnik"}           # bez bramkarzy
+    assert "Kandydat z pozycji" in [k["naglowek"] for k in z_kandydatami["kolumny"]]
+    assert all(0 <= w["Percentyl"] <= 100 for w in kandydaci)
+    # radar i podobni dla kandydata
+    kid = kandydaci[0]["ID"]
+    radar = klient.post("/api/radar", json={"pozycja": "Boczny Obrońca", "ids": [kid], "kandydaci": True}).json()
+    assert radar["seria"][0]["id"] == kid
+    podobni = klient.post("/api/podobni", json={"pozycja": "Boczny Obrońca", "id": kid, "n": 3,
+                                                "filtry": {"kandydaci": True}}).json()["wiersze"]
+    assert len(podobni) == 3
+    # bramkarz nie ma kandydatow z pola
+    gk = klient.post("/api/ranking", json={"pozycja": "Bramkarz", "filtry": {"kandydaci": True,
+                                                                             "min_score_kandydata": 0}}).json()
+    assert not any(w["Kandydat"] for w in gk["wiersze"])
+
+
+def test_index_bez_cache(klient):
+    from fm_moneyball.serwer.api import KATALOG_STATIC
+    if not (KATALOG_STATIC / "index.html").is_file():
+        pytest.skip("frontend nie jest zbudowany")
+    assert klient.get("/").headers["cache-control"] == "no-cache"
+    zasob = next((KATALOG_STATIC / "assets").glob("*.js")).name
+    assert "immutable" in klient.get(f"/assets/{zasob}").headers["cache-control"]
+
+
+def test_migracja_ustawien_naturalne_pozycje(tmp_path):
+    import json
+    plik = tmp_path / "ustawienia.json"
+    plik.write_text(json.dumps({"typ": "demo", "opcje": {"wszystkie_naturalne_pozycje": False}}), encoding="utf-8")
+    stan = _stan(tmp_path)
+    assert stan.konfig.opcje["wszystkie_naturalne_pozycje"] is True and stan.konfig.wersja_ustawien == 2
+    # po migracji wybor uzytkownika jest szanowany
+    stan.ustaw_zrodlo("demo", opcje={"wszystkie_naturalne_pozycje": False}, w_tle=False)
+    assert _stan(tmp_path).konfig.opcje["wszystkie_naturalne_pozycje"] is False

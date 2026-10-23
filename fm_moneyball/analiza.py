@@ -9,9 +9,9 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-from fm_moneyball.model import macierz_stylu, oblicz_score, percentyl_w_puli
+from fm_moneyball.model import maska_odniesienia, macierz_stylu, oblicz_score, percentyl_w_puli
 from fm_moneyball.stale import (KOLUMNY_PER_POZYCJA, KOLUMNY_UKRYTE, MAPOWANIE_NAZW_LIG, MERYTORYKA_WAG,
-                                NEUTRALNE, NIE_STATYSTYKI, NIZSZE_LEPSZE)
+                                NEUTRALNE, NIE_STATYSTYKI, NIZSZE_LEPSZE, kolumna_oceny)
 
 
 @dataclass
@@ -29,11 +29,14 @@ class Filtry:
     okazje: list = field(default_factory=list)   # zawodnik musi miec ktorykolwiek z tych znacznikow
     max_ryzyko: int | None = None
     min_oplacalnosc: float | None = None
+    kandydaci: bool = False                      # pokaz kandydatow do przekwalifikowania z innych pozycji
+    min_score_kandydata: float = 60.0
 
 
 # --- Moneyball: koszt, oplacalnosc, okazje, ryzyko ----------------------------------------------
 OKAZJE = ("kontrakt ≤ 6 mies.", "kontrakt ≤ 12 mies.", "wolny agent", "koniec wypożyczenia", "talent bez minut")
 POZIOM_ODNIESIENIA = 50.0   # SCORE przecietnego zawodnika pozycji
+MIN_KOSZT_OPLACALNOSCI = 10_000   # EUR; ponizej opłacalność nie jest liczona
 DUZY_KLUB = 7000            # reputacja klubu (1-10000), od ktorej klub uznajemy za duzy
 
 
@@ -56,7 +59,8 @@ def wzbogac(pula, data_gry=None, horyzont_lat=3):
     pula['Koszt'] = wartosc + placa * horyzont_lat
     with np.errstate(divide='ignore', invalid='ignore'):
         oplacalnosc = (pula['SCORE'] - POZIOM_ODNIESIENIA).clip(lower=0) / (pula['Koszt'] / 1e6)
-    pula['Opłacalność'] = oplacalnosc.where(pula['Koszt'] > 0)
+    # przy koszcie bliskim zera iloraz traci sens (wychodzi ogromny albo nieskonczony)
+    pula['Opłacalność'] = oplacalnosc.where(pula['Koszt'] >= MIN_KOSZT_OPLACALNOSCI)
 
     wolny = pula['Wolny_agent'].fillna(False).astype(bool) if 'Wolny_agent' in pula.columns else pd.Series(False, index=pula.index)
     znaczniki = {
@@ -102,14 +106,56 @@ def wagi_domyslne(pozycja, df):
     return {c: w for c, w in MERYTORYKA_WAG.get(pozycja, {}).items() if c in df.columns}
 
 
-def policz_wynik(df, wagi, ignoruj_mnoznik=False, k_baza=5):
-    """Pula -> kopia z kolumnami SCORE, Percentyl, Wiarygodnosc; plus lista pominietych cech."""
+def policz_wynik(df, wagi, ignoruj_mnoznik=False, k_baza=5, odniesienie=None):
+    """
+    Pula -> kopia z kolumnami SCORE, Percentyl, Wiarygodnosc; plus lista pominietych cech.
+    `odniesienie` (maska) - zawodnicy pozycji; pozostali (kandydaci z innych pozycji) sa oceniani
+    na ich skali, a ich percentyl to miejsce wsrod zawodnikow pozycji.
+    """
     pula = df.copy()
-    score, wiarygodnosc, pominiete = oblicz_score(pula, wagi, ignoruj_mnoznik, k_baza)
+    score, wiarygodnosc, pominiete = oblicz_score(pula, wagi, ignoruj_mnoznik, k_baza, odniesienie)
     pula['SCORE'] = score
-    pula['Percentyl'] = score.rank(pct=True) * 100
+    if odniesienie is None:
+        pula['Percentyl'] = score.rank(pct=True) * 100
+    else:
+        ref = maska_odniesienia(pula, odniesienie)
+        nominalni = np.sort(score[ref].dropna().to_numpy())
+        percentyl = pd.Series(np.nan, index=pula.index)
+        percentyl[ref] = score[ref].rank(pct=True) * 100
+        if len(nominalni):
+            inni = score[~ref]
+            mniej = np.searchsorted(nominalni, inni.to_numpy(), side='left')
+            rowne = np.searchsorted(nominalni, inni.to_numpy(), side='right') - mniej
+            percentyl[~ref] = np.where(inni.notna(), (mniej + 0.5 * rowne) / len(nominalni) * 100, np.nan)
+        pula['Percentyl'] = percentyl
     pula['Wiarygodność'] = wiarygodnosc
     return pula, pominiete
+
+
+def dolacz_kandydatow(pula, wszyscy, pozycja):
+    """
+    Pula pozycji + zawodnicy nominalnie z innych pozycji (kandydaci do przekwalifikowania).
+    Bramkarze sa kandydatami tylko na bramkarza i odwrotnie. Zwraca (ramka, maska nominalnych):
+    maske podaje sie do policz_wynik, zeby kandydaci nie zmieniali skali wyniku pozycji.
+    Kolumny: 'Kandydat', 'Kandydat z pozycji' (pozycja glowna), 'Ocena na pozycji' (1-20, z zapisu).
+    """
+    nominalni = pula.assign(Kandydat=False)
+    if wszyscy is None or wszyscy.empty:
+        ramka = nominalni
+    else:
+        klucz = 'UID' if 'UID' in pula.columns and 'UID' in wszyscy.columns else 'ID'
+        inni = wszyscy[~wszyscy[klucz].isin(pula[klucz])]
+        glowna = (inni['Pula_główna'] if 'Pula_główna' in inni.columns
+                  else pd.Series(None, index=inni.index, dtype=object)).astype(object)
+        if 'Pula' in inni.columns:
+            glowna = glowna.where(glowna.notna(), inni['Pula'].astype(object))
+        bramkarz = glowna == 'Bramkarz'
+        wybrani = bramkarz if pozycja == 'Bramkarz' else ~bramkarz
+        inni = inni[wybrani].assign(Kandydat=True, **{'Kandydat z pozycji': glowna[wybrani]})
+        ramka = pd.concat([nominalni, inni], ignore_index=True)
+    if kolumna_oceny(pozycja) in ramka.columns:
+        ramka['Ocena na pozycji'] = ramka[kolumna_oceny(pozycja)]
+    return ramka, ~ramka['Kandydat'].astype(bool)
 
 
 def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
@@ -126,6 +172,9 @@ def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
         wynik = wynik[wynik['Wartość_Numeryczna'].notna()]
     if filtry.ligi and 'Liga' in wynik.columns:
         wynik = wynik[wynik['Liga'].isin(filtry.ligi)]
+    if 'Kandydat' in wynik.columns:
+        kandydat = wynik['Kandydat'].fillna(False).astype(bool)
+        wynik = wynik[~kandydat | (wynik['SCORE'] >= filtry.min_score_kandydata)]
     if filtry.kraje and 'Kraj' in wynik.columns:
         wynik = wynik[wynik['Kraj'].isin(filtry.kraje)]
     if filtry.nogi and 'Preferowana noga' in wynik.columns:
@@ -160,15 +209,17 @@ def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
 # --- kolumny tabeli -----------------------------------------------------------------------------
 # Format wartosci dla interfejsu: score, pasek (0-100), int, dec1, dec2, eur, eur_tyg, data, tekst
 _FORMATY = {'SCORE': 'score', 'Percentyl': 'pasek', 'Wiarygodność': 'pasek', 'Wiek': 'int', 'Minuty': 'int',
-            'CA': 'int', 'PA': 'int', 'Strata piłek na podanie': 'dec2', 'Opłacalność': 'dec2', 'Ryzyko': 'int'}
+            'CA': 'int', 'PA': 'int', 'Ocena na pozycji': 'int', 'Strata piłek na podanie': 'dec2',
+            'Opłacalność': 'dec2', 'Ryzyko': 'int'}
 # Kolumny prezentowane z pol liczbowych (sortowanie po liczbie, nie po tekscie)
 _POLA = {'Cena': ('Wartość_Numeryczna', 'eur'), 'Płaca': ('Zarobki_Numeryczne', 'eur_tyg'),
          'Wygasa': ('Wygasa_Data', 'data'), 'Koszt (3 lata)': ('Koszt', 'eur')}
-_TEKSTOWE = {'Piłkarz', 'Klub', 'Liga', 'Pozycja', 'Kraj', 'Preferowana noga', 'Okazje', 'Pozycja na liście'}
+_TEKSTOWE = {'Piłkarz', 'Klub', 'Liga', 'Pozycja', 'Kraj', 'Preferowana noga', 'Okazje', 'Pozycja na liście',
+             'Kandydat z pozycji'}
 # Naglowki inne niz nazwa kolumny w danych
-_NAGLOWKI = {'Kraj': 'Narodowość'}
+_NAGLOWKI = {'Kraj': 'Narodowość', 'Pozycja': 'Pozycje'}
 # Kolumny Moneyball (z wzbogac), nie sa statystykami meczowymi
-_MONEYBALL = {'Koszt (3 lata)', 'Opłacalność', 'Okazje', 'Ryzyko'}
+_MONEYBALL = {'Koszt (3 lata)', 'Opłacalność', 'Okazje', 'Ryzyko', 'Ocena na pozycji'}
 
 
 def _wstaw_po(lista, nowy, po):
@@ -197,6 +248,10 @@ def kolumny_tabeli(pozycja, pula, pokaz_ukryte=False):
             _wstaw_po(nazwy, kol, po)
         if pokaz_ukryte and 'Ryzyko' in pula.columns:
             _wstaw_po(nazwy, 'Ryzyko', 'Okazje')
+    if 'Kandydat' in pula.columns and pula['Kandydat'].any():
+        _wstaw_po(nazwy, 'Kandydat z pozycji', 'Piłkarz')
+        if 'Ocena na pozycji' in pula.columns and pula['Ocena na pozycji'].notna().any():
+            _wstaw_po(nazwy, 'Ocena na pozycji', 'Kandydat z pozycji')
     return [_opis_kolumny(nazwa) for nazwa in nazwy]
 
 
@@ -244,7 +299,7 @@ def do_json(ramka, pola):
 POLA_WIERSZA = ['ID', 'UID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Kraj', 'Wiek', 'Pozycja', 'Preferowana noga', 'Minuty',
                 'SCORE', 'Percentyl', 'Wiarygodność', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Wygasa_Data',
                 'Mnożnik_Ligi', 'Wypożyczony', 'Wypożyczenie_do', 'Wolny_agent', 'Lata_kontraktu', 'Koszt',
-                'Opłacalność', 'Okazje', 'Pareto']
+                'Opłacalność', 'Okazje', 'Pareto', 'Kandydat', 'Kandydat z pozycji', 'Ocena na pozycji']
 # Dane, ktorych gracz nie widzi wprost w grze - wysylane tylko przy wlaczonym przelaczniku
 POLA_UKRYTE = ['CA', 'PA', 'Ryzyko', 'Regularność', 'Ważne mecze', 'Podatność na kontuzje', 'Determinacja',
                'Profesjonalizm', 'Ambicja', 'Adaptacja', 'Kontuzje_2_lata']
@@ -264,20 +319,25 @@ def kolejnosc_lig(ligi):
 
 
 # --- radar i sobowtor ---------------------------------------------------------------------------
-def radar(pozycja, pula, ids):
-    """Percentyle statystyk (0-100, odwrocone dla 'mniej = lepiej') wybranych zawodnikow."""
+def radar(pozycja, pula, ids, inni=None):
+    """
+    Percentyle statystyk (0-100, odwrocone dla 'mniej = lepiej') wybranych zawodnikow wzgledem puli
+    pozycji. Zawodnika spoza puli (kandydat do przekwalifikowania) szukamy w `inni`.
+    """
     kolumny = [c for c in kolumny_statystyk(pozycja, pula) if c not in NEUTRALNE]
     seria = []
     for id_ in ids:
         wiersz = pula[pula['ID'] == id_]
+        if wiersz.empty and inni is not None:
+            wiersz = inni[inni['ID'] == id_]
         if wiersz.empty:
             continue
         wiersz = wiersz.iloc[0]
         wartosci = []
         for c in kolumny:
-            p = percentyl_w_puli(pula[c], wiersz[c])
+            p = percentyl_w_puli(pula[c], wiersz.get(c))
             wartosci.append(round(100.0 - p if c in NIZSZE_LEPSZE else p, 1))
-        surowe = [None if pd.isna(wiersz[c]) else round(float(wiersz[c]), 3) for c in kolumny]
+        surowe = [None if pd.isna(wiersz.get(c)) else round(float(wiersz.get(c)), 3) for c in kolumny]
         seria.append({'id': id_, 'percentyle': wartosci, 'wartosci': surowe})
     etykiety = [c + " (odwrócone)" if c in NIZSZE_LEPSZE else c for c in kolumny]
     return {'etykiety': etykiety, 'seria': seria}

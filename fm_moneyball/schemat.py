@@ -108,13 +108,18 @@ def raport_wczytania(df, pozycja, odrzucone=0):
     return wynik
 
 
+NIEZNANY_KRAJ = "Nieznana"
+
+
 def ustaw_kraje(df, nazwy):
     """
-    Kolumna 'Kraj' (narodowosc) z 'Kraj_ID' ramki z zapisu: nazwa z mapy albo "Kraj #id".
-    Ramki bez 'Kraj_ID' (CSV, demo - maja wlasna kolumne 'Kraj') zwracane sa bez zmian.
+    Kolumna 'Kraj' (narodowosc) z 'Kraj_ID' ramki z zapisu: nazwa z mapy, "Kraj #id" albo
+    "Nieznana" (zapis nie podal narodowosci - zawodnik nie moze zniknac z filtra).
+    Ramki bez 'Kraj_ID' (CSV, demo - maja wlasna kolumne 'Kraj') dostaja tylko "Nieznana" w lukach.
     """
-    if 'Kraj_ID' not in df.columns:
-        return df
     df = df.copy()
-    df['Kraj'] = df['Kraj_ID'].map(lambda k: (nazwy.get(int(k)) or f"Kraj #{int(k)}") if pd.notna(k) else None)
+    if 'Kraj_ID' in df.columns:
+        df['Kraj'] = df['Kraj_ID'].map(lambda k: (nazwy.get(int(k)) or f"Kraj #{int(k)}") if pd.notna(k) else None)
+    if 'Kraj' in df.columns:
+        df['Kraj'] = df['Kraj'].where(df['Kraj'].notna() & (df['Kraj'].astype(str).str.strip() != ""), NIEZNANY_KRAJ)
     return df

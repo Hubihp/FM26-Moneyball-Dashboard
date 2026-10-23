@@ -17,10 +17,11 @@ from datetime import date, timedelta
 import numpy as np
 import pandas as pd
 
+from fm_moneyball.kraje import kraj_z_licznika, kraje_z_kotwic, narodowosci_lig
 from fm_moneyball.mapy import KATALOG_DANYCH, KATALOG_DOMOWY, wczytaj_mape, zapisz_mape
 from fm_moneyball.parsery import fmt_eur
 from fm_moneyball.schemat import dopelnij_schemat
-from fm_moneyball.stale import MAPOWANIE_NAZW_LIG, POZYCJE
+from fm_moneyball.stale import MAPOWANIE_NAZW_LIG, POZYCJE, kolumna_oceny
 
 PLIK_NAZW_ROZGRYWEK = KATALOG_DANYCH / "nazwy_rozgrywek.csv"
 PLIK_NAZW_UZYTKOWNIKA = KATALOG_DOMOWY / "nazwy_rozgrywek.csv"
@@ -89,7 +90,7 @@ class OpcjeZapisu:
     rodzaj_statystyk: str = "league"      # "league" (liga) albo "overall" (wszystkie rozgrywki)
     min_minut: int = 300
     kurs_waluty: float = KURS_DOMYSLNY
-    wszystkie_naturalne_pozycje: bool = False
+    wszystkie_naturalne_pozycje: bool = True   # zawodnik w kazdej puli, w ktorej jest naturalny (ocena >= 18)
     tylko_kluby_w_lidze: bool = True
     wolni_agenci: bool = True             # zawodnicy bez klubu (z minutami w sezonie) w puli
 
@@ -120,7 +121,8 @@ class WynikZapisu:
     ostrzezenia: list = field(default_factory=list)
     liczniki: dict = field(default_factory=dict)
     moje_kluby: list = field(default_factory=list)     # [{"uid", "nazwa"}] - wszystkie prowadzone druzyny
-    ligi: list = field(default_factory=list)           # podsumowanie lig: klucz, domyslna, liczba, kluby
+    ligi: list = field(default_factory=list)           # podsumowanie lig: klucz, domyslna, liczba, kluby, kraj
+    kraje_auto: dict = field(default_factory=dict)     # nation_id -> nazwa kraju z klubow-kotwic
 
 
 # =============================================================================
@@ -219,6 +221,7 @@ def statystyki_kanoniczne(liczniki):
 
 WOLNY_AGENT = "Wolny agent"
 
+
 # Dane ukryte (skala 1-20): atrybut/cecha rekordu fmsave -> kolumna aplikacji
 ATRYBUTY_UKRYTE = {"consistency": "Regularność", "important_matches": "Ważne mecze",
                    "injury_proneness": "Podatność na kontuzje", "determination": "Determinacja"}
@@ -254,7 +257,8 @@ def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0):
         "Reputacja_klubu": getattr(zawodnik, "club_reputation", None),
         "Wypożyczenie_do": pd.Timestamp(koniec_wyp) if koniec_wyp else pd.NaT,
         "Kontuzje_2_lata": kontuzje,
-        "Pozycja": ", ".join(dict.fromkeys(SKROT_POZYCJI.get(k, k.upper())
+        # fmsave podaje kody wielkimi literami ("DC", "WBL") - stad .lower()
+        "Pozycja": ", ".join(dict.fromkeys(SKROT_POZYCJI.get(k.lower(), k.upper())
                                            for k in (zawodnik.natural_positions or ()))) or None,
         "Kraj_ID": getattr(zawodnik, "nation_id", None),
         "Preferowana noga": preferowana_noga(zawodnik.left_foot, zawodnik.right_foot),
@@ -270,6 +274,11 @@ def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0):
         "UID": zawodnik.uid,
         "Klub_UID": zawodnik.club_uid,
     }
+    # Ocena (1-20) na kazdej puli pozycji = najlepsza z jej kodow; pokazuje latwosc przekwalifikowania
+    oceny = oceny_pozycji(zawodnik.positions) if getattr(zawodnik, "positions", None) is not None else {}
+    for grupa in POZYCJE:
+        kody = [k for k, g in POZYCJA_Z_KODU.items() if g == grupa]
+        wiersz[kolumna_oceny(grupa)] = max((oceny.get(k, 0) for k in kody), default=None) if oceny else None
     for pole, kolumna in ATRYBUTY_UKRYTE.items():
         wiersz[kolumna] = getattr(atrybuty, pole, None) if atrybuty is not None else None
     for pole, kolumna in OSOBOWOSC.items():
@@ -308,6 +317,7 @@ def zbuduj_ramki(zawodnicy, liczniki_po_uid, liga_klubu, opcje, moje_kluby=(), k
         if not grupy:
             continue
         wiersz = wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje.get(zawodnik.uid, 0))
+        wiersz["Pula_główna"] = grupy[0]
         for grupa in grupy:
             wiersze[grupa].append(wiersz)
     return {p: dopelnij_schemat(pd.DataFrame(w)) for p, w in wiersze.items() if w}
@@ -608,10 +618,12 @@ def policz_kontuzje(rekordy, data_gry, dni=730):
     return licznik
 
 
-def podsumuj_ligi(liga_klubu, kluby, limit=5):
+def podsumuj_ligi(liga_klubu, kluby, limit=5, narodowosci=None):
     """
     [{klucz, domyslna, nazwa, liczba, kluby, kraj}] - do edycji nazw i mnoznikow w aplikacji.
-    `kraj` to dominujacy nation_id klubow ligi (z niego aplikacja nazywa kraje zawodnikow).
+    `kraj` to id kraju ligi, z ktorego aplikacja nazywa narodowosci zawodnikow: najczestsza
+    narodowosc zawodnikow ligi (`narodowosci` = narodowosci_lig, ta sama numeracja co
+    Player.nation_id), a bez nich dominujacy nation_id klubow.
     """
     nazwa_klubu = {k.uid: k.name for k in kluby}
     kraj_klubu = {k.uid: getattr(k, "nation_id", None) for k in kluby}
@@ -619,15 +631,20 @@ def podsumuj_ligi(liga_klubu, kluby, limit=5):
     for uid, liga in liga_klubu.items():
         g = grupy.setdefault(liga.competition_id, {"klucz": liga.database_id,
                                                    "domyslna": Liga(liga.competition_id, liga.database_id, None).etykieta,
-                                                   "nazwa": liga.nazwa, "kluby": [], "kraje": Counter()})
+                                                   "nazwa": liga.nazwa, "kluby": [], "kraje": Counter(),
+                                                   "competition_id": liga.competition_id})
         g["kluby"].append(nazwa_klubu.get(uid) or "?")
         if kraj_klubu.get(uid) is not None:
             g["kraje"][kraj_klubu[uid]] += 1
     wynik = []
     for g in grupy.values():
         kraje = g.pop("kraje")
-        wynik.append({**g, "liczba": len(g["kluby"]), "kluby": sorted(g["kluby"])[:limit],
-                      "kraj": kraje.most_common(1)[0][0] if kraje else None})
+        competition_id = g.pop("competition_id")
+        if narodowosci is not None:
+            kraj = kraj_z_licznika(narodowosci.get(competition_id))
+        else:
+            kraj = kraje.most_common(1)[0][0] if kraje else None
+        wynik.append({**g, "liczba": len(g["kluby"]), "kluby": sorted(g["kluby"])[:limit], "kraj": kraj})
     return sorted(wynik, key=lambda g: -g["liczba"])
 
 
@@ -699,7 +716,8 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
                   "kluby_z_liga": len(liga_klubu), "w_aplikacji": sum(len(d) for d in dane.values()),
                   "czasy_s": czasy},
         moje_kluby=moje,
-        ligi=podsumuj_ligi(liga_klubu, kluby),
+        ligi=podsumuj_ligi(liga_klubu, kluby, narodowosci=narodowosci_lig(zawodnicy, liga_klubu)),
+        kraje_auto=kraje_z_kotwic(kluby, zawodnicy),
     )
 
 

@@ -11,6 +11,9 @@ from fm_moneyball.stale import (KOLUMNY_PER_POZYCJA, KOLUMNY_STATYSTYK, NAZWY_KO
                                 TLUMACZENIE_KOLUMN, WSKAZOWKI_NAZW_PLIKOW)
 
 
+NAZWY_KOLUMNY_KRAJU = ["Nar", "Narodowość", "Nat", "Nationality", "Kraj"]
+
+
 def wczytaj_csv(plik_bajty):
     """
     Bajty pliku CSV z FM -> (kanoniczny DataFrame, liczba odrzuconych wierszy).
@@ -23,6 +26,12 @@ def wczytaj_csv(plik_bajty):
 
     df.columns = df.columns.astype(str).str.replace('﻿', '', regex=False).str.strip()
     df = df.rename(columns=TLUMACZENIE_KOLUMN)
+
+    # Kolumna z narodowoscia (rozne naglowki zaleznie od wersji i jezyka gry) -> 'Kraj'
+    for nazwa in NAZWY_KOLUMNY_KRAJU:
+        if nazwa in df.columns and 'Kraj' not in df.columns:
+            df = df.rename(columns={nazwa: 'Kraj'})
+            break
 
     # Kolumna z minutami (opcjonalna) -> 'Minuty'
     for nazwa in NAZWY_KOLUMNY_MINUT:
@@ -74,6 +83,12 @@ ZIARNA_DEMO = {"Bramkarz": 0, "Środkowy Obrońca": 1, "Boczny Obrońca": 2, "De
                "Środkowy Pomocnik": 4, "Skrzydłowy": 5, "Napastnik": 6, "Wahadłowy": 7, "Ofensywny Pomocnik": 8}
 
 
+# Pozycja w danych demo - polski skrot jak w danych z zapisu
+SKROT_DEMO = {"Bramkarz": "BR", "Środkowy Obrońca": "ŚO", "Boczny Obrońca": "LO, PO", "Wahadłowy": "LWAH, PWAH",
+              "Defensywny Pomocnik": "DP", "Środkowy Pomocnik": "ŚP", "Ofensywny Pomocnik": "OP",
+              "Skrzydłowy": "LS, PS", "Napastnik": "N"}
+
+
 def generuj_demo_csv(pozycja, n=150):
     rng = np.random.default_rng(100 + ZIARNA_DEMO[pozycja])
     ligi = ["Premier League", "LaLiga", "Bundesliga", "Ekstraklasa", "Eredivisie", "Ligue 1"]
@@ -103,7 +118,7 @@ def generuj_demo_csv(pozycja, n=150):
         'Wiek': rng.integers(18, 37, n).astype(str),
         'Klub': klub,
         'Liga': liga,
-        'Pozycja': ['BR' if pozycja == "Bramkarz" else pozycja] * n,
+        'Pozycja': [SKROT_DEMO[pozycja]] * n,
         'Preferowana noga': rng.choice(["Wyłącznie prawonożny", "Wyłącznie lewonożny", "Obunożny"], n),
         # osobny generator, zeby nie zmieniac pozostalych danych demo
         'Kraj': np.random.default_rng(500 + ZIARNA_DEMO[pozycja]).choice(

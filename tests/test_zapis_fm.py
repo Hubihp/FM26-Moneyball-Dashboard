@@ -24,7 +24,9 @@ def pozycje(**oceny):
 def zawodnik(uid, poz, klub=10, wiek=24, wartosc=1_000_000, placa=10_000, **kw):
     dane = dict(
         uid=uid, name=f"Gracz {uid}", age=wiek, club_uid=klub, club_name=f"Klub {klub}",
-        natural_positions=tuple(k for k in KODY if getattr(poz, k) >= 18), positions=poz,
+        # fmsave podaje kody pozycji wielkimi literami, najlepsza pierwsza
+        natural_positions=tuple(k.upper() for k in sorted(KODY, key=lambda k: -getattr(poz, k))
+                                if getattr(poz, k) >= 18), positions=poz,
         left_foot=8, right_foot=20, transfer_value=wartosc,
         transfer_value_state=fmsave.TransferValueState.OK,
         contract=NS(wage=placa, end=date(2027, 6, 30)), ability=NS(current=120, potential=150), on_loan=False,
@@ -64,9 +66,23 @@ def test_pozycje():
 
 
 def test_polskie_skroty_pozycji():
-    ramki = zbuduj_ramki([zawodnik(1, pozycje(wbl=20, dl=18, aml=18))],
+    ramki = zbuduj_ramki([zawodnik(1, pozycje(wbl=20, dl=19, aml=18))],
                          sumuj_statystyki([wiersz_statystyk(1)], "league"), {10: _liga()}, OpcjeZapisu())
-    assert ramki["Wahadłowy"].iloc[0]["Pozycja"] == "LO, LS, LWAH"
+    assert ramki["Wahadłowy"].iloc[0]["Pozycja"] == "LWAH, LO, LS"
+
+
+def test_zawodnik_na_wszystkich_naturalnych_pozycjach():
+    # jak Sirafily Mukhtar: naturalny srodkowy i prawy obronca - wczesniej tylko w puli SO (remis/najwyzsza ocena)
+    z = zawodnik(1, pozycje(dc=20, dr=19, dm=16))
+    ramki = zbuduj_ramki([z], sumuj_statystyki([wiersz_statystyk(1)], "league"), {10: _liga()}, OpcjeZapisu())
+    assert set(ramki) == {"Środkowy Obrońca", "Boczny Obrońca"}
+    w = ramki["Boczny Obrońca"].iloc[0]
+    assert w["Pozycja"] == "ŚO, PO" and w["Pula_główna"] == "Środkowy Obrońca"
+    assert w["Ocena|Boczny Obrońca"] == 19 and w["Ocena|Defensywny Pomocnik"] == 16
+    # opcja wylaczona = tylko pozycja glowna
+    tylko = zbuduj_ramki([z], sumuj_statystyki([wiersz_statystyk(1)], "league"), {10: _liga()},
+                         OpcjeZapisu(wszystkie_naturalne_pozycje=False))
+    assert set(tylko) == {"Środkowy Obrońca"}
 
 
 @pytest.mark.parametrize("lewa, prawa, etykieta", [
@@ -391,7 +407,13 @@ def test_policz_kontuzje_i_podsumowanie_lig():
                NS(kind="history", player_uid=2, date=date(2032, 1, 1))]
     assert policz_kontuzje(rekordy, DZIS) == {1: 1, 2: 1}
     kluby = [NS(uid=i, name=f"Klub {i}", nation_id=n) for i, n in ((1, 7), (2, 7), (3, None))]
-    ligi = podsumuj_ligi({1: Liga(5, 50, "Liga A"), 2: Liga(5, 50, "Liga A"), 3: Liga(6, None, None)}, kluby)
+    liga_klubu = {1: Liga(5, 50, "Liga A"), 2: Liga(5, 50, "Liga A"), 3: Liga(6, None, None)}
+    ligi = podsumuj_ligi(liga_klubu, kluby)
     assert ligi[0] == {"klucz": 50, "domyslna": "Rozgrywki #50", "nazwa": "Liga A", "liczba": 2,
                        "kluby": ["Klub 1", "Klub 2"], "kraj": 7}
     assert ligi[1]["kraj"] is None
+    # kraj ligi z narodowosci zawodnikow (inna numeracja niz kraj klubu) - wygrywa, gdy ma >= 35%
+    from fm_moneyball.kraje import narodowosci_lig
+    gracze = [NS(club_uid=1, nation_id=700)] * 5 + [NS(club_uid=2, nation_id=701)] * 2 + [NS(club_uid=3, nation_id=9)]
+    ligi = podsumuj_ligi(liga_klubu, kluby, narodowosci=narodowosci_lig(gracze, liga_klubu))
+    assert ligi[0]["kraj"] == 700 and ligi[1]["kraj"] == 9

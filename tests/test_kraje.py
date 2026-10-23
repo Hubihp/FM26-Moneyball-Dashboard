@@ -18,12 +18,12 @@ def test_nazwy_krajow_z_lig():
 def test_kolumna_kraj_i_filtr():
     df = pd.DataFrame({"Piłkarz": ["A", "B", "C"], "Kraj_ID": [7, 3, None], "SCORE": [60, 50, 40]})
     df = ustaw_kraje(df, {7: "Polska"})
-    assert list(df["Kraj"][:2]) == ["Polska", "Kraj #3"] and pd.isna(df["Kraj"][2])
+    assert list(df["Kraj"]) == ["Polska", "Kraj #3", "Nieznana"]
     widoczni = analiza.filtruj(df.assign(**{"Wartość_Numeryczna": 1.0}), analiza.Filtry(kraje=["Polska"]))
     assert list(widoczni["Piłkarz"]) == ["A"]
     # ramka bez Kraj_ID (CSV) - bez zmian
-    csv = pd.DataFrame({"Kraj": ["Anglia"]})
-    assert ustaw_kraje(csv, {}) is csv
+    csv = pd.DataFrame({"Kraj": ["Anglia", None, " "]})
+    assert list(ustaw_kraje(csv, {})["Kraj"]) == ["Anglia", "Nieznana", "Nieznana"]
 
 
 def test_reczne_nazwy_i_podsumowanie(tmp_path):
@@ -37,7 +37,7 @@ def test_reczne_nazwy_i_podsumowanie(tmp_path):
 
     zawodnicy = pd.DataFrame({"Piłkarz": ["A", "B", "C", "D"], "Klub": ["X", "Y", "Z", "X"],
                               "Kraj_ID": [7, 7, 3, 8], "Wartość_Numeryczna": [1e6, 5e6, 2e6, None]})
-    kraje = podsumuj_kraje(zawodnicy, {7: "Polska"}, reczne={7})
+    kraje = podsumuj_kraje(zawodnicy, {7: "Polska"}, {7: "ręcznie"})
     assert [k["id"] for k in kraje] == [3, 8, 7]                 # bez nazwy najpierw
     polska = kraje[-1]
     assert polska["liczba"] == 2 and polska["reczna"] and polska["przyklady"] == ["B (Y)", "A (X)"]
@@ -57,3 +57,26 @@ def test_nowe_pozycje_maja_wagi_i_kolumny():
         wagi = MERYTORYKA_WAG[pozycja]
         assert sum(wagi.values()) == 100
         assert set(wagi) <= set(KOLUMNY_PER_POZYCJA[pozycja])
+
+
+def test_kraje_z_klubow_kotwic():
+    from types import SimpleNamespace as NS
+
+    from fm_moneyball.kraje import klucz_nazwy_klubu, kraje_z_kotwic
+    assert klucz_nazwy_klubu("FK Bodø/Glimt") == klucz_nazwy_klubu("Bodø/Glimt") == {"bodo", "glimt"}
+    assert klucz_nazwy_klubu("AC Sparta Praha") == klucz_nazwy_klubu("Sparta Praha")
+    kluby = [NS(uid=1, name="Hibernian FC"), NS(uid=2, name="Aberdeen"), NS(uid=3, name="AC Sparta Praha"),
+             NS(uid=4, name="Motherwell"), NS(uid=5, name="Olimpia"), NS(uid=6, name="CD Olimpia")]
+
+    def kadra(klub, kraje):
+        return [NS(club_uid=klub, nation_id=k) for k in kraje]
+    zawodnicy = (kadra(1, [30] * 8 + [5] * 4) + kadra(2, [30] * 9 + [6] * 3)     # dwa glosy na 30
+                 + kadra(3, [40] * 10 + [7] * 2)                                    # jeden wyrazny glos (83%)
+                 + kadra(4, [30] * 4 + [8] * 3)                                     # za malo zawodnikow
+                 + kadra(5, [50] * 7 + [51] * 3) + kadra(6, [51] * 6 + [50] * 4))   # Paragwaj vs Honduras
+    kotwice = {"Szkocja": ["Hibernian", "Aberdeen", "Motherwell"], "Czechy": ["Sparta Praha"],
+               "Paragwaj": ["Olimpia"], "Honduras": ["Olimpia"]}
+    wynik = kraje_z_kotwic(kluby, zawodnicy, kotwice)
+    assert wynik[30] == "Szkocja" and wynik[40] == "Czechy"
+    # "Olimpia" to dwa kluby (dwa kraje) - jeden glos na kraj ponizej progu 70%, wiec bez nazwy
+    assert 50 not in wynik and 51 not in wynik

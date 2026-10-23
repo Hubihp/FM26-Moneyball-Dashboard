@@ -76,3 +76,27 @@ def test_moja_kadra_luka():
     assert [z["Piłkarz"] for z in kadra["zawodnicy"]] == ["Drogi", "Tani"]
     pusta = analiza.moja_kadra("Napastnik", pula, 99, DZIS)
     assert pusta["liczba"] == 0 and pusta["luka"] == pusta["cel"]
+
+
+def test_oplacalnosc_przy_koszcie_bliskim_zera():
+    pula = _pula()
+    pula.loc[3, 'Zarobki_Numeryczne'] = 1.0          # wolny agent z pensja ~0 -> koszt 3 EUR
+    p = analiza.wzbogac(pula, DZIS)
+    assert pd.isna(p.loc[3, 'Opłacalność']) and np.isfinite(p['Opłacalność'].dropna()).all()
+
+
+def test_maska_odniesienia_nie_zmienia_wyniku_nominalnych():
+    rng = np.random.default_rng(3)
+    pula = pd.DataFrame({'ID': [f"N{i}" for i in range(60)], 'Przechwyty/90': rng.gamma(3, 0.5, 60),
+                         'Minuty': rng.integers(500, 3000, 60).astype(float)})
+    inni = pd.DataFrame({'ID': ["K1", "K2"], 'Przechwyty/90': [20.0, 0.0], 'Minuty': [2500.0, 2500.0],
+                         'Pula': ["Napastnik", "Napastnik"]})
+    wagi = {'Przechwyty/90': 1}
+    sama, _ = analiza.policz_wynik(pula, wagi, True, 5)
+    ramka, maska = analiza.dolacz_kandydatow(pula, inni, "Środkowy Obrońca")
+    razem, _ = analiza.policz_wynik(ramka, wagi, True, 5, maska)
+    assert np.allclose(razem.loc[maska, 'SCORE'].to_numpy(), sama['SCORE'].to_numpy())
+    assert np.allclose(razem.loc[maska, 'Percentyl'].to_numpy(), sama['Percentyl'].to_numpy())
+    k1, k2 = razem[razem['ID'] == "K1"].iloc[0], razem[razem['ID'] == "K2"].iloc[0]
+    assert k1['SCORE'] > sama['SCORE'].max() - 1 and k1['Percentyl'] == 100 and k2['Percentyl'] < 10
+    assert k1['Kandydat z pozycji'] == "Napastnik"

@@ -21,28 +21,38 @@ def _srednia_odchylenie(x, wagi):
     return x.mean(), x.std(ddof=0)
 
 
-def oblicz_z(df, nazwy_cech, k_baza):
+def maska_odniesienia(df, odniesienie=None):
+    """Maska wierszy, na ktorych liczymy skale wyniku (domyslnie wszystkie)."""
+    if odniesienie is None:
+        return pd.Series(True, index=df.index)
+    return odniesienie.reindex(df.index).fillna(False).astype(bool)
+
+
+def oblicz_z(df, nazwy_cech, k_baza, odniesienie=None):
     """
     Dla kazdej cechy liczy z-score w obrebie calej puli (df). Jesli dostepne sa minuty:
       - srednia i odchylenie sa wazone minutami, wiec zawodnicy z kilkoma minutami (skrajne
         wartosci per 90) nie zawyzaja rozrzutu i nie splaszczaja wyniku pozostalych,
       - cechy sa skurczone w strone sredniej puli: x* = (n90*x + k*srednia) / (n90 + k), gdzie
         n90 to liczba pelnych meczow, a k = k_baza * wspolczynnik cechy.
+    `odniesienie` (maska wierszy) to zawodnicy, wzgledem ktorych liczymy srednia i odchylenie;
+    pozostali (np. kandydaci z innych pozycji) dostaja z-score na tej samej skali, ale jej nie zmieniaja.
     Zwraca (slownik z-score'ow, n90 lub None).
     """
+    ref = maska_odniesienia(df, odniesienie)
     n90 = None
     if 'Minuty' in df.columns and df['Minuty'].notna().any():
         n90 = df['Minuty'] / 90.0
-        n90 = n90.fillna(n90.median())
+        n90 = n90.fillna(n90[ref].median())
 
     z = {}
     for nazwa in nazwy_cech:
         if nazwa not in df.columns:
             continue
         x = df[nazwa].astype(float)
-        if x.notna().sum() < 2:
+        if x[ref].notna().sum() < 2:
             continue
-        srednia, odchylenie = _srednia_odchylenie(x, n90)
+        srednia, odchylenie = _srednia_odchylenie(x[ref], n90[ref] if n90 is not None else None)
         if not np.isfinite(odchylenie) or odchylenie == 0:
             continue
         kierunek, skurcz = parametry_cechy(nazwa)
@@ -54,17 +64,19 @@ def oblicz_z(df, nazwy_cech, k_baza):
     return z, n90
 
 
-def oblicz_score(df, wagi, ignoruj_mnoznik, k_baza):
+def oblicz_score(df, wagi, ignoruj_mnoznik, k_baza, odniesienie=None):
     """
     SCORE = 50 + 10 * (skladana z-score'ow - srednia) / odchylenie, czyli skala typu T-score:
     50 = przecietny zawodnik na tej pozycji w wgranej probie, +10 = jedno odchylenie wyzej.
     Korekta ligowa jest addytywna: SCORE + 50 * (mnoznik - 1). Przy przecietnym zawodniku daje
     to dokladnie to samo co dawne mnozenie (50 * mnoznik), ale kara nie zalezy od poziomu
     wyniku (mnozenie skali ze srodkiem 50 karalo slabych zawodnikow mniej niz mocnych).
-    Wagi sa normalizowane do sumy 1. Zwraca (SCORE, Wiarygodnosc w %, lista pominietych cech).
+    Wagi sa normalizowane do sumy 1. `odniesienie` - patrz oblicz_z (skala T tez liczona tylko na nim).
+    Zwraca (SCORE, Wiarygodnosc w %, lista pominietych cech).
     """
     nazwy = [n for n, w in wagi.items() if w > 0]
-    z, n90 = oblicz_z(df, nazwy, k_baza)
+    z, n90 = oblicz_z(df, nazwy, k_baza, odniesienie)
+    ref = pd.Series(True, index=df.index) if odniesienie is None else odniesienie.reindex(df.index).fillna(False).astype(bool)
     uzyte = [n for n in nazwy if n in z]
     pominiete = [n for n in nazwy if n not in z]
     suma = sum(wagi[n] for n in uzyte)
@@ -73,9 +85,9 @@ def oblicz_score(df, wagi, ignoruj_mnoznik, k_baza):
         return pd.Series(np.nan, index=df.index), pd.Series(np.nan, index=df.index), pominiete
 
     kompozyt = sum(z[n] * (wagi[n] / suma) for n in uzyte)
-    odch = kompozyt.std(ddof=0)
+    odch = kompozyt[ref].std(ddof=0)
     if np.isfinite(odch) and odch > 0:
-        score = 50.0 + 10.0 * (kompozyt - kompozyt.mean()) / odch
+        score = 50.0 + 10.0 * (kompozyt - kompozyt[ref].mean()) / odch
     else:
         score = pd.Series(50.0, index=df.index)
 

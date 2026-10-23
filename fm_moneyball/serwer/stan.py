@@ -36,7 +36,9 @@ from fm_moneyball.zrodla.zapis_fm import (ETAPY_WCZYTYWANIA, PLIK_NAZW_UZYTKOWNI
 log = logging.getLogger("fm_moneyball")
 
 CO_ILE_SPRAWDZAC = 15        # sekundy miedzy sprawdzeniami folderu zapisow
-WERSJA_CACHE = 4             # zmiana formatu wyniku = nowy klucz cache
+# 2: domyslnie zawodnik we wszystkich pulach, w ktorych jest naturalny (wczesniej tylko glowna)
+WERSJA_USTAWIEN = 2
+WERSJA_CACHE = 5             # zmiana formatu wyniku = nowy klucz cache
 ILE_W_CACHE = 3
 DEMO_DATA_GRY = date(2027, 1, 15)
 
@@ -50,6 +52,7 @@ class Konfiguracja:
     wczytaj_przy_starcie: bool = False
     moj_klub_uid: int | None = None   # wybrany recznie, gdy prowadzimy kilka druzyn
     opcje: dict = field(default_factory=lambda: asdict(OpcjeZapisu()))
+    wersja_ustawien: int = WERSJA_USTAWIEN
 
     def opcje_zapisu(self):
         znane = OpcjeZapisu.__dataclass_fields__
@@ -83,7 +86,9 @@ class Stan:
         # edycje uzytkownika (nakladane na mapy domyslne z dane/)
         self.plik_nazw, self.plik_mnoznikow = Path(plik_nazw), Path(plik_mnoznikow)
         self.plik_krajow = Path(plik_krajow)
-        self.nazwy_krajow = {}         # nation_id -> nazwa (reczne + wyprowadzone z lig)
+        self.nazwy_krajow = {}         # nation_id -> nazwa (reczne, z lig i z klubow-kotwic)
+        self.zrodla_krajow = {}        # nation_id -> skad nazwa: ręcznie | liga | kluby
+        self.kraje_auto = {}           # nation_id -> nazwa z klubow-kotwic (z odczytu zapisu)
         self.konfig = self._wczytaj_ustawienia()
         self.surowe = {}               # ramki prosto ze zrodla (przed nalozeniem nazw lig)
         self.dane = {}
@@ -112,6 +117,10 @@ class Stan:
                 dane = json.loads(self.plik_ustawien.read_text(encoding="utf-8"))
                 konfig = Konfiguracja(**{k: v for k, v in dane.items() if k in Konfiguracja.__dataclass_fields__})
                 konfig.opcje = {**asdict(OpcjeZapisu()), **konfig.opcje}
+                if dane.get("wersja_ustawien", 1) < 2:
+                    # ustawienia sprzed zmiany domyslnej: zawodnik ma trafiac na wszystkie naturalne pozycje
+                    konfig.opcje["wszystkie_naturalne_pozycje"] = True
+                konfig.wersja_ustawien = WERSJA_USTAWIEN
                 return konfig
             except Exception:
                 log.warning("Nie udało się odczytać ustawień, używam domyślnych.")
@@ -144,7 +153,7 @@ class Stan:
     def wszyscy_zawodnicy(self):
         """Zawodnicy wszystkich pozycji bez powtorzen (zawodnik moze byc w kilku pulach) albo None."""
         with self._blokada:
-            ramki = [df for df in self.dane.values() if not df.empty]
+            ramki = [df.assign(Pula=p) for p, df in self.dane.items() if not df.empty]
         if not ramki:
             return None
         wszyscy = pd.concat(ramki, ignore_index=True)
@@ -289,7 +298,7 @@ class Stan:
             if self._klucz == ("demo",):
                 return True
             dane, meta = _demo()
-            return self._zakoncz(pokolenie, ("demo",), dane, meta, [], None)
+            return self._zakoncz(pokolenie, ("demo",), dane, meta, [], None, {})
 
         oryginal, opis = self._znajdz_zapis()
         if oryginal is None:
@@ -331,13 +340,14 @@ class Stan:
             "z_cache": z_cache,
             "wczytano": datetime.now().isoformat(timespec="seconds"),
         }
-        return self._zakoncz(pokolenie, klucz, wynik.dane, meta, wynik.ligi, sciezka_odczytu)
+        return self._zakoncz(pokolenie, klucz, wynik.dane, meta, wynik.ligi, sciezka_odczytu, wynik.kraje_auto)
 
-    def _zakoncz(self, pokolenie, klucz, dane, meta, ligi, sciezka_odczytu):
+    def _zakoncz(self, pokolenie, klucz, dane, meta, ligi, sciezka_odczytu, kraje_auto):
         with self._blokada:
             if pokolenie != self.pokolenie:
                 return False
             self.surowe, self.meta, self.ligi, self._klucz = dane, meta, ligi, klucz
+            self.kraje_auto = kraje_auto or {}
             self._sciezka_odczytu = sciezka_odczytu
             self._uzupelnij_moj_klub()
             self._zastosuj_ligi()
@@ -355,7 +365,12 @@ class Stan:
         nazwy, mnozniki = wczytaj_nazwy_rozgrywek(self.plik_nazw), wszystkie_mnozniki(self.plik_mnoznikow)
         for liga in self.ligi:
             liga["nazwa"] = nazwy.get(liga["klucz"]) if liga["klucz"] is not None else None
-        # kraj nazwanej ligi daje nazwe narodowosci; reczne nazwy wygrywaja
-        self.nazwy_krajow = {**nazwy_auto(self.ligi), **wczytaj_nazwy_krajow(self.plik_krajow)}
+        # zrodla nazw krajow, od najslabszego: kluby-kotwice, kraj nazwanej ligi, nazwa reczna
+        zrodla = (("kluby", self.kraje_auto), ("liga", nazwy_auto(self.ligi)),
+                  ("ręcznie", wczytaj_nazwy_krajow(self.plik_krajow)))
+        self.nazwy_krajow, self.zrodla_krajow = {}, {}
+        for zrodlo, mapa in zrodla:
+            self.nazwy_krajow.update(mapa)
+            self.zrodla_krajow.update(dict.fromkeys(mapa, zrodlo))
         self.dane = {p: ustaw_kraje(ustaw_ligi(df, nazwy, mnozniki), self.nazwy_krajow)
                      for p, df in self.surowe.items()}

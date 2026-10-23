@@ -46,7 +46,8 @@ _sprawdz_srodowisko()
 
 import pandas as pd  # noqa: E402
 
-from fm_moneyball.kraje import nazwy_auto, podsumuj_kraje, wczytaj_nazwy_krajow  # noqa: E402
+from fm_moneyball.kraje import (kraje_z_kotwic, narodowosci_lig, nazwy_auto, podsumuj_kraje,  # noqa: E402
+                                wczytaj_nazwy_krajow)
 from fm_moneyball.stale import KOLUMNY_PER_POZYCJA  # noqa: E402
 from fm_moneyball.zrodla.csv_fm import wczytaj_csv  # noqa: E402
 from fm_moneyball.zrodla.zapis_fm import (PLIK_NAZW_UZYTKOWNIKA, OpcjeZapisu, kandydaci_lig,  # noqa: E402
@@ -282,12 +283,16 @@ def main():
     print("Ze wszystkimi naturalnymi pozycjami:", raport["zawodnicy_na_pozycji_wszystkie_naturalne"])
 
     # Narodowosci: nazwy wyprowadzone z nazwanych lig i kraje, ktore trzeba nazwac recznie
-    nazwy_krajow = {**nazwy_auto(podsumuj_ligi(liga_klubu, kluby)), **wczytaj_nazwy_krajow()}
+    z_kotwic = kraje_z_kotwic(kluby, zawodnicy)
+    z_lig = nazwy_auto(podsumuj_ligi(liga_klubu, kluby, narodowosci=narodowosci_lig(zawodnicy, liga_klubu)))
+    nazwy_krajow = {**z_kotwic, **z_lig, **wczytaj_nazwy_krajow()}
+    raport["kraje_zrodla"] = {"z_lig": len(z_lig), "z_klubow_kotwic": len(z_kotwic)}
     wszyscy_w_analizie = pd.concat(list(ramki.values())).drop_duplicates('UID') if ramki else None
     kraje = podsumuj_kraje(wszyscy_w_analizie, nazwy_krajow)
     raport["kraje_z_nazwa"] = {str(k["id"]): k["nazwa"] for k in kraje if k["nazwa"]}
     raport["kraje_bez_nazwy"] = [k for k in kraje if not k["nazwa"]][:25]
-    print(f"Kraje z nazwą: {len(raport['kraje_z_nazwa'])}, bez nazwy: {sum(1 for k in kraje if not k['nazwa'])}")
+    print(f"Kraje z nazwą: {len(raport['kraje_z_nazwa'])} (z lig: {len(z_lig)}, z klubów: {len(z_kotwic)}), "
+          f"bez nazwy: {sum(1 for k in kraje if not k['nazwa'])}")
 
     if zarzadzane:
         moj, moj_uid = zarzadzane[0].club_name, zarzadzane[0].club_uid

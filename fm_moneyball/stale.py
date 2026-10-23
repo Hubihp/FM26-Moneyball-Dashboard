@@ -1,5 +1,10 @@
 """Stale i slowniki wspolne dla wszystkich zrodel danych i modelu."""
 
+def kolumna_oceny(pozycja):
+    """Kolumna z ocena zawodnika (1-20) na danej puli pozycji (tylko dane z zapisu)."""
+    return f"Ocena|{pozycja}"
+
+
 POZYCJE = ["Bramkarz", "Środkowy Obrońca", "Boczny Obrońca", "Wahadłowy", "Defensywny Pomocnik",
            "Środkowy Pomocnik", "Ofensywny Pomocnik", "Skrzydłowy", "Napastnik"]
 
