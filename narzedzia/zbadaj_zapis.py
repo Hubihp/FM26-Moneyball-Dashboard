@@ -26,6 +26,24 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+
+def _sprawdz_srodowisko():
+    """Czytelny komunikat zamiast tracebacku, gdy brakuje Pythona 3.12+ albo bibliotek."""
+    import importlib.util
+    wymagania = Path(__file__).resolve().parents[1] / "requirements.txt"
+    instalacja = f'py -m pip install -r "{wymagania}"' if sys.platform.startswith("win") \
+        else f'python3 -m pip install -r "{wymagania}"'
+    if sys.version_info < (3, 12):
+        sys.exit(f"Potrzebny jest Python 3.12 lub nowszy (masz {sys.version.split()[0]}).\n"
+                 "Windows: winget install -e --id Python.Python.3.12, potem otwórz terminal na nowo\n"
+                 f"i zainstaluj biblioteki: {instalacja}")
+    brakujace = [m for m in ("pandas", "numpy", "fmsave") if importlib.util.find_spec(m) is None]
+    if brakujace:
+        sys.exit(f"Brakuje bibliotek: {', '.join(brakujace)}.\nZainstaluj je poleceniem:\n    {instalacja}")
+
+
+_sprawdz_srodowisko()
+
 import pandas as pd  # noqa: E402
 
 from fm_moneyball.stale import KOLUMNY_PER_POZYCJA  # noqa: E402

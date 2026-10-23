@@ -9,6 +9,13 @@ python -m pip install -r requirements.txt      # Python 3.12 lub nowszy
 streamlit run app.py
 ```
 
+### Windows krok po kroku
+
+1. Pobierz kod jako ZIP (na GitHubie: przycisk *Code*, potem *Download ZIP*) i rozpakuj go.
+2. W PowerShellu przejdź do rozpakowanego folderu (`cd "ścieżka\do\folderu"`) i sprawdź wersję Pythona poleceniem `py --version`. Potrzebna jest wersja 3.12 lub nowsza. Jeśli jej brakuje, uruchom `winget install -e --id Python.Python.3.12` i otwórz PowerShell na nowo.
+3. Zainstaluj biblioteki: `py -m pip install -r requirements.txt`. Na każdym nowym komputerze trzeba to zrobić raz.
+4. Uruchom aplikację: `py -m streamlit run app.py`. Diagnostykę zapisu opisuje sekcja niżej.
+
 ## Źródła danych
 
 | Źródło | Jak działa |
