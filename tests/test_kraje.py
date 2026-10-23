@@ -93,3 +93,19 @@ def test_domyslna_mapa_krajow():
     assert len(ids) == len(set(ids)) and all(nazwy) and len(nazwy) == len(set(nazwy))
     mapa = dict(zip(ids, nazwy))
     assert mapa[33] == "Nigeria" and mapa[173] == "Turcja" and mapa[176] == "Serbia" and mapa[207] == "Montserrat"
+
+
+def test_pliki_danych_sa_w_repozytorium():
+    """Pliki dane/*.csv musza byc sledzone przez gita - inaczej nie trafia do uzytkownika (ZIP, git pull)."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    import pytest
+    katalog = Path(__file__).resolve().parents[1]
+    if not shutil.which("git") or not (katalog / ".git").exists():
+        pytest.skip("brak repozytorium gita")
+    for plik in (katalog / "dane").glob("*.csv"):
+        wynik = subprocess.run(["git", "ls-files", "--error-unmatch", str(plik.relative_to(katalog))],
+                               cwd=katalog, capture_output=True)
+        assert wynik.returncode == 0, f"{plik.name} nie jest w repozytorium (sprawdz .gitignore)"
