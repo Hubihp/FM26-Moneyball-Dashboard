@@ -73,6 +73,7 @@ export type Filtry = {
   min_oplacalnosc: number | null;
   kandydaci: boolean;
   min_score_kandydata: number;
+  min_niedowartosciowanie: number | null;
 };
 
 export type ZapytanieRankingu = {
@@ -84,7 +85,15 @@ export type ZapytanieRankingu = {
   pokaz_ukryte: boolean;
 };
 
-export type Format = 'score' | 'pasek' | 'int' | 'dec1' | 'dec2' | 'eur' | 'eur_tyg' | 'data' | 'tekst';
+export type Format = 'score' | 'pasek' | 'int' | 'dec1' | 'dec2' | 'eur' | 'eur_tyg' | 'data' | 'tekst' | 'mnoznik';
+
+// Model ceny wg wyniku (fm_moneyball/wycena.py)
+export type ModelWyceny = {
+  r2: number | null;
+  liczba: number;
+  proc_za_10_score: number | null;
+  proc_za_rok_mlodszy: number | null;
+};
 export type Kolumna = { naglowek: string; pole: string; format: Format; statystyka: boolean; nizsze_lepsze: boolean };
 export type Wiersz = Record<string, string | number | boolean | null>;
 
@@ -97,6 +106,7 @@ export type Ranking = {
   liczba_kandydatow: number;
   pominiete: string[];
   statystyki: string[];
+  model_wyceny: ModelWyceny;
 };
 
 export type Radar = { etykiety: string[]; seria: { id: string; percentyle: number[]; wartosci: (number | null)[] }[] };

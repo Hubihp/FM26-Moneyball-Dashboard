@@ -5,7 +5,7 @@ import { AgGridReact } from 'ag-grid-react';
 import { useEffect, useMemo, useRef } from 'react';
 
 import type { Kolumna, Wiersz } from '../api';
-import { formatuj, kolorWyniku } from '../format';
+import { formatuj, kolorNiedowartosciowania, kolorWyniku } from '../format';
 import { kluczZawodnika } from '../pamiec';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -133,6 +133,20 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         }
         if (k.pole === 'Kandydat z pozycji') {
           Object.assign(def, { width: 170, cellClass: 'komorka-kandydat' });
+        }
+        if (k.pole === 'Niedowartościowanie') {
+          Object.assign(def, {
+            width: 140,
+            headerTooltip: 'Wycena wg wyniku / cena. ×2 = zawodnik gra jak typowy zawodnik dwa razy droższy '
+              + '(o tym samym wieku i kontrakcie).',
+            cellStyle: (p: { value: number | null }) => {
+              const kolor = p.value === null || p.value === undefined ? undefined : kolorNiedowartosciowania(p.value);
+              return kolor ? { color: kolor, fontWeight: 700 } : null;
+            },
+          });
+        }
+        if (k.pole === 'Wycena wg wyniku') {
+          def.headerTooltip = 'Cena typowa dla zawodnika z takim wynikiem, wiekiem i kontraktem (model w obrębie pozycji).';
         }
         if (k.pole === 'Kraj') {
           def.width = 140;

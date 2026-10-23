@@ -20,6 +20,7 @@ import pandas as pd
 from fm_moneyball import analiza
 from fm_moneyball.kraje import podsumuj_kraje, zapisz_nazwe_kraju
 from fm_moneyball.ligi import wszystkie_mnozniki, zapisz_mnoznik
+from fm_moneyball.wycena import wycen
 from fm_moneyball.stale import MNOZNIK_NIEZNANEJ_LIGI, MNOZNIKI_LIG, POZYCJE
 from fm_moneyball.zrodla import folder as folder_zapisow
 from fm_moneyball.zrodla.csv_fm import wczytaj_csv
@@ -106,6 +107,7 @@ class FiltryModel(BaseModel):
     min_oplacalnosc: float | None = None
     kandydaci: bool = False
     min_score_kandydata: float = 60
+    min_niedowartosciowanie: float | None = None
 
 
 class RankingModel(BaseModel):
@@ -162,7 +164,8 @@ def utworz_aplikacje(stan):
         if kandydaci:
             df, odniesienie = analiza.dolacz_kandydatow(df, stan.wszyscy_zawodnicy(), pozycja)
         policzona, pominiete = analiza.policz_wynik(df, wagi, ignoruj_mnoznik, k_baza, odniesienie)
-        wynik = (analiza.wzbogac(policzona, data_gry()), pominiete)
+        policzona, model_wyceny = wycen(policzona, odniesienie, data_gry())
+        wynik = (analiza.wzbogac(policzona, data_gry()), pominiete, model_wyceny)
         with blokada_policzonych:
             policzone[klucz] = wynik
             while len(policzone) > ILE_POLICZONYCH:
@@ -170,10 +173,10 @@ def utworz_aplikacje(stan):
         return wynik
 
     def wynik_i_filtr(z: RankingModel):
-        policzona, pominiete = policz(z.pozycja, z.wagi, z.ignoruj_mnoznik, z.k_baza, z.filtry.kandydaci)
+        policzona, pominiete, model_wyceny = policz(z.pozycja, z.wagi, z.ignoruj_mnoznik, z.k_baza, z.filtry.kandydaci)
         filtry = analiza.Filtry(**z.filtry.model_dump())
         widoczni = analiza.filtruj(policzona, filtry, data_gry(), stan.migawka()["meta"].get("moj_klub_uid"))
-        return policzona, analiza.oznacz_pareto(widoczni), pominiete
+        return policzona, analiza.oznacz_pareto(widoczni), pominiete, model_wyceny
 
     def kandydat(ramka):
         if 'Kandydat' not in ramka.columns:
@@ -268,7 +271,7 @@ def utworz_aplikacje(stan):
             df = stan.pula(pozycja)
             if df is None or df.empty:
                 continue
-            policzona, _ = policz(pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
+            policzona, _, _ = policz(pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
             wynik.append(analiza.moja_kadra(pozycja, policzona, uid, data_gry()))
         # w kolejnosci POZYCJE: od bramkarza do napastnika (sortowanie po luce robi interfejs)
         return {"klub": meta.get("moj_klub"), "pozycje": wynik}
@@ -292,7 +295,7 @@ def utworz_aplikacje(stan):
             if df is None or df.empty:
                 brak += [w.klucz for w in wpisy]
                 continue
-            policzona, _ = policz(pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
+            policzona, _, _ = policz(pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
             for w in wpisy:
                 wiersz = analiza.znajdz_zawodnika(policzona, w.klucz, w.pilkarz)
                 if wiersz.empty:
@@ -365,7 +368,7 @@ def utworz_aplikacje(stan):
 
     @app.post("/api/ranking")
     def ranking(z: RankingModel):
-        policzona, widoczni, pominiete = wynik_i_filtr(z)
+        policzona, widoczni, pominiete, model_wyceny = wynik_i_filtr(z)
         kolumny = analiza.kolumny_tabeli(z.pozycja, policzona, z.pokaz_ukryte)
         return {
             "pozycja": z.pozycja,
@@ -376,6 +379,7 @@ def utworz_aplikacje(stan):
             "liczba_kandydatow": int(kandydat(widoczni).sum()),
             "pominiete": pominiete,
             "statystyki": analiza.kolumny_statystyk(z.pozycja, policzona),
+            "model_wyceny": model_wyceny,
         }
 
     @app.post("/api/radar")
@@ -384,7 +388,7 @@ def utworz_aplikacje(stan):
 
     @app.post("/api/podobni")
     def podobni(z: PodobniModel):
-        policzona, widoczni, _ = wynik_i_filtr(z)
+        policzona, widoczni, _, _ = wynik_i_filtr(z)
         wynik = analiza.podobni(z.pozycja, policzona, widoczni.index, z.id, z.k_baza, z.n)
         pola = analiza.pola_wiersza(z.pozycja, policzona, z.pokaz_ukryte) + ['Podobieństwo']
         return {"wiersze": analiza.do_json(wynik, pola)}

@@ -41,7 +41,7 @@ type Props = {
 export const PUSTE_FILTRY: Filtry = {
   ligi: [], nogi: [], kraje: [], wiek: null, cena: null, bez_ceny: true, szukaj: '', kontrakt_mies: null, min_minut: 0,
   bez_mojego_klubu: false, okazje: [], max_ryzyko: null, min_oplacalnosc: null, kandydaci: false,
-  min_score_kandydata: 60,
+  min_score_kandydata: 60, min_niedowartosciowanie: null,
 };
 
 // Suwak ceny w skali pierwiastkowej: wiecej precyzji przy niskich kwotach
@@ -114,6 +114,16 @@ export default function PanelBoczny(p: Props) {
           <MultiSelect label="Okazje transferowe" placeholder="Dowolne" clearable data={meta.okazje} value={filtry.okazje}
             onChange={(v) => zmien('okazje', v)} />
         )}
+
+        <Select label="Niedowartościowanie co najmniej" clearable placeholder="Dowolne"
+          description="Wycena wg wyniku / cena"
+          value={filtry.min_niedowartosciowanie ? String(filtry.min_niedowartosciowanie) : null}
+          onChange={(v) => zmien('min_niedowartosciowanie', v ? Number(v) : null)}
+          data={[
+            { value: '1.5', label: '×1,5 (wyraźnie tańszy)' },
+            { value: '2', label: '×2 (dwa razy tańszy)' },
+            { value: '3', label: '×3 i więcej' },
+          ]} />
 
         <NumberInput label="Min. opłacalność" description="Punkty SCORE ponad przeciętnego na 1 mln € kosztu (3 lata)"
           min={0} step={0.5} decimalScale={2} value={filtry.min_oplacalnosc ?? ''}

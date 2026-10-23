@@ -89,6 +89,11 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
             {w['CA'] !== undefined ? <Pole etykieta="CA / PA" wartosc={`${w['CA'] ?? '–'} / ${w['PA'] ?? '–'}`} /> : null}
             <Pole etykieta="Koszt (cena + 3 lata pensji)" wartosc={eur(w['Koszt'] as number | null)} />
             <Pole etykieta="Opłacalność" wartosc={formatuj(w['Opłacalność'], 'dec2')} />
+            <Pole etykieta="Wycena wg wyniku" wartosc={eur(w['Wycena wg wyniku'] as number | null)} />
+            <Pole etykieta="Niedowartościowanie" wartosc={formatuj(w['Niedowartościowanie'], 'mnoznik')} />
+            {w['Wynik ponad CA'] !== undefined ? (
+              <Pole etykieta="Wynik ponad CA" wartosc={formatuj(w['Wynik ponad CA'], 'dec1')} />
+            ) : null}
             {w['Ryzyko'] !== undefined ? <Pole etykieta="Ryzyko (0-100)" wartosc={formatuj(w['Ryzyko'], 'int')} /> : null}
             {w['Kontuzje_2_lata'] !== undefined ? (
               <Pole etykieta="Kontuzje (2 lata)" wartosc={formatuj(w['Kontuzje_2_lata'], 'int')} />

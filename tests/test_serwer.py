@@ -326,3 +326,14 @@ def test_migracja_ustawien_naturalne_pozycje(tmp_path):
     # po migracji wybor uzytkownika jest szanowany
     stan.ustaw_zrodlo("demo", opcje={"wszystkie_naturalne_pozycje": False}, w_tle=False)
     assert _stan(tmp_path).konfig.opcje["wszystkie_naturalne_pozycje"] is False
+
+
+def test_wycena_wg_wyniku_w_rankingu(klient):
+    wynik = klient.post("/api/ranking", json={"pozycja": "Napastnik"}).json()
+    naglowki = [k["naglowek"] for k in wynik["kolumny"]]
+    assert "Wycena wg wyniku" in naglowki and "Niedowartościowanie" in naglowki
+    assert 0 <= wynik["model_wyceny"]["r2"] <= 1 and wynik["model_wyceny"]["liczba"] > 40
+    tanie = klient.post("/api/ranking", json={"pozycja": "Napastnik",
+                                               "filtry": {"min_niedowartosciowanie": 2}}).json()["wiersze"]
+    assert tanie and all(w["Niedowartościowanie"] >= 2 for w in tanie)
+    assert "niedowartościowany" in klient.get("/api/pozycja/Napastnik").json()["okazje"]

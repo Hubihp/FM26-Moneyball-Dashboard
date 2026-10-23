@@ -6,6 +6,7 @@ import { api, type Wiersz, type ZapytanieRankingu } from '../api';
 import TabelaRankingu from './TabelaRankingu';
 
 const OPISY: Record<string, string> = {
+  'niedowartościowany': 'gra jak zawodnik co najmniej 2 razy droższy (SCORE ≥ 55)',
   'kontrakt ≤ 6 mies.': 'może podpisać przedkontrakt z klubem zagranicznym',
   'kontrakt ≤ 12 mies.': 'klub sprzeda taniej, zanim straci go za darmo',
   'wolny agent': 'bez klubu - koszt to tylko pensja',

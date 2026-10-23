@@ -1,15 +1,25 @@
 import { Group, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 import { useMemo, useState } from 'react';
 
-import type { Kolumna, Wiersz } from '../api';
+import type { Kolumna, ModelWyceny, Wiersz } from '../api';
 import { eur } from '../format';
 import Wykres from './Wykres';
 
-type Props = { wiersze: Wiersz[]; kolumny: Kolumna[]; mojKlubUid: number | null | undefined; naWybor: (id: string) => void };
+type Props = {
+  wiersze: Wiersz[];
+  kolumny: Kolumna[];
+  modelWyceny: ModelWyceny | undefined;
+  mojKlubUid: number | null | undefined;
+  naWybor: (id: string) => void;
+};
+
+const MAKS_PUNKTOW_WYCENY = 1500;
+const PROG_SLABEGO_MODELU = 0.25;
+const procent = (x: number) => `${x > 0 ? '+' : ''}${Math.round(x)}%`;
 
 type Punkt = { value: number[]; id: string; name: string };
 
-export default function Wykresy({ wiersze, kolumny, mojKlubUid, naWybor }: Props) {
+export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naWybor }: Props) {
   const [ile, setIle] = useState(60);
   const [os, setOs] = useState<'Koszt' | 'Wartość_Numeryczna'>('Koszt');
   const statystyki = kolumny.filter((k) => k.statystyka);
@@ -34,6 +44,27 @@ export default function Wykresy({ wiersze, kolumny, mojKlubUid, naWybor }: Props
         : [],
     };
   }, [wiersze, ile, os, mojKlubUid]);
+
+  // Cena vs wycena wg wyniku: punkty nad przekatna sa tansze, niz wynika z gry
+  const wycena = useMemo(() => {
+    const czyMoj = (w: Wiersz) => mojKlubUid !== null && mojKlubUid !== undefined && w['Klub_UID'] === mojKlubUid;
+    const zCena = wiersze
+      .filter((w) => typeof w['Wartość_Numeryczna'] === 'number' && (w['Wartość_Numeryczna'] as number) > 0
+        && typeof w['Wycena wg wyniku'] === 'number')
+      .slice(0, MAKS_PUNKTOW_WYCENY);
+    const punkt = (w: Wiersz) => ({
+      value: [w['Wartość_Numeryczna'] as number, w['Wycena wg wyniku'] as number, (w['Wiek'] as number) ?? 0,
+        w['SCORE'] as number],
+      id: String(w['ID']),
+      name: String(w['Piłkarz']),
+    });
+    const wartosci = zCena.flatMap((w) => [w['Wartość_Numeryczna'] as number, w['Wycena wg wyniku'] as number]);
+    return {
+      punkty: zCena.filter((w) => !czyMoj(w)).map(punkt),
+      moi: zCena.filter(czyMoj).map(punkt),
+      zakres: wartosci.length ? [Math.min(...wartosci), Math.max(...wartosci)] : null,
+    };
+  }, [wiersze, mojKlubUid]);
 
   const top10 = useMemo(() => {
     if (!wybrana) return [];
@@ -84,6 +115,57 @@ export default function Wykresy({ wiersze, kolumny, mojKlubUid, naWybor }: Props
           }}
         />
       </div>
+
+      {wycena.zakres && (
+        <div>
+          <Title order={5}>Cena vs wycena wg wyniku</Title>
+          <Text size="xs" c="dimmed">
+            Wycena = cena typowa dla zawodnika tej pozycji z takim samym wynikiem, wiekiem i kontraktem. Punkty nad linią
+            są tańsze, niż wynika z ich gry (okazje), pod linią - przepłacone. Kolor = wiek, bursztynowe = twój klub.
+            {modelWyceny?.r2 !== null && modelWyceny?.r2 !== undefined && (
+              <> Model: R² {modelWyceny.r2.toFixed(2).replace('.', ',')} na {modelWyceny.liczba} zawodnikach
+                {modelWyceny.proc_za_10_score !== null ? `; +10 SCORE ≈ ${procent(modelWyceny.proc_za_10_score)} ceny` : ''}
+                {modelWyceny.proc_za_rok_mlodszy !== null
+                  ? `; rok młodszy ≈ ${procent(modelWyceny.proc_za_rok_mlodszy)} ceny` : ''}.</>
+            )}
+          </Text>
+          {modelWyceny?.r2 !== null && modelWyceny?.r2 !== undefined && modelWyceny.r2 < PROG_SLABEGO_MODELU && (
+            <Text size="xs" c="orange" mt={4}>
+              Model słabo tłumaczy ceny w tej puli (R² poniżej {PROG_SLABEGO_MODELU.toString().replace('.', ',')}) -
+              ceny zależą tu głównie od czegoś innego niż wynik, wiek i kontrakt. Traktuj niedowartościowanie ostrożnie.
+            </Text>
+          )}
+          <Wykres
+            wysokosc={480}
+            naKlik={(d) => d && typeof d === 'object' && 'id' in d && naWybor(String((d as { id: unknown }).id))}
+            opcje={{
+              grid: { left: 70, right: 90, top: 30, bottom: 50 },
+              tooltip: {
+                formatter: (p: unknown) => {
+                  const d = (p as { data: { name?: string; value: number[] } }).data;
+                  if (!d.name) return '';
+                  return `<b>${d.name}</b><br/>cena ${eur(d.value[0])}<br/>wycena ${eur(d.value[1])}`
+                    + `<br/>×${(d.value[1] / d.value[0]).toFixed(1).replace('.', ',')} · SCORE ${Math.round(d.value[3])}`;
+                },
+              },
+              legend: { top: 0, left: 'center', data: ['Zawodnicy', 'Twój klub', 'Cena = wycena'] },
+              xAxis: { type: 'log', name: 'Cena (€)', nameLocation: 'middle', nameGap: 30,
+                axisLabel: { formatter: (v: number) => eur(v) } },
+              yAxis: { type: 'log', name: 'Wycena wg wyniku (€)', axisLabel: { formatter: (v: number) => eur(v) } },
+              visualMap: { dimension: 2, min: 17, max: 35, calculable: true, right: 0, top: 'middle', seriesIndex: 0,
+                inRange: { color: ['#12b886', '#4dabf7', '#be4bdb'] }, text: ['wiek', ''] },
+              series: [
+                { name: 'Zawodnicy', type: 'scatter', symbolSize: 8, data: wycena.punkty },
+                { name: 'Twój klub', type: 'scatter', symbolSize: 11, data: wycena.moi,
+                  itemStyle: { color: '#fab005', borderColor: '#fff', borderWidth: 1 } },
+                { name: 'Cena = wycena', type: 'line', showSymbol: false, silent: true,
+                  data: [[wycena.zakres[0], wycena.zakres[0]], [wycena.zakres[1], wycena.zakres[1]]],
+                  lineStyle: { color: '#868e96', type: 'dashed' }, itemStyle: { color: '#868e96' } },
+              ],
+            }}
+          />
+        </div>
+      )}
 
       <SimpleGrid cols={1}>
         <Group align="end">

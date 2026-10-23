@@ -334,7 +334,8 @@ export default function App() {
             <Tabs.Panel value="wykresy" style={{ overflow: 'auto' }}>
               {zakladka === 'wykresy' && rankingPozycji && (
                 <Suspense fallback={<Loader m="md" />}>
-                  <Wykresy wiersze={wiersze} kolumny={rankingPozycji.kolumny} mojKlubUid={mojKlubUid} naWybor={setKarta} />
+                  <Wykresy wiersze={wiersze} kolumny={rankingPozycji.kolumny} modelWyceny={rankingPozycji.model_wyceny}
+                    mojKlubUid={mojKlubUid} naWybor={setKarta} />
                 </Suspense>
               )}
             </Tabs.Panel>

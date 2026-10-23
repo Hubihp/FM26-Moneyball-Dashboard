@@ -26,6 +26,8 @@ export function formatuj(wartosc: unknown, format: Format): string {
       return wartosc.toFixed(2).replace('.', ',');
     case 'eur':
       return eur(wartosc);
+    case 'mnoznik':
+      return `×${wartosc.toFixed(1).replace('.', ',')}`;
     case 'eur_tyg':
       return `${eur(wartosc / 52)} / tydz.`;
     default:
@@ -39,4 +41,12 @@ export function kolorWyniku(score: number): string {
   const r = t < 0.5 ? 255 : Math.round(255 - (t - 0.5) * 2 * 102);
   const g = t < 0.5 ? Math.round(153 + t * 2 * 102) : 255;
   return `rgb(${r}, ${g}, 153)`;
+}
+
+// Kolor niedowartosciowania (wycena wg wyniku / cena): zielony = tanszy, niz wynika z gry
+export function kolorNiedowartosciowania(x: number): string | undefined {
+  if (x >= 2) return '#69db7c';
+  if (x >= 1.4) return '#b2f2bb';
+  if (x <= 0.5) return '#ff8787';
+  return undefined;
 }
