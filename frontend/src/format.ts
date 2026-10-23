@@ -1,0 +1,42 @@
+import type { Format } from './api';
+
+export function eur(x: number | null | undefined): string {
+  if (x === null || x === undefined || Number.isNaN(x)) return '–';
+  if (x >= 1_000_000) return `${(x / 1_000_000).toFixed(1).replace('.', ',').replace(',0', '')} mln €`;
+  if (x >= 1_000) return `${Math.round(x / 1_000)} tys. €`;
+  return `${Math.round(x)} €`;
+}
+
+export function formatuj(wartosc: unknown, format: Format): string {
+  if (wartosc === null || wartosc === undefined || wartosc === '') return '–';
+  if (typeof wartosc !== 'number') {
+    if (format === 'data' && typeof wartosc === 'string') {
+      const [r, m, d] = wartosc.split('-');
+      return `${Number(d)}.${Number(m)}.${r}`;
+    }
+    return String(wartosc);
+  }
+  switch (format) {
+    case 'score':
+    case 'int':
+      return Math.round(wartosc).toString();
+    case 'pasek':
+      return `${Math.round(wartosc)}%`;
+    case 'dec2':
+      return wartosc.toFixed(2).replace('.', ',');
+    case 'eur':
+      return eur(wartosc);
+    case 'eur_tyg':
+      return `${eur(wartosc / 52)} / tydz.`;
+    default:
+      return wartosc.toFixed(1).replace('.', ',');
+  }
+}
+
+// Kolor wyniku: czerwony (slaby) -> zolty -> zielony (mocny), skala T (50 = przecietny)
+export function kolorWyniku(score: number): string {
+  const t = Math.max(0, Math.min(1, (score - 30) / 40));
+  const r = t < 0.5 ? 255 : Math.round(255 - (t - 0.5) * 2 * 102);
+  const g = t < 0.5 ? Math.round(153 + t * 2 * 102) : 255;
+  return `rgb(${r}, ${g}, 153)`;
+}

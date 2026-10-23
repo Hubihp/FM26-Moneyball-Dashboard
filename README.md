@@ -6,15 +6,24 @@ Narzędzie do wyszukiwania zawodników w Football Manager 26 w stylu Moneyball. 
 
 ```bash
 python -m pip install -r requirements.txt      # Python 3.12 lub nowszy
-streamlit run app.py
+python -m fm_moneyball                         # otwiera aplikację w przeglądarce (http://localhost:8765)
 ```
+
+Aplikacja działa lokalnie: serwer w Pythonie czyta zapisy gry z dysku, a interfejs otwiera się w przeglądarce. Do uruchomienia nie jest potrzebny Node.js, bo zbudowany interfejs jest w repozytorium. Poprzednia wersja (`streamlit run app.py`) nadal działa, np. do importu plików CSV.
+
+Co jest w aplikacji:
+- **Ranking:** tabela z sortowaniem i filtrami w kolumnach, płynna przy tysiącach zawodników. Filtry po lewej: ligi, wiek, cena, kończący się kontrakt, noga, minuty, pomijanie własnego klubu. Wagi statystyk zmieniasz suwakami. Twój klub jest podświetlony.
+- **Karta zawodnika:** kliknij nazwisko, żeby zobaczyć szczegóły, profil statystyk na radarze i podobnych zawodników.
+- **Porównanie:** do 4 zawodników na jednym radarze, razem z tabelą wartości.
+- **Wykresy:** wynik względem wartości (okazje w lewym górnym rogu) oraz top 10 w wybranej statystyce.
+- **Źródło danych:** folder zapisów gry (najnowszy zapis wczytywany automatycznie, także po każdym zapisie w grze), wgranie pliku `.fm` albo dane demo. Ustawienia są zapamiętywane między uruchomieniami.
 
 ### Windows krok po kroku
 
 1. Pobierz kod jako ZIP (na GitHubie: przycisk *Code*, potem *Download ZIP*) i rozpakuj go.
 2. W PowerShellu przejdź do rozpakowanego folderu (`cd "ścieżka\do\folderu"`) i sprawdź wersję Pythona poleceniem `py --version`. Potrzebna jest wersja 3.12 lub nowsza. Jeśli jej brakuje, uruchom `winget install -e --id Python.Python.3.12` i otwórz PowerShell na nowo.
 3. Zainstaluj biblioteki: `py -m pip install -r requirements.txt`. Na każdym nowym komputerze trzeba to zrobić raz.
-4. Uruchom aplikację: `py -m streamlit run app.py`. Diagnostykę zapisu opisuje sekcja niżej.
+4. Uruchom aplikację: `py -m fm_moneyball` (w folderze projektu). Przeglądarka otworzy się sama. Okno PowerShella musi pozostać otwarte, a `Ctrl+C` kończy pracę aplikacji.
 
 ## Źródła danych
 
@@ -55,8 +64,10 @@ Skrypt wypisze liczbę odczytanych zawodników i lig, pokrycie kolumn oraz prób
 ## Struktura
 
 ```
-app.py                     interfejs (Streamlit)
 fm_moneyball/              logika niezależna od interfejsu
+  __main__.py              uruchomienie: python -m fm_moneyball
+  serwer/                  API (FastAPI), stan i wczytywanie w tle; static/ = zbudowany frontend
+  analiza.py               ranking, filtry, kolumny, radar, podobni
   stale.py                 kolumny, cechy, wagi, mnożniki lig
   parsery.py               tekst z FM -> liczby
   schemat.py               kolumny pochodne, ID, raport wczytania
@@ -65,7 +76,11 @@ fm_moneyball/              logika niezależna od interfejsu
   zrodla/zapis_fm.py       plik zapisu .fm (fmsave)
   zrodla/folder.py         folder zapisów gry
 narzedzia/zbadaj_zapis.py  diagnostyka zapisu
+frontend/                  interfejs React + TypeScript (Vite, Mantine, AG Grid, ECharts)
+app.py                     poprzedni interfejs (Streamlit)
 tests/                     testy (pytest)
 ```
 
 Testy: `python -m pip install -r requirements-dev.txt && python -m pytest`
+
+Zmiany w interfejsie (wymaga Node.js 20+): `cd frontend && npm install && npm run build` zapisuje wynik do `fm_moneyball/serwer/static/`. Tryb deweloperski: `python -m fm_moneyball --bez-przegladarki` oraz `npm run dev` w katalogu `frontend`.

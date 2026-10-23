@@ -1,10 +1,15 @@
 # Python >= 3.12 (wymog fmsave)
-streamlit>=1.40
 pandas>=2.2
 numpy>=1.26
-altair>=5
-plotly>=5
-matplotlib>=3.8
 # Odczyt plikow zapisu FM26 (.fm). Wersja przypieta, bo format zapisu jest odtwarzany
 # metoda inzynierii wstecznej - po aktualizacji gry sprawdz nowsza wersje fmsave.
 fmsave[pandas]==0.5.11
+# Nowa aplikacja (py -m fm_moneyball): serwer API + zbudowany frontend React
+fastapi>=0.115
+uvicorn>=0.30
+python-multipart>=0.0.9
+# Poprzednia wersja interfejsu (streamlit run app.py) - nadal dziala, np. do importu CSV
+streamlit>=1.40
+altair>=5
+plotly>=5
+matplotlib>=3.8

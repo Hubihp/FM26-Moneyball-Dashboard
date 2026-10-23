@@ -1,0 +1,40 @@
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+.wiersz-moj-klub {
+  background-color: rgba(18, 184, 134, 0.14) !important;
+}
+
+.komorka-score {
+  color: #111;
+  font-weight: 700;
+  text-align: center;
+}
+
+.pasek {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.pasek-tlo {
+  position: absolute;
+  left: 0;
+  top: 25%;
+  height: 50%;
+  border-radius: 3px;
+  background: rgba(18, 184, 134, 0.35);
+}
+
+.pasek-tekst {
+  position: relative;
+  padding-left: 4px;
+}
