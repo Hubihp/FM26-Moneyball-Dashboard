@@ -98,7 +98,8 @@ def test_dzielenie_przez_zero():
 
 
 def _liga(nazwa="Ekstraklasa"):
-    return NS(etykieta=nazwa, database_id=1, nazwa=nazwa)
+    from fm_moneyball.zrodla.zapis_fm import Liga
+    return Liga(competition_id=1, database_id=1, nazwa=nazwa)
 
 
 def test_zbuduj_ramki_filtry_i_kolumny():
@@ -326,3 +327,45 @@ def test_mapa_nazw_z_kluczem_ujemnym(tmp_path):
     plik = tmp_path / "nazwy.csv"
     zapisz_nazwy_rozgrywek({-131: "Jupiler Pro League", 32: "Serie A"}, plik)
     assert wczytaj_nazwy_rozgrywek(plik) == {-131: "Jupiler Pro League", 32: "Serie A"}
+
+
+# --- wolni agenci, moj klub, dane ukryte, kontuzje, podsumowanie lig -------------------------------
+def test_wolni_agenci_i_moj_klub_poza_progiem_minut():
+    from fm_moneyball.zrodla.zapis_fm import WOLNY_AGENT
+    zawodnicy = [zawodnik(1, pozycje(stc=20), klub=None, club_name=None),
+                 zawodnik(2, pozycje(stc=20), klub=55),                     # moj klub, malo minut, bez ligi
+                 zawodnik(3, pozycje(stc=20), klub=10)]
+    liczniki = sumuj_statystyki([wiersz_statystyk(1), wiersz_statystyk(2, minutes=50),
+                                 wiersz_statystyk(3, minutes=50)], "league")
+    ramki = zbuduj_ramki(zawodnicy, liczniki, {10: _liga()}, OpcjeZapisu(), moje_kluby=[55])
+    nap = ramki["Napastnik"].set_index("UID")
+    assert set(nap.index) == {1, 2}
+    assert nap.loc[1, "Klub"] == WOLNY_AGENT and nap.loc[1, "Wartość_Numeryczna"] == 0 and bool(nap.loc[1, "Wolny_agent"])
+    bez = zbuduj_ramki(zawodnicy, liczniki, {10: _liga()}, OpcjeZapisu(wolni_agenci=False))
+    assert "Napastnik" not in bez
+
+
+def test_dane_ukryte_kontuzje_i_klucz_ligi():
+    z = zawodnik(1, pozycje(stc=20),
+                 attributes=NS(consistency=14, important_matches=9, injury_proneness=17, determination=12),
+                 personality=NS(professionalism=18, ambition=11, adaptability=7),
+                 on_loan=True, loan_end=date(2032, 6, 30))
+    ramki = zbuduj_ramki([z], sumuj_statystyki([wiersz_statystyk(1)], "league"), {10: _liga()}, OpcjeZapisu(),
+                         kontuzje={1: 3})
+    w = ramki["Napastnik"].iloc[0]
+    assert (w["Regularność"], w["Podatność na kontuzje"], w["Profesjonalizm"]) == (14, 17, 18)
+    assert w["Kontuzje_2_lata"] == 3 and w["Wypożyczenie_do"] == pd.Timestamp(2032, 6, 30)
+    assert w["Liga_klucz"] == 1 and w["Liga_domyslna"] == "Rozgrywki #1"
+
+
+def test_policz_kontuzje_i_podsumowanie_lig():
+    from fm_moneyball.zrodla.zapis_fm import Liga, podsumuj_ligi, policz_kontuzje
+    rekordy = [NS(kind="history", player_uid=1, date=date(2031, 9, 1)),
+               NS(kind="history", player_uid=1, date=date(2025, 1, 1)),     # za stara
+               NS(kind="typed", player_uid=1, date=date(2031, 9, 1)),       # inny magazyn
+               NS(kind="history", player_uid=2, date=date(2032, 1, 1))]
+    assert policz_kontuzje(rekordy, DZIS) == {1: 1, 2: 1}
+    kluby = [NS(uid=i, name=f"Klub {i}") for i in range(1, 4)]
+    ligi = podsumuj_ligi({1: Liga(5, 50, "Liga A"), 2: Liga(5, 50, "Liga A"), 3: Liga(6, None, None)}, kluby)
+    assert ligi[0] == {"klucz": 50, "domyslna": "Rozgrywki #50", "nazwa": "Liga A", "liczba": 2,
+                       "kluby": ["Klub 1", "Klub 2"]}

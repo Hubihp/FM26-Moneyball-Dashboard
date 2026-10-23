@@ -5,17 +5,17 @@ Uruchomienie: `python -m fm_moneyball` (patrz fm_moneyball/__main__.py).
 """
 import asyncio
 import json
-import shutil
 from datetime import date
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from fm_moneyball import analiza
-from fm_moneyball.stale import POZYCJE
+from fm_moneyball.ligi import wszystkie_mnozniki, zapisz_mnoznik
+from fm_moneyball.stale import MNOZNIK_NIEZNANEJ_LIGI, MNOZNIKI_LIG, POZYCJE
 from fm_moneyball.zrodla import folder as folder_zapisow
 from fm_moneyball.zrodla.csv_fm import wczytaj_csv
 from fm_moneyball.zrodla.zapis_fm import KURS_DOMYSLNY, zapisz_nazwy_rozgrywek, zbuduj_mape_nazw_lig
@@ -30,6 +30,7 @@ class OpcjeZapisuModel(BaseModel):
     kurs_waluty: float = KURS_DOMYSLNY
     wszystkie_naturalne_pozycje: bool = False
     tylko_kluby_w_lidze: bool = True
+    wolni_agenci: bool = True
 
 
 class ZrodloModel(BaseModel):
@@ -37,7 +38,23 @@ class ZrodloModel(BaseModel):
     folder: str | None = None
     plik: str | None = None
     sledz: bool | None = None
+    wczytaj_przy_starcie: bool | None = None
     opcje: OpcjeZapisuModel | None = None
+
+
+class LigaModel(BaseModel):
+    nazwa: str | None = None
+    mnoznik: float | None = None
+
+
+class MojKlubModel(BaseModel):
+    uid: int
+
+
+class KadraModel(BaseModel):
+    wagi: dict[str, dict[str, float]] = Field(default_factory=dict)   # pozycja -> wagi (brak = domyslne)
+    ignoruj_mnoznik: bool = False
+    k_baza: float = 5
 
 
 class FiltryModel(BaseModel):
@@ -50,6 +67,9 @@ class FiltryModel(BaseModel):
     kontrakt_mies: int | None = None
     min_minut: int = 0
     bez_mojego_klubu: bool = False
+    okazje: list[str] = Field(default_factory=list)
+    max_ryzyko: int | None = None
+    min_oplacalnosc: float | None = None
 
 
 class RankingModel(BaseModel):
@@ -87,14 +107,18 @@ def utworz_aplikacje(stan):
         tekst = stan.migawka()["meta"].get("data_gry")
         return date.fromisoformat(tekst) if tekst else None
 
-    def wynik_i_filtr(z: RankingModel):
-        df = pula(z.pozycja)
-        wagi = z.wagi if z.wagi is not None else analiza.wagi_domyslne(z.pozycja, df)
+    def policz(pozycja, wagi, ignoruj_mnoznik, k_baza):
+        df = pula(pozycja)
+        wagi = wagi if wagi is not None else analiza.wagi_domyslne(pozycja, df)
         wagi = {k: v for k, v in wagi.items() if k in df.columns}
-        policzona, pominiete = analiza.policz_wynik(df, wagi, z.ignoruj_mnoznik, z.k_baza)
+        policzona, pominiete = analiza.policz_wynik(df, wagi, ignoruj_mnoznik, k_baza)
+        return analiza.wzbogac(policzona, data_gry()), pominiete
+
+    def wynik_i_filtr(z: RankingModel):
+        policzona, pominiete = policz(z.pozycja, z.wagi, z.ignoruj_mnoznik, z.k_baza)
         filtry = analiza.Filtry(**z.filtry.model_dump())
         widoczni = analiza.filtruj(policzona, filtry, data_gry(), stan.migawka()["meta"].get("moj_klub_uid"))
-        return policzona, widoczni, pominiete
+        return policzona, analiza.oznacz_pareto(widoczni), pominiete
 
     # --- stan i zrodlo -------------------------------------------------------------------------
     @app.get("/api/stan")
@@ -116,6 +140,7 @@ def utworz_aplikacje(stan):
         if z.typ not in ("folder", "plik", "demo"):
             raise HTTPException(400, "Nieznany typ źródła.")
         stan.ustaw_zrodlo(z.typ, folder=z.folder, plik=z.plik, sledz=z.sledz,
+                          wczytaj_przy_starcie=z.wczytaj_przy_starcie,
                           opcje=z.opcje.model_dump() if z.opcje else None)
         return stan.migawka()
 
@@ -125,18 +150,66 @@ def utworz_aplikacje(stan):
         return stan.migawka()
 
     @app.post("/api/wgraj")
-    def wgraj_zapis(plik: UploadFile = File(...)):
-        if not (plik.filename or "").lower().endswith(".fm"):
+    async def wgraj_zapis(request: Request, nazwa: str):
+        """Surowa zawartosc pliku w ciele zapytania (bez multipart) - zapisywana raz, strumieniowo."""
+        if not nazwa.lower().endswith(".fm"):
             raise HTTPException(400, "To nie jest plik zapisu FM (.fm).")
         katalog = folder_zapisow.folder_kopii() / "wgrane"
         katalog.mkdir(parents=True, exist_ok=True)
         for stary in katalog.glob("*.fm"):
             stary.unlink(missing_ok=True)
-        cel = katalog / Path(plik.filename).name
+        cel = katalog / Path(nazwa).name
         with open(cel, "wb") as f:
-            shutil.copyfileobj(plik.file, f, length=4 * 2**20)
+            async for kawalek in request.stream():
+                f.write(kawalek)
+        if cel.stat().st_size == 0:
+            raise HTTPException(400, "Pusty plik.")
         stan.ustaw_zrodlo("plik", plik=str(cel))
         return stan.migawka()
+
+    # --- moj klub i ligi -----------------------------------------------------------------------
+    @app.post("/api/moj-klub")
+    def ustaw_moj_klub(z: MojKlubModel):
+        stan.ustaw_moj_klub(z.uid)
+        return stan.migawka()
+
+    @app.get("/api/ligi")
+    def ligi():
+        mnozniki = wszystkie_mnozniki(stan.plik_mnoznikow)
+        wynik = []
+        for liga in stan.ligi:
+            nazwa = liga.get("nazwa")
+            wynik.append({**liga, "mnoznik": mnozniki.get(nazwa) if nazwa else None})
+        return {"ligi": sorted(wynik, key=lambda l: (l["nazwa"] is not None, -l["liczba"])),
+                "znane_nazwy": sorted(set(MNOZNIKI_LIG) | set(mnozniki)),
+                "mnoznik_nieznanej": MNOZNIK_NIEZNANEJ_LIGI}
+
+    @app.put("/api/ligi/{klucz}")
+    def zmien_lige(klucz: int, z: LigaModel):
+        if not any(l["klucz"] == klucz for l in stan.ligi):
+            raise HTTPException(404, "Nieznana liga.")
+        nazwa = (z.nazwa or "").strip()
+        if nazwa:
+            zapisz_nazwy_rozgrywek({klucz: nazwa}, stan.plik_nazw)
+            if z.mnoznik is not None:
+                zapisz_mnoznik(nazwa, z.mnoznik, stan.plik_mnoznikow)
+        stan.zastosuj_ligi()
+        return ligi()
+
+    @app.post("/api/moja-kadra")
+    def kadra(z: KadraModel):
+        meta = stan.migawka()["meta"]
+        uid = meta.get("moj_klub_uid")
+        if uid is None:
+            raise HTTPException(409, "Nie wiem, którym klubem grasz - wczytaj zapis kariery.")
+        wynik = []
+        for pozycja in POZYCJE:
+            df = stan.pula(pozycja)
+            if df is None or df.empty:
+                continue
+            policzona, _ = policz(pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
+            wynik.append(analiza.moja_kadra(pozycja, policzona, uid, data_gry()))
+        return {"klub": meta.get("moj_klub"), "pozycje": sorted(wynik, key=lambda p: -(p["luka"] or 0))}
 
     @app.post("/api/nazwy-lig")
     def naucz_nazw_lig(pliki: list[UploadFile] = File(...)):
@@ -149,12 +222,12 @@ def utworz_aplikacje(stan):
                 ramki.append(wczytaj_csv(p.file.read())[0])
             except Exception as e:
                 raise HTTPException(400, f"Nie udało się wczytać {p.filename}: {e}")
-        sciezka = stan._klucz[0] if stan._klucz else None
+        sciezka = stan._sciezka_odczytu
         if not sciezka:
             raise HTTPException(409, "Brak wczytanego zapisu.")
         mapa = zbuduj_mape_nazw_lig(sciezka, ramki)
         if mapa:
-            zapisz_nazwy_rozgrywek(mapa)
+            zapisz_nazwy_rozgrywek(mapa, stan.plik_nazw)
             stan.przeladuj(wymus=True)
         return {"rozpoznane": {str(k): v for k, v in sorted(mapa.items())}}
 
@@ -191,6 +264,8 @@ def utworz_aplikacje(stan):
             "wagi_domyslne": analiza.wagi_domyslne(pozycja, df),
             "ma_kontrakty": bool(df['Wygasa_Data'].notna().any()),
             "ma_ukryte": 'CA' in df.columns and bool(df['CA'].notna().any()),
+            "ma_ryzyko": 'Podatność na kontuzje' in df.columns and bool(df['Podatność na kontuzje'].notna().any()),
+            "okazje": list(analiza.OKAZJE),
         }
 
     @app.post("/api/ranking")

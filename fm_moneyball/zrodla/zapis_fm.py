@@ -81,6 +81,7 @@ class OpcjeZapisu:
     kurs_waluty: float = KURS_DOMYSLNY
     wszystkie_naturalne_pozycje: bool = False
     tylko_kluby_w_lidze: bool = True
+    wolni_agenci: bool = True             # zawodnicy bez klubu (z minutami w sezonie) w puli
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,8 @@ class WynikZapisu:
     build: str = ""
     ostrzezenia: list = field(default_factory=list)
     liczniki: dict = field(default_factory=dict)
+    moje_kluby: list = field(default_factory=list)     # [{"uid", "nazwa"}] - wszystkie prowadzone druzyny
+    ligi: list = field(default_factory=list)           # podsumowanie lig: klucz, domyslna, liczba, kluby
 
 
 # =============================================================================
@@ -204,22 +207,43 @@ def statystyki_kanoniczne(liczniki):
     return wynik
 
 
-def wiersz_zawodnika(zawodnik, liczniki, liga, opcje):
-    """Rekord Player (+ jego liczniki sezonowe i liga klubu) -> slownik kolumn aplikacji."""
+WOLNY_AGENT = "Wolny agent"
+
+# Dane ukryte (skala 1-20): atrybut/cecha rekordu fmsave -> kolumna aplikacji
+ATRYBUTY_UKRYTE = {"consistency": "Regularność", "important_matches": "Ważne mecze",
+                   "injury_proneness": "Podatność na kontuzje", "determination": "Determinacja"}
+OSOBOWOSC = {"professionalism": "Profesjonalizm", "ambition": "Ambicja", "adaptability": "Adaptacja"}
+
+
+def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0):
+    """Rekord Player (+ jego liczniki sezonowe, liga klubu, liczba kontuzji) -> slownik kolumn aplikacji."""
     kurs = opcje.kurs_waluty
+    wolny = zawodnik.club_uid is None
     wartosc = None
-    if str(getattr(zawodnik, "transfer_value_state", "ok")) == "ok" and zawodnik.transfer_value is not None:
+    if wolny:
+        wartosc = 0.0       # wolny agent: bez kwoty odstepnego
+    elif str(getattr(zawodnik, "transfer_value_state", "ok")) == "ok" and zawodnik.transfer_value is not None:
         wartosc = zawodnik.transfer_value * kurs
     kontrakt = getattr(zawodnik, "contract", None)
     tygodniowka = kontrakt.wage * kurs if kontrakt is not None and kontrakt.wage is not None else None
     koniec = kontrakt.end if kontrakt is not None else None
     ability = getattr(zawodnik, "ability", None)
+    atrybuty = getattr(zawodnik, "attributes", None)
+    osobowosc = getattr(zawodnik, "personality", None)
+    koniec_wyp = getattr(zawodnik, "loan_end", None) if getattr(zawodnik, "on_loan", False) else None
+    domyslna = WOLNY_AGENT if wolny else (Liga(liga.competition_id, liga.database_id, None).etykieta if liga else None)
 
     wiersz = {
         "Piłkarz": zawodnik.name,
         "Wiek": zawodnik.age,
-        "Klub": zawodnik.club_name,
-        "Liga": liga.etykieta if liga else None,
+        "Klub": WOLNY_AGENT if wolny else zawodnik.club_name,
+        "Liga": WOLNY_AGENT if wolny else (liga.etykieta if liga else None),
+        "Liga_klucz": liga.database_id if liga and not wolny else None,
+        "Liga_domyslna": domyslna,
+        "Wolny_agent": wolny,
+        "Reputacja_klubu": getattr(zawodnik, "club_reputation", None),
+        "Wypożyczenie_do": pd.Timestamp(koniec_wyp) if koniec_wyp else pd.NaT,
+        "Kontuzje_2_lata": kontuzje,
         "Pozycja": ", ".join(k.upper() for k in (zawodnik.natural_positions or ())) or None,
         "Preferowana noga": preferowana_noga(zawodnik.left_foot, zawodnik.right_foot),
         "Cena": fmt_eur(wartosc),
@@ -234,31 +258,44 @@ def wiersz_zawodnika(zawodnik, liczniki, liga, opcje):
         "UID": zawodnik.uid,
         "Klub_UID": zawodnik.club_uid,
     }
+    for pole, kolumna in ATRYBUTY_UKRYTE.items():
+        wiersz[kolumna] = getattr(atrybuty, pole, None) if atrybuty is not None else None
+    for pole, kolumna in OSOBOWOSC.items():
+        wiersz[kolumna] = getattr(osobowosc, pole, None) if osobowosc is not None else None
     wiersz.update(statystyki_kanoniczne(liczniki))
     return wiersz
 
 
-def zbuduj_ramki(zawodnicy, liczniki_po_uid, liga_klubu, opcje):
+def zbuduj_ramki(zawodnicy, liczniki_po_uid, liga_klubu, opcje, moje_kluby=(), kontuzje=None):
     """
     Zawodnicy + liczniki + liga kazdego klubu -> {pozycja: kanoniczny DataFrame}.
-    Pomija zawodnikow bez klubu, bez wieku, ponizej progu minut i (opcjonalnie) z klubow,
-    ktorych nie udalo sie przypisac do ligi krajowej.
+    Pomija zawodnikow bez wieku, ponizej progu minut i (opcjonalnie) z klubow, ktorych nie udalo
+    sie przypisac do ligi krajowej. Wolni agenci trafiaja do puli, gdy opcje.wolni_agenci.
+    Zawodnicy moich klubow (`moje_kluby`) trafiaja zawsze - potrzebni do analizy kadry.
     """
+    moje_kluby = set(moje_kluby)
+    kontuzje = kontuzje or {}
     wiersze = {p: [] for p in POZYCJE}
     for zawodnik in zawodnicy:
-        if zawodnik.club_uid is None or not zawodnik.age:
+        if not zawodnik.age:
             continue
-        liga = liga_klubu.get(zawodnik.club_uid)
-        if liga is None and opcje.tylko_kluby_w_lidze:
-            continue
+        moj = zawodnik.club_uid in moje_kluby
+        if zawodnik.club_uid is None:
+            if not opcje.wolni_agenci:
+                continue
+            liga = None
+        else:
+            liga = liga_klubu.get(zawodnik.club_uid)
+            if liga is None and opcje.tylko_kluby_w_lidze and not moj:
+                continue
         liczniki = liczniki_po_uid.get(zawodnik.uid)
         minuty = (liczniki or {}).get("minutes") or 0
-        if minuty < opcje.min_minut:
+        if minuty < opcje.min_minut and not moj:
             continue
         grupy = grupy_pozycji(zawodnik.positions, opcje.wszystkie_naturalne_pozycje)
         if not grupy:
             continue
-        wiersz = wiersz_zawodnika(zawodnik, liczniki, liga, opcje)
+        wiersz = wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje.get(zawodnik.uid, 0))
         for grupa in grupy:
             wiersze[grupa].append(wiersz)
     return {p: dopelnij_schemat(pd.DataFrame(w)) for p, w in wiersze.items() if w}
@@ -563,43 +600,103 @@ def kandydaci_lig_lacznie(zapis, kluby, data_gry, ostrzezenia=None, statystyki=N
     return polacz_kandydatow(z_terminarza, z_tabel)
 
 
-def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None):
-    """Plik .fm -> WynikZapisu (ramki dla wszystkich pozycji + metadane)."""
+def policz_kontuzje(rekordy, data_gry, dni=730):
+    """Liczba kontuzji kazdego zawodnika w ostatnich `dni` (z historii kontuzji w zapisie)."""
+    od = data_gry - timedelta(days=dni) if data_gry else None
+    licznik = Counter()
+    for r in rekordy:
+        if str(getattr(r, "kind", "")) != "history" or r.player_uid is None:
+            continue
+        if od is not None and (r.date is None or r.date < od):
+            continue
+        licznik[r.player_uid] += 1
+    return licznik
+
+
+def podsumuj_ligi(liga_klubu, kluby, limit=5):
+    """[{klucz, domyslna, nazwa, liczba, kluby}] - do edycji nazw i mnoznikow w aplikacji."""
+    nazwa_klubu = {k.uid: k.name for k in kluby}
+    grupy = {}
+    for uid, liga in liga_klubu.items():
+        g = grupy.setdefault(liga.competition_id, {"klucz": liga.database_id,
+                                                   "domyslna": Liga(liga.competition_id, liga.database_id, None).etykieta,
+                                                   "nazwa": liga.nazwa, "kluby": []})
+        g["kluby"].append(nazwa_klubu.get(uid) or "?")
+    wynik = []
+    for g in grupy.values():
+        wynik.append({**g, "liczba": len(g["kluby"]), "kluby": sorted(g["kluby"])[:limit]})
+    return sorted(wynik, key=lambda g: -g["liczba"])
+
+
+ETAPY_WCZYTYWANIA = ("Otwieranie zapisu", "Kluby i terminarz", "Zawodnicy", "Statystyki sezonu",
+                     "Kontuzje", "Budowanie tabel")
+
+
+def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
+    """
+    Plik .fm -> WynikZapisu (ramki dla wszystkich pozycji + metadane).
+    `postep(nr, nazwa)` jest wywolywane przed kazdym etapem (ETAPY_WCZYTYWANIA); czasy etapow
+    trafiaja do liczniki["czasy_s"].
+    """
+    import time
     import warnings
 
     import fmsave
     nazwy = wczytaj_nazwy_rozgrywek() if nazwy is None else nazwy
     ostrzezenia = []
+    czasy = {}
+    zegar = {"etap": None, "start": time.perf_counter()}
+
+    def etap(nr):
+        teraz = time.perf_counter()
+        if zegar["etap"] is not None:
+            czasy[zegar["etap"]] = round(teraz - zegar["start"], 1)
+        zegar.update(etap=ETAPY_WCZYTYWANIA[nr] if nr is not None else None, start=teraz)
+        if postep and nr is not None:
+            postep(nr, ETAPY_WCZYTYWANIA[nr])
+
     with warnings.catch_warnings(record=True) as zlapane:
         warnings.simplefilter("always", fmsave.FmsaveWarning)
+        etap(0)
         with fmsave.open(sciezka) as zapis:
             info = zapis.info
+            etap(1)
             kluby = list(zapis.clubs())
             kandydaci = kandydaci_lig_lacznie(zapis, kluby, info.game_date, ostrzezenia)
             liga_klubu = ligi_klubow([], [], kluby, nazwy, kandydaci=kandydaci)
+            zarzadzane = list(zapis.managed_clubs())
+            etap(2)
             zawodnicy = list(zapis.players())
+            etap(3)
             rodzaj = fmsave.SeasonStatsKind(opcje.rodzaj_statystyk)
             liczniki = sumuj_statystyki(zapis.player_season_stats().where(kind=rodzaj), opcje.rodzaj_statystyk)
-            zarzadzane = list(zapis.managed_clubs())
+            etap(4)
+            try:
+                kontuzje = policz_kontuzje(zapis.injuries(), info.game_date)
+            except Exception as e:   # historia kontuzji jest dodatkiem - jej brak nie blokuje reszty
+                ostrzezenia.append(f"Nie udało się odczytać historii kontuzji ({e}).")
+                kontuzje = {}
     for w in zlapane:
         if issubclass(w.category, fmsave.UnknownBuildWarning):
             ostrzezenia.append(f"Nieznana wersja gry - fmsave może czytać dane błędnie: {w.message}")
 
-    dane = zbuduj_ramki(zawodnicy, liczniki, liga_klubu, opcje)
-    bez_nazwy = {l.etykieta for l in liga_klubu.values() if not l.nazwa}
-    if bez_nazwy:
-        ostrzezenia.append(f"{len(bez_nazwy)} lig bez nazwy (pokazane jako 'Rozgrywki #id'). "
-                           "Wgraj stare eksporty CSV w sekcji 'Nazwy lig', aby je rozpoznać.")
+    etap(5)
+    moje = [{"uid": m.club_uid, "nazwa": m.club_name} for m in zarzadzane]
+    dane = zbuduj_ramki(zawodnicy, liczniki, liga_klubu, opcje, [m["uid"] for m in moje], kontuzje)
+    etap(None)
     return WynikZapisu(
         dane=dane,
         data_gry=info.game_date,
-        moj_klub=zarzadzane[0].club_name if zarzadzane else None,
-        moj_klub_uid=zarzadzane[0].club_uid if zarzadzane else None,
+        moj_klub=moje[0]["nazwa"] if moje else None,
+        moj_klub_uid=moje[0]["uid"] if moje else None,
         nazwa_zapisu=info.save_name,
         build=info.build,
         ostrzezenia=ostrzezenia,
         liczniki={"zawodnicy_w_zapisie": len(zawodnicy), "z_statystykami": len(liczniki),
-                  "kluby_z_liga": len(liga_klubu), "w_aplikacji": sum(len(d) for d in dane.values())},
+                  "kluby_z_liga": len(liga_klubu), "w_aplikacji": sum(len(d) for d in dane.values()),
+                  "czasy_s": czasy},
+        moje_kluby=moje,
+        ligi=podsumuj_ligi(liga_klubu, kluby),
     )
 
 
