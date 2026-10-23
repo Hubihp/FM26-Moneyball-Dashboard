@@ -57,6 +57,11 @@ Dośrodkowania, 100% sytuacje i sprinty pochodzą tylko z zapisu gry. Przy impor
 3. Zainstaluj biblioteki: `py -m pip install -r requirements.txt`. Na każdym nowym komputerze trzeba to zrobić raz.
 4. Uruchom aplikację: `py -m fm_moneyball` (w folderze projektu). Przeglądarka otworzy się sama. Okno PowerShella musi pozostać otwarte, a `Ctrl+C` kończy pracę aplikacji.
 
+### Aktualizacja
+
+- **Bez gita (folder z ZIP-a):** zamknij aplikację (Ctrl+C w jej oknie) i kliknij dwukrotnie `aktualizuj.bat` w folderze aplikacji. Skrypt pobierze najnowszą wersję z GitHuba, podmieni pliki i doinstaluje brakujące biblioteki. Twoje nazwy lig i krajów, ustawienia oraz cache są w `%USERPROFILE%\.fm_moneyball` i zostają bez zmian.
+- **Z gitem:** zainstaluj go raz (`winget install -e --id Git.Git`), pobierz aplikację poleceniem `git clone -b claude/optimistic-lamport-we8t1j https://github.com/Hubihp/FM26-Moneyball-Dashboard.git`, a potem aktualizuj przez `git pull` w jej folderze. Polecenie `git pull` nie działa w folderze rozpakowanym z ZIP-a („not a git repository”).
+
 ## Źródła danych
 
 | Źródło | Jak działa |
