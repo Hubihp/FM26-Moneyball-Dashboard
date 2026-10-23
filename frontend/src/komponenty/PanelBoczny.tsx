@@ -39,7 +39,7 @@ type Props = {
 
 export const PUSTE_FILTRY: Filtry = {
   ligi: [], nogi: [], wiek: null, cena: null, bez_ceny: true, szukaj: '', kontrakt_mies: null, min_minut: 0,
-  bez_mojego_klubu: false,
+  bez_mojego_klubu: false, okazje: [], max_ryzyko: null, min_oplacalnosc: null,
 };
 
 // Suwak ceny w skali pierwiastkowej: wiecej precyzji przy niskich kwotach
@@ -99,6 +99,23 @@ export default function PanelBoczny(p: Props) {
             ]} />
         )}
 
+        {meta?.okazje && (
+          <MultiSelect label="Okazje transferowe" placeholder="Dowolne" clearable data={meta.okazje} value={filtry.okazje}
+            onChange={(v) => zmien('okazje', v)} />
+        )}
+
+        <NumberInput label="Min. opłacalność" description="Punkty SCORE ponad przeciętnego na 1 mln € kosztu (3 lata)"
+          min={0} step={0.5} decimalScale={2} value={filtry.min_oplacalnosc ?? ''}
+          onChange={(v) => zmien('min_oplacalnosc', v === '' ? null : Number(v))} />
+
+        {meta?.ma_ryzyko && p.ustawienia.pokaz_ukryte && (
+          <div>
+            <Text size="sm" fw={500}>Maks. ryzyko: {filtry.max_ryzyko ?? 100}</Text>
+            <Slider min={0} max={100} step={5} label={null} value={filtry.max_ryzyko ?? 100}
+              onChange={(v) => zmien('max_ryzyko', v >= 100 ? null : v)} />
+          </div>
+        )}
+
         <MultiSelect label="Lepsza noga" placeholder="Dowolna" clearable data={meta?.nogi ?? []} value={filtry.nogi}
           onChange={(v) => zmien('nogi', v)} />
 
@@ -148,7 +165,7 @@ export default function PanelBoczny(p: Props) {
                 <Switch label="Ignoruj mnożnik ligowy" checked={p.ustawienia.ignoruj_mnoznik}
                   onChange={(e) => p.setUstawienia({ ...p.ustawienia, ignoruj_mnoznik: e.currentTarget.checked })} />
                 {meta?.ma_ukryte && (
-                  <Switch label="Pokaż dane ukryte w grze (CA/PA)" checked={p.ustawienia.pokaz_ukryte}
+                  <Switch label="Pokaż dane ukryte w grze (CA/PA, ryzyko)" checked={p.ustawienia.pokaz_ukryte}
                     onChange={(e) => p.setUstawienia({ ...p.ustawienia, pokaz_ukryte: e.currentTarget.checked })} />
                 )}
               </Stack>

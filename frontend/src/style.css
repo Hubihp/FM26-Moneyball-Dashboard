@@ -8,8 +8,27 @@ body {
   margin: 0;
 }
 
+/* Zawodnicy mojego klubu: bursztynowe tlo, pasek z lewej i pogrubione nazwisko */
 .wiersz-moj-klub {
-  background-color: rgba(18, 184, 134, 0.14) !important;
+  background-color: rgba(250, 176, 5, 0.16) !important;
+}
+
+.ag-pinned-left-cols-container .wiersz-moj-klub {
+  box-shadow: inset 4px 0 0 #fab005;
+}
+
+.komorka-moj-klub {
+  color: #fcc419;
+}
+
+.legenda-moj-klub {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: rgba(250, 176, 5, 0.35);
+  box-shadow: inset 3px 0 0 #fab005;
+  vertical-align: middle;
 }
 
 .komorka-score {

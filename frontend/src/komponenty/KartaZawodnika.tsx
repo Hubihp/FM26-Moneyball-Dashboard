@@ -1,4 +1,4 @@
-import { Badge, Button, Drawer, Group, Loader, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { Badge, Button, Drawer, Group, Loader, SimpleGrid, Stack, Table, Text, Title, Tooltip } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 
 import { api, type Wiersz, type ZapytanieRankingu } from '../api';
@@ -10,6 +10,7 @@ type Props = {
   wiersz: Wiersz | undefined;
   zapytanie: ZapytanieRankingu;
   wersja: number;
+  mojKlubUid: number | null | undefined;
   zamknij: () => void;
   otworz: (id: string) => void;
   dodajDoPorownania: (id: string) => void;
@@ -24,7 +25,10 @@ function Pole({ etykieta, wartosc }: { etykieta: string; wartosc: string }) {
   );
 }
 
-export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, zamknij, otworz, dodajDoPorownania }: Props) {
+const UKRYTE = ['Regularność', 'Ważne mecze', 'Podatność na kontuzje', 'Determinacja', 'Profesjonalizm', 'Ambicja',
+  'Adaptacja'];
+
+export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubUid, zamknij, otworz, dodajDoPorownania }: Props) {
   const radar = useQuery({
     queryKey: ['radar', wersja, zapytanie.pozycja, id],
     queryFn: () => api.radar(zapytanie.pozycja, [id!]),
@@ -38,16 +42,28 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, zamknij,
 
   const w = wiersz ?? {};
   const seria = radar.data?.seria[0];
+  const moj = (x: Wiersz) => mojKlubUid !== null && mojKlubUid !== undefined && x['Klub_UID'] === mojKlubUid;
+  const okazje = typeof w['Okazje'] === 'string' && w['Okazje'] ? (w['Okazje'] as string).split('; ') : [];
+  const ukryte = UKRYTE.filter((k) => typeof w[k] === 'number');
 
   return (
     <Drawer opened={!!id} onClose={zamknij} position="right" size="xl" title={<Title order={4}>{String(w['Piłkarz'] ?? id ?? '')}</Title>}>
       {id && (
         <Stack>
           <Group gap="xs">
+            {moj(w) && <Badge color="yellow" variant="filled">Twój zawodnik</Badge>}
             <Badge variant="light">{String(w['Klub'] ?? '–')}</Badge>
             <Badge variant="light" color="gray">{String(w['Liga'] ?? '–')}</Badge>
             {w['Pozycja'] ? <Badge variant="outline">{String(w['Pozycja'])}</Badge> : null}
-            {w['Wypożyczony'] ? <Badge color="orange">wypożyczony</Badge> : null}
+            {w['Wypożyczony'] ? (
+              <Badge color="orange">wypożyczony{w['Wypożyczenie_do'] ? ` do ${formatuj(w['Wypożyczenie_do'], 'data')}` : ''}</Badge>
+            ) : null}
+            {w['Pareto'] ? (
+              <Tooltip label="Nikt w tabeli nie ma jednocześnie wyższego SCORE i niższego kosztu">
+                <Badge color="teal" variant="outline">granica opłacalności</Badge>
+              </Tooltip>
+            ) : null}
+            {okazje.map((o) => <Badge key={o} color="grape" variant="light">{o}</Badge>)}
           </Group>
           <SimpleGrid cols={4}>
             <Pole etykieta="SCORE" wartosc={formatuj(w['SCORE'], 'score')} />
@@ -60,7 +76,22 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, zamknij,
             <Pole etykieta="Minuty" wartosc={formatuj(w['Minuty'], 'int')} />
             <Pole etykieta="Noga" wartosc={String(w['Preferowana noga'] ?? '–')} />
             {w['CA'] !== undefined ? <Pole etykieta="CA / PA" wartosc={`${w['CA'] ?? '–'} / ${w['PA'] ?? '–'}`} /> : null}
+            <Pole etykieta="Koszt (cena + 3 lata pensji)" wartosc={eur(w['Koszt'] as number | null)} />
+            <Pole etykieta="Opłacalność" wartosc={formatuj(w['Opłacalność'], 'dec2')} />
+            {w['Ryzyko'] !== undefined ? <Pole etykieta="Ryzyko (0-100)" wartosc={formatuj(w['Ryzyko'], 'int')} /> : null}
+            {w['Kontuzje_2_lata'] !== undefined ? (
+              <Pole etykieta="Kontuzje (2 lata)" wartosc={formatuj(w['Kontuzje_2_lata'], 'int')} />
+            ) : null}
           </SimpleGrid>
+
+          {ukryte.length > 0 && (
+            <>
+              <Title order={6}>Atrybuty ukryte i osobowość (1-20)</Title>
+              <SimpleGrid cols={4}>
+                {ukryte.map((k) => <Pole key={k} etykieta={k} wartosc={formatuj(w[k], 'int')} />)}
+              </SimpleGrid>
+            </>
+          )}
 
           <Button variant="light" onClick={() => dodajDoPorownania(id)}>Dodaj do porównania</Button>
 
@@ -96,8 +127,9 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, zamknij,
               </Table.Thead>
               <Table.Tbody>
                 {podobni.data.wiersze.map((p) => (
-                  <Table.Tr key={String(p['ID'])} style={{ cursor: 'pointer' }} onClick={() => otworz(String(p['ID']))}>
-                    <Table.Td>{String(p['Piłkarz'])}</Table.Td>
+                  <Table.Tr key={String(p['ID'])} style={{ cursor: 'pointer' }} onClick={() => otworz(String(p['ID']))}
+                    className={moj(p) ? 'wiersz-moj-klub' : undefined}>
+                    <Table.Td fw={moj(p) ? 700 : undefined} c={moj(p) ? 'yellow' : undefined}>{String(p['Piłkarz'])}</Table.Td>
                     <Table.Td>{String(p['Klub'] ?? '–')}</Table.Td>
                     <Table.Td>{formatuj(p['Wiek'], 'int')}</Table.Td>
                     <Table.Td>{formatuj(p['SCORE'], 'score')}</Table.Td>

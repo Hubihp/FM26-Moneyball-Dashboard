@@ -182,6 +182,7 @@ def utworz_aplikacje(stan):
             wynik.append({**liga, "mnoznik": mnozniki.get(nazwa) if nazwa else None})
         return {"ligi": sorted(wynik, key=lambda l: (l["nazwa"] is not None, -l["liczba"])),
                 "znane_nazwy": sorted(set(MNOZNIKI_LIG) | set(mnozniki)),
+                "mnozniki": mnozniki,
                 "mnoznik_nieznanej": MNOZNIK_NIEZNANEJ_LIGI}
 
     @app.put("/api/ligi/{klucz}")
@@ -191,7 +192,7 @@ def utworz_aplikacje(stan):
         nazwa = (z.nazwa or "").strip()
         if nazwa:
             zapisz_nazwy_rozgrywek({klucz: nazwa}, stan.plik_nazw)
-            if z.mnoznik is not None:
+            if z.mnoznik is not None and wszystkie_mnozniki(stan.plik_mnoznikow).get(nazwa) != z.mnoznik:
                 zapisz_mnoznik(nazwa, z.mnoznik, stan.plik_mnoznikow)
         stan.zastosuj_ligi()
         return ligi()

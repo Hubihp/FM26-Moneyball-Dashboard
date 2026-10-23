@@ -283,8 +283,9 @@ def podobni(pozycja, pula, widoczni_idx, id_, k_baza=5, n=10):
 
 
 # --- moja kadra -----------------------------------------------------------------------------------
-POLA_KADRY = ['ID', 'Piłkarz', 'Klub_UID', 'Wiek', 'Pozycja', 'Minuty', 'SCORE', 'Percentyl', 'Wiarygodność',
-              'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Wygasa_Data', 'Lata_kontraktu', 'Wypożyczony']
+POLA_KADRY = ['ID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Wiek', 'Pozycja', 'Preferowana noga', 'Minuty', 'SCORE',
+              'Percentyl', 'Wiarygodność', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Wygasa_Data', 'Lata_kontraktu',
+              'Wypożyczony', 'Koszt', 'Opłacalność', 'Okazje']
 
 
 def moja_kadra(pozycja, pula_policzona, moj_klub_uid, data_gry=None, percentyl_celu=80):

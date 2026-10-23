@@ -1,10 +1,29 @@
-import { Alert, AppShell, Badge, Box, Button, Center, Group, Loader, Stack, Tabs, Text, Title, Tooltip } from '@mantine/core';
+import {
+  Alert,
+  AppShell,
+  Badge,
+  Box,
+  Button,
+  Center,
+  Group,
+  Loader,
+  Progress,
+  Select,
+  Stack,
+  Tabs,
+  Text,
+  Title,
+  Tooltip,
+} from '@mantine/core';
 import { useDebouncedValue, useLocalStorage } from '@mantine/hooks';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { api, type Filtry, type ZapytanieRankingu } from './api';
+import { api, type Filtry, type Stan, type Wiersz, type ZapytanieRankingu } from './api';
 import KartaZawodnika from './komponenty/KartaZawodnika';
+import Ligi from './komponenty/Ligi';
+import MojaKadra from './komponenty/MojaKadra';
+import Okazje from './komponenty/Okazje';
 import PanelBoczny, { PUSTE_FILTRY, type Ustawienia } from './komponenty/PanelBoczny';
 import PanelZrodla from './komponenty/PanelZrodla';
 import Porownanie from './komponenty/Porownanie';
@@ -23,8 +42,36 @@ function useZdarzeniaSerwera() {
   }, [klient]);
 }
 
+// Etap odczytu zapisu i czas od startu (odswiezany co sekunde)
+function PostepWczytywania({ stan, szeroki }: { stan: Stan; szeroki?: boolean }) {
+  const [teraz, setTeraz] = useState(() => Date.now() / 1000);
+  useEffect(() => {
+    const t = setInterval(() => setTeraz(Date.now() / 1000), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const etap = stan.etap;
+  const sekundy = etap ? Math.max(0, Math.round(teraz - etap.start)) : 0;
+  if (!szeroki) {
+    return (
+      <Group gap={6} wrap="nowrap">
+        <Loader size="xs" />
+        <Text size="sm" c="dimmed">{etap ? `${etap.nazwa} (${etap.nr + 1}/${etap.z}) · ${sekundy} s` : stan.komunikat}</Text>
+      </Group>
+    );
+  }
+  return (
+    <Stack w={420} gap={6}>
+      <Text>{stan.komunikat}</Text>
+      {etap && <Progress value={((etap.nr + 0.5) / etap.z) * 100} animated />}
+      {etap && <Text size="sm" c="dimmed">Etap {etap.nr + 1} z {etap.z} · {sekundy} s</Text>}
+      <Text size="xs" c="dimmed">Kolejne otwarcie tego samego zapisu będzie natychmiastowe.</Text>
+    </Stack>
+  );
+}
+
 export default function App() {
   useZdarzeniaSerwera();
+  const klient = useQueryClient();
   const [panelZrodla, setPanelZrodla] = useState(false);
   const [pozycja, setPozycja] = useLocalStorage({ key: 'fm-pozycja', defaultValue: 'Napastnik' });
   const [ustawienia, setUstawienia] = useLocalStorage<Ustawienia>({
@@ -34,9 +81,19 @@ export default function App() {
   const [filtryPozycji, setFiltryPozycji] = useState<Record<string, Filtry>>({});
   const [wybrani, setWybrani] = useState<Record<string, string[]>>({});
   const [karta, setKarta] = useState<string | null>(null);
+  const [kartaWiersz, setKartaWiersz] = useState<Wiersz | undefined>(undefined);
   const [zakladka, setZakladka] = useState<string | null>('ranking');
 
   const stan = useQuery({ queryKey: ['stan'], queryFn: api.stan, staleTime: 0 });
+
+  // Bez zrodla danych po starcie od razu pytamy, co wczytac
+  const zapytano = useRef(false);
+  useEffect(() => {
+    if (!zapytano.current && stan.data) {
+      zapytano.current = true;
+      if (stan.data.status === 'pusto') setPanelZrodla(true);
+    }
+  }, [stan.data]);
   const wersja = stan.data?.wersja ?? 0;
   const gotowe = (stan.data?.pozycje[pozycja] ?? 0) > 0;
 
@@ -69,9 +126,25 @@ export default function App() {
   });
 
   const wiersze = ranking.data?.wiersze ?? [];
-  const wierszKarty = wiersze.find((w) => w['ID'] === karta);
+  const wierszKarty = wiersze.find((w) => w['ID'] === karta) ?? (kartaWiersz?.['ID'] === karta ? kartaWiersz : undefined);
+  const otworzKarte = (id: string, wiersz?: Wiersz) => {
+    setKarta(id);
+    setKartaWiersz(wiersz);
+  };
   const wybraniPozycji = wybrani[pozycja] ?? [];
   const s = stan.data;
+  const mojKlubUid = s?.meta.moj_klub_uid;
+  const mojeKluby = s?.meta.moje_kluby ?? [];
+
+  const szukajNastepcy = (poz: string) => {
+    setPozycja(poz);
+    setFiltryPozycji({ ...filtryPozycji, [poz]: { ...(filtryPozycji[poz] ?? PUSTE_FILTRY), bez_mojego_klubu: true } });
+    setZakladka('ranking');
+  };
+  const zmienMojKlub = async (uid: string | null) => {
+    if (!uid) return;
+    klient.setQueryData(['stan'], await api.mojKlub(Number(uid)));
+  };
 
   return (
     <AppShell header={{ height: 56 }} navbar={{ width: 320, breakpoint: 'sm' }} padding={0}>
@@ -81,12 +154,21 @@ export default function App() {
             <Title order={3}>FM26 Moneyball</Title>
             {s?.meta.nazwa_zapisu && <Badge variant="light" size="lg">{s.meta.nazwa_zapisu}</Badge>}
             {s?.meta.data_gry && <Badge variant="outline" color="gray">data w grze: {s.meta.data_gry}</Badge>}
-            {s?.meta.moj_klub && <Badge variant="outline" color="teal">{s.meta.moj_klub}</Badge>}
+            {mojeKluby.length > 1 ? (
+              <Select size="xs" w={220} aria-label="Twój klub" allowDeselect={false}
+                leftSection={<span className="legenda-moj-klub" />}
+                value={mojKlubUid !== null && mojKlubUid !== undefined ? String(mojKlubUid) : null}
+                data={mojeKluby.map((k) => ({ value: String(k.uid), label: k.nazwa }))} onChange={zmienMojKlub} />
+            ) : s?.meta.moj_klub ? (
+              <Tooltip label="Zawodnicy twojego klubu są wyróżnieni w tabelach na bursztynowo">
+                <Badge variant="light" color="yellow" size="lg" leftSection={<span className="legenda-moj-klub" />}>
+                  Twój klub: {s.meta.moj_klub}
+                </Badge>
+              </Tooltip>
+            ) : null}
           </Group>
           <Group gap="sm" wrap="nowrap">
-            {s?.status === 'wczytywanie' && (
-              <Group gap={6}><Loader size="xs" /><Text size="sm" c="dimmed">{s.komunikat}</Text></Group>
-            )}
+            {s?.status === 'wczytywanie' && <PostepWczytywania stan={s} />}
             {s?.zrodlo.typ === 'folder' && s.zrodlo.sledz && !s.zrodlo.plik && s.status === 'gotowe' && (
               <Tooltip label="Nowy zapis gry zostanie wczytany automatycznie">
                 <Badge color="teal" variant="dot">śledzę zapisy gry</Badge>
@@ -128,13 +210,13 @@ export default function App() {
           <Center style={{ flex: 1 }}>
             <Stack align="center" maw={520}>
               {s?.status === 'wczytywanie' ? (
-                <><Loader /><Text>{s.komunikat}</Text></>
+                <PostepWczytywania stan={s} szeroki />
               ) : (
                 <>
                   <Title order={3}>Brak danych</Title>
                   <Text c="dimmed" ta="center">
-                    Wskaż folder zapisów FM26 (aplikacja sama wczyta najnowszy zapis i będzie śledzić kolejne), wgraj plik
-                    .fm albo wypróbuj dane demo.
+                    Wybierz zapis z folderu gry (najszybciej; aplikacja może też śledzić kolejne zapisy), wgraj plik .fm albo
+                    wypróbuj dane demo.
                   </Text>
                   <Button onClick={() => setPanelZrodla(true)}>Wybierz źródło danych</Button>
                 </>
@@ -147,31 +229,62 @@ export default function App() {
               <Tabs.Tab value="ranking">
                 Ranking {ranking.data ? `(${ranking.data.liczba} z ${ranking.data.liczba_wszystkich})` : ''}
               </Tabs.Tab>
+              <Tabs.Tab value="okazje">Okazje</Tabs.Tab>
+              {mojKlubUid !== null && mojKlubUid !== undefined && <Tabs.Tab value="kadra">Moja kadra</Tabs.Tab>}
               <Tabs.Tab value="porownanie">Porównanie {wybraniPozycji.length ? `(${wybraniPozycji.length})` : ''}</Tabs.Tab>
               <Tabs.Tab value="wykresy">Wykresy</Tabs.Tab>
+              {!s?.meta.demo && <Tabs.Tab value="ligi">Ligi</Tabs.Tab>}
               {ranking.isFetching && <Loader size="xs" ml="sm" mt={10} />}
             </Tabs.List>
 
             <Tabs.Panel value="ranking" style={{ flex: 1, minHeight: 0 }}>
-              <Box p="sm" h="100%">
+              <Box p="sm" h="100%" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {ranking.error && <Alert color="red">{(ranking.error as Error).message}</Alert>}
+                {s?.meta.moj_klub && (
+                  <Text size="xs" c="dimmed">
+                    <span className="legenda-moj-klub" /> zawodnicy twojego klubu ({s.meta.moj_klub}) · kliknij nazwisko,
+                    aby otworzyć kartę · zaznacz do 4 zawodników do porównania
+                  </Text>
+                )}
                 {ranking.data && (
+                  <Box style={{ flex: 1, minHeight: 0 }}>
                   <TabelaRankingu
                     kolumny={ranking.data.kolumny}
                     wiersze={wiersze}
-                    mojKlubUid={s?.meta.moj_klub_uid}
-                    naWybor={setKarta}
+                    mojKlubUid={mojKlubUid}
+                    naWybor={otworzKarte}
                     naZaznaczenie={(ids) => setWybrani({ ...wybrani, [pozycja]: ids.slice(0, 4) })}
                   />
+                  </Box>
                 )}
               </Box>
+            </Tabs.Panel>
+            <Tabs.Panel value="okazje" style={{ flex: 1, minHeight: 0 }}>
+              {zakladka === 'okazje' && meta.data && (
+                <Okazje zapytanie={zapytanieOpoznione} okazje={meta.data.okazje} wersja={wersja} mojKlubUid={mojKlubUid}
+                  naWybor={otworzKarte} />
+              )}
+            </Tabs.Panel>
+            <Tabs.Panel value="kadra" style={{ overflow: 'auto' }}>
+              {zakladka === 'kadra' && (
+                <MojaKadra wersja={wersja} wagi={wagiWlasne} ustawienia={ustawienia} szukajNastepcy={szukajNastepcy}
+                  otworz={(poz, id, wiersz) => {
+                    setPozycja(poz);
+                    otworzKarte(id, wiersz);
+                  }} />
+              )}
+            </Tabs.Panel>
+            <Tabs.Panel value="ligi" style={{ overflow: 'auto' }}>
+              {zakladka === 'ligi' && <Ligi wersja={wersja} />}
             </Tabs.Panel>
             <Tabs.Panel value="porownanie" style={{ overflow: 'auto' }}>
               <Porownanie pozycja={pozycja} wersja={wersja} wiersze={wiersze} wybrani={wybraniPozycji}
                 setWybrani={(ids) => setWybrani({ ...wybrani, [pozycja]: ids })} />
             </Tabs.Panel>
             <Tabs.Panel value="wykresy" style={{ overflow: 'auto' }}>
-              {ranking.data && <Wykresy wiersze={wiersze} kolumny={ranking.data.kolumny} naWybor={setKarta} />}
+              {ranking.data && (
+                <Wykresy wiersze={wiersze} kolumny={ranking.data.kolumny} mojKlubUid={mojKlubUid} naWybor={setKarta} />
+              )}
             </Tabs.Panel>
           </Tabs>
         )}
@@ -183,6 +296,7 @@ export default function App() {
         wiersz={wierszKarty}
         zapytanie={zapytanie}
         wersja={wersja}
+        mojKlubUid={mojKlubUid}
         zamknij={() => setKarta(null)}
         otworz={setKarta}
         dodajDoPorownania={(id) => {

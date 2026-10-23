@@ -30,6 +30,7 @@ export default function PanelZrodla({ otwarty, zamknij, stan }: Props) {
   const [folder, setFolder] = useState('');
   const [plik, setPlik] = useState<string>('najnowszy');
   const [sledz, setSledz] = useState(true);
+  const [przyStarcie, setPrzyStarcie] = useState(false);
   const [opcje, setOpcje] = useState<Opcje | null>(null);
   const [plikFm, setPlikFm] = useState<File | null>(null);
   const [postep, setPostep] = useState<number | null>(null);
@@ -43,6 +44,7 @@ export default function PanelZrodla({ otwarty, zamknij, stan }: Props) {
     setFolder(stan.zrodlo.folder ?? '');
     setPlik(stan.zrodlo.plik && stan.zrodlo.typ === 'folder' ? stan.zrodlo.plik : 'najnowszy');
     setSledz(stan.zrodlo.sledz);
+    setPrzyStarcie(stan.zrodlo.wczytaj_przy_starcie);
     setOpcje(stan.zrodlo.opcje);
     setKomunikat(null);
   }, [otwarty]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -65,10 +67,13 @@ export default function PanelZrodla({ otwarty, zamknij, stan }: Props) {
     setKomunikat(null);
     try {
       if (typ === 'folder') {
-        odswiezStan(await api.ustawZrodlo({ typ, folder, plik: plik === 'najnowszy' ? null : plik, sledz, opcje: opcje ?? undefined }));
+        odswiezStan(await api.ustawZrodlo({
+          typ, folder, plik: plik === 'najnowszy' ? null : plik, sledz, wczytaj_przy_starcie: przyStarcie,
+          opcje: opcje ?? undefined,
+        }));
         zamknij();
       } else if (typ === 'demo') {
-        odswiezStan(await api.ustawZrodlo({ typ }));
+        odswiezStan(await api.ustawZrodlo({ typ, wczytaj_przy_starcie: przyStarcie }));
         zamknij();
       } else if (plikFm) {
         setPostep(0);
@@ -99,7 +104,8 @@ export default function PanelZrodla({ otwarty, zamknij, stan }: Props) {
   const zmienOpcje = <K extends keyof Opcje>(klucz: K, wartosc: Opcje[K]) => opcje && setOpcje({ ...opcje, [klucz]: wartosc });
 
   return (
-    <Modal opened={otwarty} onClose={zamknij} title="Źródło danych" size="lg">
+    <Modal opened={otwarty} onClose={zamknij} size="lg"
+      title={stan?.status === 'pusto' ? 'Co wczytać?' : 'Źródło danych'}>
       <Stack>
         <SegmentedControl
           value={typ}
@@ -137,6 +143,11 @@ export default function PanelZrodla({ otwarty, zamknij, stan }: Props) {
               onChange={(e) => setSledz(e.currentTarget.checked)}
               label="Automatycznie wczytuj nowy zapis, gdy gra zapisze stan"
             />
+            <Text size="xs" c="dimmed">
+              Wybór z folderu jest szybszy niż wgrywanie (plik nie jest przesyłany przez przeglądarkę). Pierwszy odczyt
+              dużego zapisu trwa od kilkudziesięciu sekund do kilku minut; ponowne otwarcie tego samego zapisu jest
+              natychmiastowe (pamięć podręczna).
+            </Text>
           </Stack>
         )}
 
@@ -144,6 +155,9 @@ export default function PanelZrodla({ otwarty, zamknij, stan }: Props) {
           <Stack gap="xs">
             <FileInput label="Plik zapisu kariery (.fm)" placeholder="Wybierz plik" accept=".fm" value={plikFm} onChange={setPlikFm} />
             {postep !== null && <Progress value={postep} animated />}
+            <Text size="xs" c="dimmed">
+              Jeśli aplikacja działa na komputerze z grą, szybciej będzie wybrać zapis z folderu gry.
+            </Text>
           </Stack>
         )}
 
@@ -172,6 +186,8 @@ export default function PanelZrodla({ otwarty, zamknij, stan }: Props) {
                     onChange={(e) => zmienOpcje('wszystkie_naturalne_pozycje', e.currentTarget.checked)} />
                   <Switch label="Tylko kluby przypisane do ligi krajowej" checked={opcje.tylko_kluby_w_lidze}
                     onChange={(e) => zmienOpcje('tylko_kluby_w_lidze', e.currentTarget.checked)} />
+                  <Switch label="Wolni agenci (zawodnicy bez klubu z minutami w sezonie)" checked={opcje.wolni_agenci ?? true}
+                    onChange={(e) => zmienOpcje('wolni_agenci', e.currentTarget.checked)} />
                 </Stack>
               </Accordion.Panel>
             </Accordion.Item>
@@ -180,8 +196,8 @@ export default function PanelZrodla({ otwarty, zamknij, stan }: Props) {
               <Accordion.Panel>
                 <Stack gap="xs">
                   <Text size="sm" c="dimmed">
-                    Zapis nie zawiera nazw lig. Wgraj stare eksporty CSV z gry (kolumny Klub i Liga) - aplikacja dopasuje kluby
-                    i zapamięta nazwy na stałe.
+                    Zapis nie zawiera nazw lig. Nazwy i mnożniki możesz wpisać ręcznie w zakładce „Ligi” albo wgrać tu
+                    stare eksporty CSV z gry (kolumny Klub i Liga) - aplikacja dopasuje kluby i zapamięta nazwy na stałe.
                   </Text>
                   <FileInput multiple accept=".csv" placeholder="Pliki CSV" value={plikiCsv} onChange={setPlikiCsv} />
                   <Button variant="light" disabled={!plikiCsv.length || stan?.status !== 'gotowe'} onClick={naucz}>
@@ -192,6 +208,9 @@ export default function PanelZrodla({ otwarty, zamknij, stan }: Props) {
             </Accordion.Item>
           </Accordion>
         )}
+
+        <Switch checked={przyStarcie} onChange={(e) => setPrzyStarcie(e.currentTarget.checked)}
+          label="Wczytuj to źródło automatycznie przy uruchomieniu aplikacji" />
 
         {komunikat && <Alert color={komunikat.kolor}>{komunikat.tekst}</Alert>}
 
@@ -204,7 +223,7 @@ export default function PanelZrodla({ otwarty, zamknij, stan }: Props) {
           <Group>
             <Button variant="default" onClick={zamknij}>Anuluj</Button>
             <Button onClick={uzyj} disabled={(typ === 'plik' && !plikFm) || postep !== null}>
-              {typ === 'plik' ? 'Wgraj i wczytaj' : 'Użyj'}
+              {typ === 'plik' ? 'Wgraj i wczytaj' : 'Wczytaj'}
             </Button>
           </Group>
         </Group>

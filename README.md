@@ -12,11 +12,16 @@ python -m fm_moneyball                         # otwiera aplikację w przegląda
 Aplikacja działa lokalnie: serwer w Pythonie czyta zapisy gry z dysku, a interfejs otwiera się w przeglądarce. Do uruchomienia nie jest potrzebny Node.js, bo zbudowany interfejs jest w repozytorium. Poprzednia wersja (`streamlit run app.py`) nadal działa, np. do importu plików CSV.
 
 Co jest w aplikacji:
-- **Ranking:** tabela z sortowaniem i filtrami w kolumnach, płynna przy tysiącach zawodników. Filtry po lewej: ligi, wiek, cena, kończący się kontrakt, noga, minuty, pomijanie własnego klubu. Wagi statystyk zmieniasz suwakami. Twój klub jest podświetlony.
-- **Karta zawodnika:** kliknij nazwisko, żeby zobaczyć szczegóły, profil statystyk na radarze i podobnych zawodników.
+- **Źródło danych:** po starcie aplikacja pyta, co wczytać: zapis z folderu gry (najszybciej; opcjonalnie śledzi kolejne zapisy), wgranie pliku `.fm` albo dane demo. Nic nie wczytuje się samo, chyba że włączysz „Wczytuj to źródło automatycznie przy uruchomieniu”. Podczas odczytu widać etap i czas. Wynik odczytu trafia do pamięci podręcznej (`~/.fm_moneyball/cache`, 3 ostatnie zapisy), więc ponowne otwarcie tego samego zapisu, także po restarcie, jest natychmiastowe.
+- **Ranking:** tabela z sortowaniem i filtrami w kolumnach, płynna przy tysiącach zawodników. Filtry po lewej: ligi, wiek, cena, kontrakt, okazje transferowe, minimalna opłacalność, maksymalne ryzyko, noga, minuty, pomijanie własnego klubu. Wagi statystyk zmieniasz suwakami.
+- **Twój klub** jest odczytywany z zapisu i widoczny w nagłówku (przy kilku prowadzonych drużynach można wybrać jedną). Jego zawodnicy są wyróżnieni na bursztynowo w tabelach, w karcie zawodnika i na wykresach.
+- **Kolumny Moneyball:** koszt (cena + 3 lata pensji; u wolnego agenta tylko pensja), opłacalność (punkty SCORE ponad przeciętnego zawodnika na 1 mln € kosztu), okazje i, przy włączonych danych ukrytych, ryzyko 0–100 (podatność na kontuzje, regularność, ważne mecze, wiek ponad 30 lat, kontuzje z ostatnich 2 lat).
+- **Okazje:** ranking zawodników z kończącym się kontraktem (≤ 6 i ≤ 12 mies.), wolnych agentów, kończących wypożyczenie oraz młodych talentów bez minut w dużych klubach.
+- **Moja kadra:** każda pozycja twojego klubu na tle całej puli: najlepszy zawodnik, średni wiek, kończące się kontrakty i luka do 80. percentyla. Pozycje są posortowane od największej luki, a „Szukaj wzmocnienia” otwiera ranking tej pozycji bez twoich zawodników.
+- **Karta zawodnika:** kliknij nazwisko, żeby zobaczyć szczegóły, koszt i okazje, dane ukryte (gdy włączone), profil statystyk na radarze i podobnych zawodników.
 - **Porównanie:** do 4 zawodników na jednym radarze, razem z tabelą wartości.
-- **Wykresy:** wynik względem wartości (okazje w lewym górnym rogu) oraz top 10 w wybranej statystyce.
-- **Źródło danych:** folder zapisów gry (najnowszy zapis wczytywany automatycznie, także po każdym zapisie w grze), wgranie pliku `.fm` albo dane demo. Ustawienia są zapamiętywane między uruchomieniami.
+- **Wykresy:** wynik względem kosztu lub wartości z granicą opłacalności (zawodnicy, od których nikt nie jest jednocześnie lepszy i tańszy) oraz top 10 w wybranej statystyce.
+- **Ligi:** lista lig wykrytych w zapisie z przykładowymi klubami. Nazwę i mnożnik siły ligi wpisujesz ręcznie; zmiany działają od razu i zapisują się w `dane/nazwy_rozgrywek.csv` oraz `dane/mnozniki_lig.csv`.
 
 ### Windows krok po kroku
 
@@ -29,8 +34,8 @@ Co jest w aplikacji:
 
 | Źródło | Jak działa |
 |---|---|
-| **Zapis gry (folder)** | Aplikacja sama znajduje folder `Dokumenty/Sports Interactive/Football Manager 26/games` i bierze najnowszy plik `.fm`. Co 30 s sprawdza, czy gra zapisała nowy stan (zapis ręczny lub autozapis), i wtedy się odświeża. Wymaga uruchomienia aplikacji na komputerze z grą. |
-| **Plik zapisu .fm** | Wgrywasz plik kariery (limit 2 GB, ustawiony w `.streamlit/config.toml`). |
+| **Zapis gry (folder)** | Aplikacja sama znajduje folder `Dokumenty/Sports Interactive/Football Manager 26/games`. Wybierasz konkretny zapis albo „zawsze najnowszy”: wtedy co 15 s sprawdza, czy gra zapisała nowy stan (zapis ręczny lub autozapis), i wczytuje go. Wymaga uruchomienia aplikacji na komputerze z grą. |
+| **Plik zapisu .fm** | Wgrywasz plik kariery przez przeglądarkę. Wolniejsze niż wybór z folderu, bo plik jest najpierw kopiowany. |
 | **Pliki CSV** | Eksport widoku z gry, po jednym pliku na pozycję (jak w poprzednich wersjach). |
 | **Dane demo** | Dane syntetyczne. |
 
@@ -42,12 +47,13 @@ Zapis FM26 to kontener z sekcjami skompresowanymi algorytmem Zstandard, bez szyf
 
 Ograniczenia:
 
-- **Nazwy lig.** Zapis nie zawiera nazw lig, tylko ich identyfikatory. Wgraj stare eksporty CSV w sekcji „Nazwy lig” w panelu bocznym: aplikacja dopasuje kluby i zapisze nazwy w `dane/nazwy_rozgrywek.csv`. Identyfikatory są wspólne dla wszystkich zapisów FM26. Ligi bez nazwy są pokazywane jako „Rozgrywki #id” i dostają najniższy mnożnik ligowy.
+- **Nazwy lig.** Zapis nie zawiera nazw lig, tylko ich identyfikatory. Nazwy wpiszesz w zakładce „Ligi” albo nauczysz ze starych eksportów CSV (panel „Źródło danych”, sekcja „Nazwy lig”). Trafiają do `dane/nazwy_rozgrywek.csv`; identyfikatory są wspólne dla wszystkich zapisów FM26. Ligi bez nazwy są pokazywane jako „Rozgrywki #id” i dostają najniższy mnożnik ligowy. Mnożniki lig spoza wbudowanej tabeli (np. K League) zapisują się w `dane/mnozniki_lig.csv`.
+- **Wolni agenci** (zawodnicy bez klubu, którzy grali w tym sezonie) trafiają do puli z ligą „Wolny agent”. Można to wyłączyć w „Opcjach odczytu zapisu”.
 - **Waluta.** Kwoty są zapisane w walucie bazowej. Domyślny kurs 1,157 odpowiada temu, co gra pokazuje w euro. Można go zmienić w „Opcjach odczytu zapisu”.
 - **Ceny.** Zapis zawiera rzeczywistą wartość transferową z gry. Gra pokazuje zamiast niej widełki zależne od wiedzy skautów (np. 80–325 tys. € przy wartości 315 tys. €). Dlatego ceny z zapisu są zwykle wyższe niż przy imporcie CSV, który brał środek widełek.
 - **Liga klubu** to rozgrywki, w których jego pierwsza drużyna gra najwięcej kolejek ligowych w bieżącym sezonie (z terminarza, łącznie z kolejkami zaplanowanymi). Dzięki temu np. kluby brazylijskie mają Série A także wtedy, gdy trwają jeszcze ligi stanowe. Drużyny kobiece (kluby o tej samej nazwie co męskie) i ich rozgrywki są pomijane.
 - **Ligi bez identyfikatora w bazie** (np. belgijska Jupiler Pro League) dostają w mapie nazw klucz zastępczy `-numer_kraju` (np. `-131,Jupiler Pro League`).
-- **Dane ukryte.** Zapis zawiera dane, których w grze nie widać bez pełnej wiedzy skautów (CA/PA). Domyślnie są ukryte; włączysz je w Ustawieniach.
+- **Dane ukryte.** Zapis zawiera dane, których w grze nie widać bez pełnej wiedzy skautów (CA/PA, atrybuty ukryte, osobowość, a z nich ryzyko). Domyślnie są ukryte; włączysz je w „Ustawieniach wyniku”.
 
 ## Diagnostyka zapisu
 
@@ -67,7 +73,8 @@ Skrypt wypisze liczbę odczytanych zawodników i lig, pokrycie kolumn oraz prób
 fm_moneyball/              logika niezależna od interfejsu
   __main__.py              uruchomienie: python -m fm_moneyball
   serwer/                  API (FastAPI), stan i wczytywanie w tle; static/ = zbudowany frontend
-  analiza.py               ranking, filtry, kolumny, radar, podobni
+  analiza.py               ranking, filtry, kolumny, radar, podobni, koszt/opłacalność/okazje/ryzyko, moja kadra
+  ligi.py                  mnożniki lig ustawione przez użytkownika (dane/mnozniki_lig.csv)
   stale.py                 kolumny, cechy, wagi, mnożniki lig
   parsery.py               tekst z FM -> liczby
   schemat.py               kolumny pochodne, ID, raport wczytania

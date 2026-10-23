@@ -6,19 +6,32 @@ export type Opcje = {
   kurs_waluty: number;
   wszystkie_naturalne_pozycje: boolean;
   tylko_kluby_w_lidze: boolean;
+  wolni_agenci: boolean;
 };
+
+export type Klub = { uid: number; nazwa: string };
 
 export type Stan = {
   status: 'pusto' | 'wczytywanie' | 'gotowe' | 'blad';
   komunikat: string;
   wersja: number;
-  zrodlo: { typ: 'brak' | 'folder' | 'plik' | 'demo'; folder: string | null; plik: string | null; sledz: boolean; opcje: Opcje };
+  etap: { nr: number; z: number; nazwa: string; start: number } | null;
+  zrodlo: {
+    typ: 'brak' | 'folder' | 'plik' | 'demo';
+    folder: string | null;
+    plik: string | null;
+    sledz: boolean;
+    wczytaj_przy_starcie: boolean;
+    opcje: Opcje;
+  };
   meta: {
     nazwa_zapisu?: string;
     plik?: string;
     data_gry?: string | null;
     moj_klub?: string | null;
     moj_klub_uid?: number | null;
+    moje_kluby?: Klub[];
+    z_cache?: boolean;
     ostrzezenia?: string[];
     liczniki?: Record<string, number>;
     czas_odczytu_s?: number;
@@ -39,6 +52,8 @@ export type MetaPozycji = {
   wagi_domyslne: Record<string, number>;
   ma_kontrakty: boolean;
   ma_ukryte: boolean;
+  ma_ryzyko: boolean;
+  okazje: string[];
 };
 
 export type Filtry = {
@@ -51,6 +66,9 @@ export type Filtry = {
   kontrakt_mies: number | null;
   min_minut: number;
   bez_mojego_klubu: boolean;
+  okazje: string[];
+  max_ryzyko: number | null;
+  min_oplacalnosc: number | null;
 };
 
 export type ZapytanieRankingu = {
@@ -84,6 +102,28 @@ export type Zapisy = {
   pliki: { nazwa: string; sciezka: string; rozmiar_mb: number; zmieniony: number }[];
 };
 
+export type Liga = {
+  klucz: number | null;
+  domyslna: string;
+  nazwa: string | null;
+  liczba: number;
+  kluby: string[];
+  mnoznik: number | null;
+};
+export type Ligi = { ligi: Liga[]; znane_nazwy: string[]; mnozniki: Record<string, number>; mnoznik_nieznanej: number };
+
+export type PozycjaKadry = {
+  pozycja: string;
+  liczba: number;
+  najlepszy: number | null;
+  cel: number | null;
+  luka: number | null;
+  sredni_wiek: number | null;
+  konczace_kontrakty: number;
+  zawodnicy: Wiersz[];
+};
+export type Kadra = { klub: string | null; pozycje: PozycjaKadry[] };
+
 async function zadanie<T>(url: string, init?: RequestInit): Promise<T> {
   const odp = await fetch(url, init);
   if (!odp.ok) {
@@ -106,8 +146,24 @@ export const api = {
   stan: () => zadanie<Stan>('/api/stan'),
   zapisy: (folder?: string | null) =>
     zadanie<Zapisy>('/api/zapisy' + (folder ? `?folder=${encodeURIComponent(folder)}` : '')),
-  ustawZrodlo: (body: { typ: string; folder?: string | null; plik?: string | null; sledz?: boolean; opcje?: Opcje }) =>
-    post<Stan>('/api/zrodlo', body),
+  ustawZrodlo: (body: {
+    typ: string;
+    folder?: string | null;
+    plik?: string | null;
+    sledz?: boolean;
+    wczytaj_przy_starcie?: boolean;
+    opcje?: Opcje;
+  }) => post<Stan>('/api/zrodlo', body),
+  mojKlub: (uid: number) => post<Stan>('/api/moj-klub', { uid }),
+  ligi: () => zadanie<Ligi>('/api/ligi'),
+  zmienLige: (klucz: number, nazwa: string, mnoznik: number | null) =>
+    zadanie<Ligi>(`/api/ligi/${klucz}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nazwa, mnoznik }),
+    }),
+  mojaKadra: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number }) =>
+    post<Kadra>('/api/moja-kadra', body),
   przeladuj: () => post<Stan>('/api/przeladuj', {}),
   metaPozycji: (pozycja: string) => zadanie<MetaPozycji>(`/api/pozycja/${encodeURIComponent(pozycja)}`),
   ranking: (body: ZapytanieRankingu) => post<Ranking>('/api/ranking', body),
@@ -121,10 +177,11 @@ export const api = {
 };
 
 // Wgrywanie duzego pliku .fm z postepem (fetch nie raportuje postepu wysylania).
+// Plik idzie surowo w ciele zapytania - serwer zapisuje go strumieniowo, bez multipart.
 export function wgrajZapis(plik: File, naPostep: (proc: number) => void): Promise<Stan> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/wgraj');
+    xhr.open('POST', `/api/wgraj?nazwa=${encodeURIComponent(plik.name)}`);
     xhr.upload.onprogress = (e) => e.lengthComputable && naPostep(Math.round((e.loaded / e.total) * 100));
     xhr.onload = () => {
       try {
@@ -136,8 +193,7 @@ export function wgrajZapis(plik: File, naPostep: (proc: number) => void): Promis
       }
     };
     xhr.onerror = () => reject(new Error('Błąd połączenia z serwerem'));
-    const dane = new FormData();
-    dane.append('plik', plik);
-    xhr.send(dane);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.send(plik);
   });
 }
