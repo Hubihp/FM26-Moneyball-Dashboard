@@ -350,7 +350,7 @@ def radar(pozycja, pula, ids, inni=None):
             wartosci.append(round(100.0 - p if c in NIZSZE_LEPSZE else p, 1))
         surowe = [None if pd.isna(wiersz.get(c)) else round(float(wiersz.get(c)), 3) for c in kolumny]
         seria.append({'id': id_, 'percentyle': wartosci, 'wartosci': surowe})
-    etykiety = [c + " (odwrócone)" if c in NIZSZE_LEPSZE else c for c in kolumny]
+    etykiety = [c + " (mniej strat = wyżej)" if c in NIZSZE_LEPSZE else c for c in kolumny]
     return {'etykiety': etykiety, 'seria': seria}
 
 

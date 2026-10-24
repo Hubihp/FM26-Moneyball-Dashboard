@@ -54,7 +54,7 @@ export default function Porownanie({ pozycja, wersja, wiersze, wybrani, setWybra
               }],
             }}
           />
-          <Text size="sm" c="dimmed">Percentyl w pozycji (100 = najlepszy w puli). Statystyki „odwrócone”: mniej = lepiej.</Text>
+          <Text size="sm" c="dimmed">Percentyl w pozycji (100 = najlepszy w puli). Przy stratach piłki liczy się odwrotnie: mniej strat daje wyższy percentyl.</Text>
           <Table striped withTableBorder>
             <Table.Thead>
               <Table.Tr>
