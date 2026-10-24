@@ -101,6 +101,7 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
   przelaczUlubione }: Props) {
   const siatka = useRef<AgGridReact<Wiersz>>(null);
   const zGwiazdka = !!przelaczUlubione;
+  const sortPoRoli = kolumny.some((k) => k.sortuj);
   const definicje = useMemo<ColDef<Wiersz>[]>(
     () => [
       ...(zGwiazdka
@@ -154,9 +155,19 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         if (k.pole === 'Okazje') {
           Object.assign(def, { width: 200, tooltipField: 'Okazje' });
         }
+        if (k.pole.startsWith('Dopasowanie') || k.pole.startsWith('Rola|')) {
+          def.headerTooltip = `${k.naglowek}: dopasowanie 0-100 do roli FM26 - atrybuty kluczowe (waga 2) i dodatkowe `
+            + '(waga 1), a przy rolach ze statystykami do 25% wyniku daje percentyl statystyk meczowych (pełny udział od 900 min).';
+        }
+        if (k.pole === 'Rola IP' || k.pole === 'Rola OOP') {
+          def.width = 190;
+        }
+        if (k.sortuj) {
+          Object.assign(def, { pinned: 'left', sort: 'desc', width: 200 });
+        }
         if (k.format === 'score') {
           Object.assign(def, {
-            pinned: 'left', width: 108, sort: 'desc', wrapHeaderText: false, suppressHeaderFilterButton: true,
+            pinned: 'left', width: 108, sort: sortPoRoli ? null : 'desc', wrapHeaderText: false, suppressHeaderFilterButton: true,
             cellClass: 'komorka-score',
             cellStyle: (p: { value: number | null }) => (p.value === null ? null : { backgroundColor: kolorWyniku(p.value) }),
             headerTooltip: 'Skala T: 50 = przeciętny zawodnik pozycji w próbie, +10 = jedno odchylenie wyżej (z korektą ligową).',
@@ -171,7 +182,7 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         return def;
       }),
     ],
-    [kolumny, mojKlubUid, zGwiazdka],
+    [kolumny, mojKlubUid, zGwiazdka, sortPoRoli],
   );
 
   // Gwiazdki odswiezane bez przebudowy kolumn (przebudowa skasowalaby wybrane sortowanie)

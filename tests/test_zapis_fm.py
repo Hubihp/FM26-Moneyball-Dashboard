@@ -417,3 +417,16 @@ def test_policz_kontuzje_i_podsumowanie_lig():
     gracze = [NS(club_uid=1, nation_id=700)] * 5 + [NS(club_uid=2, nation_id=701)] * 2 + [NS(club_uid=3, nation_id=9)]
     ligi = podsumuj_ligi(liga_klubu, kluby, narodowosci=narodowosci_lig(gracze, liga_klubu))
     assert ligi[0]["kraj"] == 700 and ligi[1]["kraj"] == 9
+
+
+def test_odczytaj_taktyki_surowe_numery():
+    from fm_moneyball.zrodla.zapis_fm import odczytaj_taktyki
+    miejsce = NS(number=0, in_possession_positions=(NS(raw=3), NS(raw=20)), out_of_possession_positions=(NS(raw=3),),
+                 unknown={"in_possession_role_bits": 1 << 5, "out_of_possession_role_bits": 1 << 2})
+    taktyki = [NS(club_uid=7, team_slot=0, index=1, name="4-3-3", mentality=NS(label=NS(name="POSITIVE")),
+                  slots=(miejsce,)),
+               NS(club_uid=7, team_slot=1, index=0, name="rezerwy", mentality=None, slots=()),   # druga druzyna
+               NS(club_uid=8, team_slot=0, index=0, name="obca", mentality=None, slots=())]
+    wynik = odczytaj_taktyki(taktyki, {7})
+    assert [t["nazwa"] for t in wynik] == ["4-3-3"] and wynik[0]["mentalnosc"] == "POSITIVE"
+    assert wynik[0]["miejsca"] == [{"nr": 0, "ip_pozycje": [3, 20], "oop_pozycje": [3], "ip_rola": 5, "oop_rola": 2}]

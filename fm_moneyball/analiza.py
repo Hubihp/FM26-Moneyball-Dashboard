@@ -9,6 +9,7 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
+from fm_moneyball.role import NAZWA_FAZY, kolumna_roli
 from fm_moneyball.model import maska_odniesienia, macierz_stylu, oblicz_score, percentyl_w_puli
 from fm_moneyball.stale import (KOLUMNY_PER_POZYCJA, KOLUMNY_UKRYTE, MAPOWANIE_NAZW_LIG, MERYTORYKA_WAG,
                                 NEUTRALNE, NIE_STATYSTYKI, NIZSZE_LEPSZE, kolumna_oceny)
@@ -32,6 +33,8 @@ class Filtry:
     min_niedowartosciowanie: float | None = None  # wycena wg wyniku / cena
     kandydaci: bool = False                      # pokaz kandydatow do przekwalifikowania z innych pozycji
     min_score_kandydata: float = 60.0
+    rola: str | None = None                      # "IP|nazwa roli" - filtr i sortowanie po dopasowaniu
+    min_dopasowania: float | None = None
 
 
 # --- Moneyball: koszt, okazje, ryzyko ----------------------------------------------
@@ -203,30 +206,45 @@ def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
         wynik = wynik[wynik['Niedowartościowanie'] >= filtry.min_niedowartosciowanie]
     if filtry.bez_mojego_klubu and moj_klub_uid is not None and 'Klub_UID' in wynik.columns:
         wynik = wynik[wynik['Klub_UID'] != moj_klub_uid]
+    kol_roli = kolumna_wybranej_roli(filtry)
+    if kol_roli and kol_roli in wynik.columns:
+        if filtry.min_dopasowania:
+            wynik = wynik[wynik[kol_roli] >= filtry.min_dopasowania]
     if filtry.szukaj:
         warunek = pd.Series(False, index=wynik.index)
         for kol in ('Piłkarz', 'Klub'):
             if kol in wynik.columns:
                 warunek |= wynik[kol].astype(str).str.contains(filtry.szukaj, case=False, na=False, regex=False)
         wynik = wynik[warunek]
+    if kol_roli and kol_roli in wynik.columns:
+        return wynik.sort_values([kol_roli, 'SCORE'], ascending=False)
     return wynik.sort_values('SCORE', ascending=False)
+
+
+def kolumna_wybranej_roli(filtry):
+    """Filtry.rola ("IP|nazwa") -> kolumna dopasowania albo None."""
+    if not filtry.rola or "|" not in filtry.rola:
+        return None
+    faza, nazwa = filtry.rola.split("|", 1)
+    return kolumna_roli(faza, nazwa)
 
 
 # --- kolumny tabeli -----------------------------------------------------------------------------
 # Format wartosci dla interfejsu: score, pasek (0-100), int, dec1, dec2, eur, eur_tyg, data, tekst
 _FORMATY = {'SCORE': 'score', 'Percentyl': 'pasek', 'Wiarygodność': 'pasek', 'Wiek': 'int', 'Minuty': 'int',
             'CA': 'int', 'PA': 'int', 'Ocena na pozycji': 'int', 'Strata piłek na podanie': 'dec2',
-            'Ryzyko': 'int', 'Niedowartościowanie': 'mnoznik', 'Wycena wg wyniku': 'eur'}
+            'Ryzyko': 'int', 'Dopasowanie IP': 'pasek', 'Dopasowanie OOP': 'pasek', 'Niedowartościowanie': 'mnoznik', 'Wycena wg wyniku': 'eur'}
 # Kolumny prezentowane z pol liczbowych (sortowanie po liczbie, nie po tekscie)
 _POLA = {'Cena': ('Wartość_Numeryczna', 'eur'), 'Płaca': ('Zarobki_Numeryczne', 'eur_tyg'),
          'Wygasa': ('Wygasa_Data', 'data'), 'Koszt (3 lata)': ('Koszt', 'eur')}
 _TEKSTOWE = {'Piłkarz', 'Klub', 'Liga', 'Pozycja', 'Kraj', 'Preferowana noga', 'Okazje', 'Pozycja na liście',
-             'Kandydat z pozycji'}
+             'Kandydat z pozycji', 'Rola IP', 'Rola OOP'}
 # Naglowki inne niz nazwa kolumny w danych
-_NAGLOWKI = {'Kraj': 'Narodowość', 'Pozycja': 'Pozycje'}
+_NAGLOWKI = {'Kraj': 'Narodowość', 'Pozycja': 'Pozycje', 'Rola IP': 'Rola przy piłce',
+             'Dopasowanie IP': 'Dopas. przy piłce', 'Rola OOP': 'Rola bez piłki', 'Dopasowanie OOP': 'Dopas. bez piłki'}
 # Kolumny Moneyball (z wzbogac), nie sa statystykami meczowymi
 _MONEYBALL = {'Koszt (3 lata)', 'Okazje', 'Ryzyko', 'Ocena na pozycji', 'Wycena wg wyniku',
-              'Niedowartościowanie', 'Wynik ponad CA'}
+              'Niedowartościowanie', 'Wynik ponad CA', 'Rola IP', 'Rola OOP', 'Dopasowanie IP', 'Dopasowanie OOP'}
 
 
 def _wstaw_po(lista, nowy, po):
@@ -234,9 +252,15 @@ def _wstaw_po(lista, nowy, po):
         lista.insert(lista.index(po) + 1 if po in lista else len(lista), nowy)
 
 
-def kolumny_tabeli(pozycja, pula, pokaz_ukryte=False):
-    """Lista kolumn tabeli: [{naglowek, pole, format, statystyka, nizsze_lepsze}]."""
+def kolumny_tabeli(pozycja, pula, pokaz_ukryte=False, rola=None):
+    """
+    Lista kolumn tabeli: [{naglowek, pole, format, statystyka, nizsze_lepsze}]. `rola` (kolumna
+    dopasowania wybranej roli) dodaje ja za SCORE z oznaczeniem domyslnego sortowania.
+    """
     nazwy = [c for c in KOLUMNY_PER_POZYCJA.get(pozycja, []) if c in pula.columns]
+    if 'Rola IP' in pula.columns:
+        for kol in ('Dopasowanie OOP', 'Rola OOP', 'Dopasowanie IP', 'Rola IP'):
+            _wstaw_po(nazwy, kol, 'Percentyl')
     if 'Minuty' in pula.columns and pula['Minuty'].notna().any():
         _wstaw_po(nazwy, 'Minuty', 'Klub')
     if 'Płaca' in pula.columns:
@@ -262,7 +286,12 @@ def kolumny_tabeli(pozycja, pula, pokaz_ukryte=False):
         _wstaw_po(nazwy, 'Kandydat z pozycji', 'Piłkarz')
         if 'Ocena na pozycji' in pula.columns and pula['Ocena na pozycji'].notna().any():
             _wstaw_po(nazwy, 'Ocena na pozycji', 'Kandydat z pozycji')
-    return [_opis_kolumny(nazwa) for nazwa in nazwy]
+    opisy = [_opis_kolumny(nazwa) for nazwa in nazwy]
+    if rola and rola in pula.columns:
+        _, faza, nazwa = rola.split("|", 2)
+        opisy.insert(1, {'naglowek': f"{nazwa} ({NAZWA_FAZY[faza]})", 'pole': rola, 'format': 'pasek',
+                         'statystyka': False, 'nizsze_lepsze': False, 'sortuj': True})
+    return opisy
 
 
 def _opis_kolumny(nazwa):
@@ -317,11 +346,16 @@ POLA_UKRYTE = ['CA', 'PA', 'Wynik ponad CA', 'Ryzyko', 'Regularność', 'Ważne 
 
 
 def pola_wiersza(pozycja, pula, pokaz_ukryte=False):
+    # dopasowania do wszystkich rol pozycji - karta zawodnika pokazuje pelne listy
     pola = POLA_WIERSZA + (POLA_UKRYTE if pokaz_ukryte else []) + [
-        k['pole'] for k in kolumny_tabeli(pozycja, pula, pokaz_ukryte)]
+        k['pole'] for k in kolumny_tabeli(pozycja, pula, pokaz_ukryte)] + kolumny_rol(pula)
     if not pokaz_ukryte:
         pola = [p for p in pola if p not in POLA_UKRYTE]
     return pola
+
+
+def kolumny_rol(pula):
+    return [c for c in pula.columns if str(c).startswith("Rola|")]
 
 
 def kolejnosc_lig(ligi):

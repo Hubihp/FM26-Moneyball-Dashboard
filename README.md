@@ -25,6 +25,8 @@ Co jest w aplikacji:
 - **Karta zawodnika:** kliknij nazwisko, żeby zobaczyć szczegóły, koszt i okazje, dane ukryte (gdy włączone), profil statystyk na radarze i podobnych zawodników.
 - **Porównanie:** do 4 zawodników na jednym radarze, razem z tabelą wartości.
 - **Wykresy:** wynik względem kosztu lub wartości z granicą wynik/koszt (zawodnicy, od których nikt nie jest jednocześnie lepszy i tańszy) oraz top 10 w wybranej statystyce.
+- **Role FM26 (przy piłce i bez piłki):** przy danych z zapisu gry każdy zawodnik dostaje dopasowanie 0–100 do każdej roli swojej pozycji, osobno w posiadaniu piłki (IP) i bez niej (OOP). W tabeli widać najlepszą rolę IP i OOP z wynikiem, w karcie zawodnika pełne listy ról, a w panelu można wybrać rolę: ranking jest wtedy sortowany po dopasowaniu do niej (z opcjonalnym minimum). Metoda: atrybuty kluczowe roli mają wagę 2, dodatkowe 1 (wynik = średnia ważona z (atrybut − 1) / 19 × 100). Przy rolach, do których pasują statystyki meczowe (np. pressing u „Pressing Central Midfielder”, xG u „Poacher”), do 25% wyniku daje percentyl tych statystyk w pozycji; pełny udział od 900 minut, przy mniejszej liczbie minut proporcjonalnie mniej. Role pochodzą z poradnika FM26 (Steam), a zestawy atrybutów są w `fm_moneyball/role.py`. Zapis zawiera prawdziwe atrybuty także zawodników, których w grze nie przeskautowano. Dane demo i CSV nie mają atrybutów, więc tam ról nie ma.
+- **Moja taktyka:** taktyki prowadzonego klubu odczytane z zapisu: 11 miejsc z rolą IP i OOP, a pod każdym miejscem zawodnicy z najwyższą średnią dopasowania do obu ról, z oznaczeniem „mój zespół” albo „transfer” (najlepsi z twojego zespołu są zawsze widoczni). Zapis przechowuje pozycje i role jako numery, więc za pierwszym razem wybierasz je z listy tak jak w grze. Wybór zapisuje się w `~/.fm_moneyball/role_taktyki.json` i działa dla wszystkich miejsc i taktyk z tym samym numerem. Zapis nie mówi też, która taktyka jest aktywna, więc wybierasz ją z listy.
 - **Ligi i kraje:** ligi wykryte w zapisie (z przykładowymi klubami) i narodowości zawodników; w każdej sekcji od razu widać 5 najliczniejszych, resztę po „Pokaż więcej”, a te bez nazwy zawsze są na górze. Nazwę i mnożnik siły ligi oraz nazwę kraju wpisujesz ręcznie; zmiany działają od razu i zapisują się w katalogu `~/.fm_moneyball` (`nazwy_rozgrywek.csv`, `mnozniki_lig.csv`, `nazwy_krajow.csv`), poza folderem aplikacji, więc pobranie nowej wersji ich nie nadpisze.
 
 ### Wagi nowych pozycji
@@ -118,6 +120,7 @@ fm_moneyball/              logika niezależna od interfejsu
                            (wczytywanie w tle); static/ = zbudowany frontend
   analiza.py               ranking, filtry, kolumny, radar, podobni, koszt/okazje/ryzyko, moja kadra
   ligi.py                  mnożniki lig ustawione przez użytkownika
+  role.py                  role FM26 (IP/OOP): atrybuty, statystyki, dopasowanie 0-100
   kraje.py                 nazwy krajów (narodowości): z nazwanych lig i ręczne
   mapy.py                  pliki id,nazwa: domyślne (dane/) i użytkownika (~/.fm_moneyball)
   stale.py                 kolumny, cechy, wagi, mnożniki lig

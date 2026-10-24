@@ -1,4 +1,4 @@
-import { Badge, Button, Drawer, Group, Loader, SimpleGrid, Stack, Table, Text, Title, Tooltip } from '@mantine/core';
+import { Badge, Button, Drawer, Group, Loader, Progress, SimpleGrid, Stack, Table, Text, Title, Tooltip } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 
 import { api, type Wiersz, type ZapytanieRankingu } from '../api';
@@ -27,6 +27,32 @@ function Pole({ etykieta, wartosc }: { etykieta: string; wartosc: string }) {
   );
 }
 
+// Pelne listy rol z kolumn 'Rola|IP|nazwa' wiersza, posortowane malejaco
+function listaRol(w: Wiersz, faza: 'IP' | 'OOP') {
+  const prefiks = `Rola|${faza}|`;
+  return Object.entries(w)
+    .filter(([k, v]) => k.startsWith(prefiks) && typeof v === 'number')
+    .map(([k, v]) => ({ nazwa: k.slice(prefiks.length), wynik: v as number }))
+    .sort((a, b) => b.wynik - a.wynik);
+}
+
+function ListaRol({ tytul, role }: { tytul: string; role: { nazwa: string; wynik: number }[] }) {
+  return (
+    <Stack gap={4}>
+      <Text size="sm" fw={600}>{tytul}</Text>
+      {role.map((r, i) => (
+        <div key={r.nazwa}>
+          <Group justify="space-between" gap={4}>
+            <Text size="xs" fw={i === 0 ? 700 : 400}>{r.nazwa}</Text>
+            <Text size="xs" fw={600}>{formatuj(r.wynik, 'int')}</Text>
+          </Group>
+          <Progress value={r.wynik} size="sm" color={i === 0 ? 'teal' : 'gray'} />
+        </div>
+      ))}
+    </Stack>
+  );
+}
+
 const UKRYTE = ['Regularność', 'Ważne mecze', 'Podatność na kontuzje', 'Determinacja', 'Profesjonalizm', 'Ambicja',
   'Adaptacja'];
 
@@ -48,6 +74,8 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
   const moj = (x: Wiersz) => mojKlubUid !== null && mojKlubUid !== undefined && x['Klub_UID'] === mojKlubUid;
   const okazje = typeof w['Okazje'] === 'string' && w['Okazje'] ? (w['Okazje'] as string).split('; ') : [];
   const ukryte = UKRYTE.filter((k) => typeof w[k] === 'number');
+  const rolaIP = listaRol(w, 'IP');
+  const rolaOOP = listaRol(w, 'OOP');
 
   return (
     <Drawer opened={!!id} onClose={zamknij} position="right" size="xl" title={<Title order={4}>{String(w['Piłkarz'] ?? id ?? '')}</Title>}>
@@ -104,6 +132,19 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
               <Title order={6}>Atrybuty ukryte i osobowość (1-20)</Title>
               <SimpleGrid cols={4}>
                 {ukryte.map((k) => <Pole key={k} etykieta={k} wartosc={formatuj(w[k], 'int')} />)}
+              </SimpleGrid>
+            </>
+          )}
+
+          {rolaIP.length > 0 && (
+            <>
+              <Tooltip multiline w={340} withArrow
+                label="Dopasowanie 0-100: atrybuty kluczowe roli mają wagę 2, dodatkowe 1; przy rolach ze statystykami do 25% wyniku daje percentyl statystyk meczowych w pozycji (pełny udział od 900 minut).">
+                <Title order={6}>Dopasowanie do ról FM26 (0-100)</Title>
+              </Tooltip>
+              <SimpleGrid cols={2}>
+                <ListaRol tytul="Przy piłce (IP)" role={rolaIP} />
+                <ListaRol tytul="Bez piłki (OOP)" role={rolaOOP} />
               </SimpleGrid>
             </>
           )}

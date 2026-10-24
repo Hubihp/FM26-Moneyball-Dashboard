@@ -41,7 +41,7 @@ type Props = {
 export const PUSTE_FILTRY: Filtry = {
   ligi: [], nogi: [], kraje: [], wiek: null, cena: null, bez_ceny: true, szukaj: '', kontrakt_mies: null, min_minut: 0,
   bez_mojego_klubu: false, okazje: [], max_ryzyko: null, kandydaci: false,
-  min_score_kandydata: 60, min_niedowartosciowanie: null,
+  min_score_kandydata: 60, min_niedowartosciowanie: null, rola: null, min_dopasowania: null,
 };
 
 // Suwak ceny w skali pierwiastkowej: wiecej precyzji przy niskich kwotach
@@ -76,6 +76,28 @@ export default function PanelBoczny(p: Props) {
         </div>
 
         <TextInput label="Szukaj (piłkarz / klub)" value={filtry.szukaj} onChange={(e) => zmien('szukaj', e.currentTarget.value)} />
+
+        {meta?.ma_atrybuty && (
+          <div>
+            <Tooltip multiline w={320} withArrow
+              label="Ranking według dopasowania do roli FM26 (0-100): atrybuty kluczowe mają wagę 2, dodatkowe 1; przy rolach ze statystykami do 25% wyniku daje percentyl statystyk meczowych (pełny udział od 900 minut).">
+              <Select label="Rola (dopasowanie)" placeholder="Bez roli - ranking wg SCORE" clearable searchable
+                value={filtry.rola}
+                onChange={(v) => setFiltry({ ...filtry, rola: v, min_dopasowania: v ? filtry.min_dopasowania : null })}
+                data={(['IP', 'OOP'] as const).map((faza) => ({
+                  group: faza === 'IP' ? 'Przy piłce (IP)' : 'Bez piłki (OOP)',
+                  items: meta.role[faza].map((r) => ({ value: `${faza}|${r.nazwa}`, label: r.nazwa })),
+                }))} />
+            </Tooltip>
+            {filtry.rola && (
+              <>
+                <Text size="xs" mt={6}>Minimalne dopasowanie: {filtry.min_dopasowania ?? 0}</Text>
+                <Slider min={0} max={90} step={5} label={null} value={filtry.min_dopasowania ?? 0}
+                  onChange={(v) => zmien('min_dopasowania', v || null)} />
+              </>
+            )}
+          </div>
+        )}
 
         {meta?.wiek && (
           <div>

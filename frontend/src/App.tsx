@@ -24,6 +24,7 @@ import ListaZyczen from './komponenty/ListaZyczen';
 import { kluczZawodnika, usePamiec, type WpisListy } from './pamiec';
 
 import Ligi from './komponenty/Ligi';
+import MojaTaktyka from './komponenty/MojaTaktyka';
 import MojaKadra from './komponenty/MojaKadra';
 import Okazje from './komponenty/Okazje';
 import PanelBoczny, { PUSTE_FILTRY, type Ustawienia } from './komponenty/PanelBoczny';
@@ -261,6 +262,7 @@ export default function App() {
               <Tabs.Tab value="okazje">Okazje</Tabs.Tab>
               <Tabs.Tab value="lista">Lista życzeń {lista.length ? `(${lista.length})` : ''}</Tabs.Tab>
               {mojKlubUid !== null && mojKlubUid !== undefined && <Tabs.Tab value="kadra">Moja kadra</Tabs.Tab>}
+              {mojKlubUid !== null && mojKlubUid !== undefined && <Tabs.Tab value="taktyka">Moja taktyka</Tabs.Tab>}
               <Tabs.Tab value="porownanie">Porównanie {wybraniPozycji.length ? `(${wybraniPozycji.length})` : ''}</Tabs.Tab>
               <Tabs.Tab value="wykresy">Wykresy</Tabs.Tab>
               <Tabs.Tab value="ligi">Ligi i kraje</Tabs.Tab>
@@ -324,6 +326,9 @@ export default function App() {
                     otworzKarte(id, wiersz);
                   }} />
               )}
+            </Tabs.Panel>
+            <Tabs.Panel value="taktyka" style={{ overflow: 'auto' }}>
+              {zakladka === 'taktyka' && <MojaTaktyka wersja={wersja} />}
             </Tabs.Panel>
             <Tabs.Panel value="ligi" style={{ overflow: 'auto' }}>
               {zakladka === 'ligi' && <Ligi wersja={wersja} />}
