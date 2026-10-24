@@ -64,20 +64,36 @@ def podsumuj_kraje(zawodnicy, nazwy, zrodla=None, przyklady=3):
     """
     Zawodnicy wszystkich pozycji (z 'Kraj_ID') -> [{id, nazwa, zrodlo, reczna, liczba, przyklady}]:
     kraje bez nazwy najpierw, potem wg liczby zawodnikow. Przyklady to najdrozsi zawodnicy -
-    po nich najlatwiej rozpoznac kraj w grze.
+    po nich najlatwiej rozpoznac kraj w grze. Dane bez 'Kraj_ID' (CSV, demo) maja gotowa kolumne
+    'Kraj' - wtedy id jest puste, a nazwy nie da sie zmienic.
     """
-    if zawodnicy is None or 'Kraj_ID' not in zawodnicy.columns:
+    if zawodnicy is None:
         return []
+    if 'Kraj_ID' not in zawodnicy.columns:
+        return _podsumuj_kolumne_kraj(zawodnicy, przyklady)
     wynik = []
     for kraj_id, grupa in zawodnicy.dropna(subset=['Kraj_ID']).groupby('Kraj_ID'):
         kraj_id = int(kraj_id)
-        najlepsi = grupa.sort_values('Wartość_Numeryczna', ascending=False, na_position='last').head(przyklady)
         wynik.append({
             "id": kraj_id, "nazwa": nazwy.get(kraj_id), "zrodlo": (zrodla or {}).get(kraj_id),
             "reczna": (zrodla or {}).get(kraj_id) == "ręcznie", "liczba": int(len(grupa)),
-            "przyklady": [f"{w['Piłkarz']} ({w.get('Klub') or '?'})" for _, w in najlepsi.iterrows()],
+            "przyklady": _przyklady(grupa, przyklady),
         })
     return sorted(wynik, key=lambda k: (k["nazwa"] is not None, -k["liczba"]))
+
+
+def _przyklady(grupa, ile):
+    najlepsi = grupa.sort_values('Wartość_Numeryczna', ascending=False, na_position='last').head(ile)
+    return [f"{w['Piłkarz']} ({w.get('Klub') or '?'})" for _, w in najlepsi.iterrows()]
+
+
+def _podsumuj_kolumne_kraj(zawodnicy, przyklady):
+    if 'Kraj' not in zawodnicy.columns:
+        return []
+    wynik = [{"id": None, "nazwa": str(nazwa), "zrodlo": None, "reczna": False, "liczba": int(len(grupa)),
+              "przyklady": _przyklady(grupa, przyklady)}
+             for nazwa, grupa in zawodnicy.dropna(subset=['Kraj']).groupby('Kraj')]
+    return sorted(wynik, key=lambda k: -k["liczba"])
 
 
 # --- kraje bez wczytanej ligi: kluby-kotwice -------------------------------------------------------

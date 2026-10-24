@@ -145,19 +145,6 @@ KOLUMNY_PER_POZYCJA = {
     "Napastnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Skuteczność strzałów (%)', 'Celność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
 }
 
-# Wskazowki do rozpoznawania pozycji po nazwie pliku CSV (bez rozszerzenia, malymi literami).
-WSKAZOWKI_NAZW_PLIKOW = {
-    "br": "Bramkarz", "bramkarz": "Bramkarz", "gk": "Bramkarz",
-    "so": "Środkowy Obrońca", "śo": "Środkowy Obrońca", "cb": "Środkowy Obrońca",
-    "bo": "Boczny Obrońca", "fb": "Boczny Obrońca", "po": "Boczny Obrońca", "lo": "Boczny Obrońca",
-    "dp": "Defensywny Pomocnik", "dm": "Defensywny Pomocnik",
-    "sp": "Środkowy Pomocnik", "śp": "Środkowy Pomocnik", "cm": "Środkowy Pomocnik",
-    "wah": "Wahadłowy", "lwah": "Wahadłowy", "pwah": "Wahadłowy", "wb": "Wahadłowy", "wahadłowy": "Wahadłowy",
-    "op": "Ofensywny Pomocnik", "am": "Ofensywny Pomocnik", "amc": "Ofensywny Pomocnik",
-    "sk": "Skrzydłowy", "skrzydłowy": "Skrzydłowy", "w": "Skrzydłowy",
-    "n": "Napastnik", "nap": "Napastnik", "st": "Napastnik", "napastnik": "Napastnik",
-}
-
 # Mnozniki lig bazowe (wartosci heurystyczne - nie sa walidowane na danych)
 MNOZNIKI_LIG = {
     "Premier League": 0.918,

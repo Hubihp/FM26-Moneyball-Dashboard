@@ -1,3 +1,0 @@
-[server]
-# Zapisy kariery FM26 maja kilkaset MB (domyslny limit Streamlita to 200 MB)
-maxUploadSize = 2048

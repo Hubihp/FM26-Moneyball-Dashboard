@@ -85,7 +85,7 @@ export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naW
         </Group>
         <Text size="xs" c="dimmed">
           Szukaj punktów w lewym górnym rogu: wysoki wynik przy niskim koszcie. Kolor = wiek, bursztynowe punkty = twój klub.
-          {os === 'Koszt' ? ' Linia = granica opłacalności (nikt nie jest jednocześnie lepszy i tańszy).' : ''} Kliknij
+          {os === 'Koszt' ? ' Linia = granica wynik/koszt (nikt nie jest jednocześnie lepszy i tańszy).' : ''} Kliknij
           punkt, aby otworzyć kartę.
         </Text>
         <Wykres
@@ -99,7 +99,7 @@ export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naW
                 return `<b>${d.name}</b><br/>SCORE ${Math.round(d.value[1])}<br/>${eur(d.value[0])}<br/>wiek ${d.value[2]}`;
               },
             },
-            legend: { top: 0, left: 'center', data: ['Zawodnicy', 'Twój klub', 'Granica opłacalności'] },
+            legend: { top: 0, left: 'center', data: ['Zawodnicy', 'Twój klub', 'Granica wynik/koszt'] },
             xAxis: { type: 'log', name: os === 'Koszt' ? 'Koszt (€)' : 'Wartość (€)', nameLocation: 'middle', nameGap: 30,
               axisLabel: { formatter: (v: number) => eur(v) } },
             yAxis: { type: 'value', name: 'SCORE', scale: true },
@@ -109,7 +109,7 @@ export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naW
               { name: 'Zawodnicy', type: 'scatter', symbolSize: 12, data: punkty },
               { name: 'Twój klub', type: 'scatter', symbolSize: 14, data: moi,
                 itemStyle: { color: '#fab005', borderColor: '#fff', borderWidth: 1 } },
-              { name: 'Granica opłacalności', type: 'line', step: 'end', data: pareto, symbolSize: 5, z: 1,
+              { name: 'Granica wynik/koszt', type: 'line', step: 'end', data: pareto, symbolSize: 5, z: 1,
                 lineStyle: { color: '#868e96', type: 'dashed' }, itemStyle: { color: '#868e96' } },
             ],
           }}

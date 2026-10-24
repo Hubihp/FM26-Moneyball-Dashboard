@@ -8,7 +8,7 @@ Zrodlo dostarcza DataFrame z polskimi nazwami kolumn i liczbami w kolumnach stat
 import numpy as np
 import pandas as pd
 
-from fm_moneyball.stale import MAPOWANIE_NAZW_LIG, MERYTORYKA_WAG, MNOZNIK_NIEZNANEJ_LIGI, MNOZNIKI_LIG
+from fm_moneyball.stale import MAPOWANIE_NAZW_LIG, MNOZNIK_NIEZNANEJ_LIGI, MNOZNIKI_LIG
 
 
 def dopelnij_schemat(df, mnoznik_nieznanej=MNOZNIK_NIEZNANEJ_LIGI):
@@ -72,40 +72,6 @@ def ustaw_ligi(df, nazwy, mnozniki=None, mnoznik_nieznanej=MNOZNIK_NIEZNANEJ_LIG
     surowa = surowa.where(surowa.notna(), df['Liga_domyslna'])
     _ustaw_lige(df, surowa, MNOZNIKI_LIG if mnozniki is None else mnozniki, mnoznik_nieznanej)
     return df
-
-
-def raport_wczytania(df, pozycja, odrzucone=0):
-    """Zwraca liste (poziom, tekst) opisujaca jakosc wczytanych danych."""
-    wynik = []
-    wynik.append(("info", f"Liczba zawodników: {len(df)}"))
-    if odrzucone:
-        wynik.append(("warn", f"Pominięto {odrzucone} wierszy z nieczytelnym wiekiem."))
-    brakujace = [k for k in ('Piłkarz', 'Wiek', 'Klub', 'Liga') if k not in df.columns]
-    if brakujace:
-        wynik.append(("warn", f"Brak kolumn podstawowych: {', '.join(brakujace)}"))
-    brak_cech = [c for c in MERYTORYKA_WAG[pozycja] if c not in df.columns]
-    if brak_cech:
-        wynik.append(("info", "Cechy niedostępne w tych danych (pominięte w wyniku): " + ", ".join(brak_cech)))
-    if 'Minuty' in df.columns and df['Minuty'].notna().any():
-        wynik.append(("info", "Znaleziono kolumnę z minutami - włączone skurczenie cech przy małej próbie."))
-    else:
-        wynik.append(("warn", "Brak kolumny z minutami (np. 'Min') - wynik bez korekty na małą próbę. "
-                              "Dodaj ją do widoku w FM i wyeksportuj ponownie."))
-    if 'Liga_bez_mnoznika' in df.columns and df['Liga_bez_mnoznika'].any():
-        nieznane = sorted(df.loc[df['Liga_bez_mnoznika'], 'Liga'].dropna().astype(str).unique())
-        wynik.append(("warn", f"Ligi bez zdefiniowanego mnożnika (przyjęto najniższy znany, "
-                              f"{MNOZNIK_NIEZNANEJ_LIGI}): " + ", ".join(nieznane[:30])
-                      + (f" i {len(nieznane) - 30} innych" if len(nieznane) > 30 else "")))
-    bez_ceny = int(df['Wartość_Numeryczna'].isna().sum())
-    if bez_ceny:
-        wynik.append(("info", f"Bez ceny (np. 'Nie na sprzedaż'): {bez_ceny} zawodników - nie są liczeni jako darmowi."))
-    if 'Płaca' in df.columns:
-        sprawdzone = int(df['Zarobki_Numeryczne'].notna().sum())
-        wynik.append(("info", f"Płace rozpoznane: {sprawdzone} z {len(df)}"))
-    powtorzone = int(df['Piłkarz'].duplicated(keep=False).sum())
-    if powtorzone:
-        wynik.append(("info", f"Zawodnicy o tych samych nazwiskach: {powtorzone} - rozróżniani po klubie i wieku (kolumna ID)."))
-    return wynik
 
 
 NIEZNANY_KRAJ = "Nieznana"

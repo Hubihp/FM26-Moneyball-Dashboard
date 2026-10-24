@@ -191,3 +191,12 @@ body {
 .gwiazdka.aktywna {
   color: #fab005;
 }
+
+/* Naglowek tabeli o stalej wysokosci: najwyzej 2 linie nazwy, reszta ucieta wielokropkiem */
+.ag-header-cell-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.2;
+}

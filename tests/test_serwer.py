@@ -31,10 +31,9 @@ def test_stan_po_wczytaniu_demo(klient):
 
 def test_meta_pozycji(klient):
     meta = klient.get("/api/pozycja/Napastnik").json()
-    ligi = {l["nazwa"]: l["liczba"] for l in meta["ligi"]}
-    assert meta["liczba"] == 150 and "Premier League (ANG 1)" in ligi and sum(ligi.values()) == 150
-    liczby = [l["liczba"] for l in meta["ligi"]]
-    assert liczby == sorted(liczby, reverse=True)
+    assert meta["liczba"] == 150
+    wiersze = klient.post("/api/ranking", json={"pozycja": "Napastnik"}).json()["wiersze"]
+    assert "Premier League (ANG 1)" in {w["Liga"] for w in wiersze}
     assert meta["wagi_domyslne"]["Liczba goli na 90 min"] == 20
     assert klient.get("/api/pozycja/Nieznana").status_code == 404
 
@@ -176,8 +175,8 @@ def test_ligi_edycja_nazwy_i_mnoznika(tmp_path, monkeypatch):
         odp = k.put("/api/ligi/999011", json={"nazwa": "Liga Testowa", "mnoznik": 0.7}).json()
         assert odp["ligi"][0]["nazwa"] == "Liga Testowa" and odp["ligi"][0]["mnoznik"] == 0.7
         assert k.put("/api/ligi/999", json={"nazwa": "X"}).status_code == 404
-        meta = k.get("/api/pozycja/Napastnik").json()
-        assert [l["nazwa"] for l in meta["ligi"]] == ["Liga Testowa"]
+        wiersze = k.post("/api/ranking", json={"pozycja": "Napastnik"}).json()["wiersze"]
+        assert {w["Liga"] for w in wiersze} == {"Liga Testowa"}
     assert "Liga Testowa" in (tmp_path / "nazwy.csv").read_text(encoding="utf-8")
     assert "0.7" in (tmp_path / "mnozniki.csv").read_text(encoding="utf-8")
 
@@ -203,11 +202,10 @@ def test_moj_klub_i_moja_kadra(klient):
 def test_ranking_ma_kolumny_moneyball(klient):
     wynik = klient.post("/api/ranking", json={"pozycja": "Napastnik"}).json()
     naglowki = [k["naglowek"] for k in wynik["kolumny"]]
-    assert "Koszt (3 lata)" in naglowki and "Opłacalność" in naglowki
+    assert "Koszt (3 lata)" in naglowki
+    assert "Opłacalność" not in naglowki and "Wiarygodność" not in naglowki
     assert any(w["Pareto"] for w in wynik["wiersze"])
-    tylko = klient.post("/api/ranking", json={"pozycja": "Napastnik",
-                                               "filtry": {"min_oplacalnosc": 1}}).json()["wiersze"]
-    assert all(w["Opłacalność"] >= 1 for w in tylko)
+    assert all("Opłacalność" not in w for w in wynik["wiersze"])
 
 
 def test_serwuje_zbudowany_frontend(klient):
@@ -230,12 +228,18 @@ def test_nowe_pozycje_w_demo(klient):
 
 def test_narodowosc_w_tabeli_i_filtr(klient):
     meta = klient.get("/api/pozycja/Napastnik").json()
-    kraje = {k["nazwa"]: k["liczba"] for k in meta["kraje"]}
-    assert kraje["Polska"] > 0 and sum(kraje.values()) == 150
+    assert "kraje" not in meta and "ligi" not in meta    # listy krajow i lig sa w zakladce "Ligi i kraje"
     wynik = klient.post("/api/ranking", json={"pozycja": "Napastnik", "filtry": {"kraje": ["Polska"]}}).json()
     assert 0 < wynik["liczba"] < 150 and all(w["Kraj"] == "Polska" for w in wynik["wiersze"])
     assert {"naglowek": "Narodowość", "pole": "Kraj"}.items() <= next(
         k for k in wynik["kolumny"] if k["pole"] == "Kraj").items()
+
+
+def test_kraje_w_demo_z_kolumny_kraj(klient):
+    kraje = klient.get("/api/kraje").json()["kraje"]
+    assert kraje and all(k["id"] is None and k["nazwa"] for k in kraje)
+    liczby = [k["liczba"] for k in kraje]
+    assert liczby == sorted(liczby, reverse=True) and "Polska" in {k["nazwa"] for k in kraje}
 
 
 def test_lista_zyczen_po_id(klient):

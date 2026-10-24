@@ -263,7 +263,7 @@ export default function App() {
               {mojKlubUid !== null && mojKlubUid !== undefined && <Tabs.Tab value="kadra">Moja kadra</Tabs.Tab>}
               <Tabs.Tab value="porownanie">Porównanie {wybraniPozycji.length ? `(${wybraniPozycji.length})` : ''}</Tabs.Tab>
               <Tabs.Tab value="wykresy">Wykresy</Tabs.Tab>
-              {!s?.meta.demo && <Tabs.Tab value="ligi">Ligi</Tabs.Tab>}
+              <Tabs.Tab value="ligi">Ligi i kraje</Tabs.Tab>
               {ranking.isFetching && <Loader size="xs" ml="sm" mt={10} />}
             </Tabs.List>
 

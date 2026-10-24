@@ -9,23 +9,23 @@ python -m pip install -r requirements.txt      # Python 3.12 lub nowszy
 python -m fm_moneyball                         # otwiera aplikację w przeglądarce (http://localhost:8765)
 ```
 
-Aplikacja działa lokalnie: serwer w Pythonie czyta zapisy gry z dysku, a interfejs otwiera się w przeglądarce. Do uruchomienia nie jest potrzebny Node.js, bo zbudowany interfejs jest w repozytorium. Poprzednia wersja (`streamlit run app.py`) nadal działa, np. do importu plików CSV.
+Aplikacja działa lokalnie: serwer w Pythonie czyta zapisy gry z dysku, a interfejs otwiera się w przeglądarce. Do uruchomienia nie jest potrzebny Node.js, bo zbudowany interfejs jest w repozytorium.
 
 Co jest w aplikacji:
 - **Źródło danych:** po starcie aplikacja pyta, co wczytać: zapis z folderu gry (najszybciej; opcjonalnie śledzi kolejne zapisy), wgranie pliku `.fm` albo dane demo. Nic nie wczytuje się samo, chyba że włączysz „Wczytuj to źródło automatycznie przy uruchomieniu”. Podczas odczytu widać etap i czas. Wynik odczytu trafia do pamięci podręcznej (`~/.fm_moneyball/cache`, 3 ostatnie zapisy), więc ponowne otwarcie tego samego zapisu, także po restarcie, jest natychmiastowe.
 - **Pozycja** wybierana kliknięciem na boisku (BR, ŚO, BO, WAH, DP, ŚP, OP, S, N; lewa i prawa strona to ta sama pula, więc świecą razem). Pule: Bramkarz, Środkowy Obrońca, Boczny Obrońca, Wahadłowy, Defensywny Pomocnik, Środkowy Pomocnik, Ofensywny Pomocnik, Skrzydłowy, Napastnik.
-- **Ranking:** tabela z sortowaniem i filtrami w kolumnach (menu po polsku), płynna przy tysiącach zawodników. Filtry po lewej: „Ligi i kraje” (po 5 najliczniejszych, reszta po „Pokaż więcej”), wiek, cena, kontrakt, okazje transferowe, minimalna opłacalność, maksymalne ryzyko, noga, minuty, pomijanie własnego klubu. Wagi statystyk zmieniasz suwakami.
+- **Ranking:** tabela z sortowaniem i filtrami w kolumnach (menu po polsku), płynna przy tysiącach zawodników. Ligę i narodowość filtrujesz w menu kolumny. Filtry po lewej: wiek, cena, kontrakt, niedowartościowanie, maksymalne ryzyko, noga, minuty, pomijanie własnego klubu. Wagi statystyk zmieniasz suwakami.
 - **Kandydaci z innych pozycji:** przełącznik w panelu dodaje do rankingu zawodników grających nominalnie gdzie indziej, ocenionych według kryteriów wybranej pozycji (np. defensywny pomocnik, który ma profil prawego obrońcy). Nie zmieniają oni wyników zawodników tej pozycji. W tabeli mają fioletowy pasek, kolumnę „Kandydat z pozycji” i, z zapisu gry, „Ocena na pozycji” (1–20, czyli jak łatwo go przekwalifikować).
 - **Lista życzeń:** gwiazdka przy zawodniku (w rankingu, okazjach i karcie zawodnika) dodaje go do listy; lista jest zapamiętywana w przeglądarce, a wynik liczony w pozycji, z której zawodnik został dodany.
 - **Twój klub** jest odczytywany z zapisu i widoczny w nagłówku (przy kilku prowadzonych drużynach można wybrać jedną). Jego zawodnicy są wyróżnieni na bursztynowo w tabelach, w karcie zawodnika i na wykresach.
-- **Kolumny Moneyball:** koszt (cena + 3 lata pensji; u wolnego agenta tylko pensja), opłacalność (punkty SCORE ponad przeciętnego zawodnika na 1 mln € kosztu), okazje i, przy włączonych danych ukrytych, ryzyko 0–100 (podatność na kontuzje, regularność, ważne mecze, wiek ponad 30 lat, kontuzje z ostatnich 2 lat).
+- **Kolumny Moneyball:** koszt (cena + 3 lata pensji; u wolnego agenta tylko pensja), okazje i, przy włączonych danych ukrytych, ryzyko 0–100 (podatność na kontuzje, regularność, ważne mecze, wiek ponad 30 lat, kontuzje z ostatnich 2 lat).
 - **Niedowartościowani:** w każdej pozycji aplikacja uczy się, ile zwykle kosztuje zawodnik z danym wynikiem, wiekiem i długością kontraktu (regresja na logarytmie ceny). Kolumna „Wycena wg wyniku” to ta typowa cena, a „Niedowartościowanie” to wycena / cena: ×2 znaczy, że zawodnik gra jak typowy zawodnik dwa razy droższy. Model celowo nie zna ligi ani klubu, więc wskazuje tanich zawodników z mniejszych lig i klubów, którzy grają jak drożsi. Na wykresie „Cena vs wycena” okazje leżą nad przekątną; podpis pokazuje jakość modelu (R²). Przy danych ukrytych dochodzi „Wynik ponad CA”: o ile wynik zawodnika przewyższa wynik typowy dla jego CA.
 - **Okazje:** wybór rodzajów okazji jest wspólny dla wszystkich pozycji i zapamiętywany; bez zaznaczeń lista pokazuje zawodników z dowolną okazją. Zawodnik jest tu wtedy i tylko wtedy, gdy ma dany znacznik w kolumnie „Okazje” rankingu; przełącznik „Pomiń zawodników mojego klubu” jest widoczny i mówi, ilu ukrył. Rodzaje: zawodnicy niedowartościowani (×2 i SCORE ≥ 55), z kończącym się kontraktem (≤ 6 i ≤ 12 mies.), wolnych agentów, kończących wypożyczenie oraz młodych talentów bez minut w dużych klubach.
 - **Moja kadra:** każda pozycja twojego klubu na tle całej puli: najlepszy zawodnik, średni wiek, kończące się kontrakty i luka do 80. percentyla. Pozycje są ułożone od bramkarza do napastnika (albo od największej luki), a „Szukaj wzmocnienia” otwiera ranking tej pozycji bez twoich zawodników.
 - **Karta zawodnika:** kliknij nazwisko, żeby zobaczyć szczegóły, koszt i okazje, dane ukryte (gdy włączone), profil statystyk na radarze i podobnych zawodników.
 - **Porównanie:** do 4 zawodników na jednym radarze, razem z tabelą wartości.
-- **Wykresy:** wynik względem kosztu lub wartości z granicą opłacalności (zawodnicy, od których nikt nie jest jednocześnie lepszy i tańszy) oraz top 10 w wybranej statystyce.
-- **Ligi:** lista lig wykrytych w zapisie z przykładowymi klubami oraz lista narodowości. Nazwę i mnożnik siły ligi oraz nazwę kraju wpisujesz ręcznie; zmiany działają od razu i zapisują się w katalogu `~/.fm_moneyball` (`nazwy_rozgrywek.csv`, `mnozniki_lig.csv`, `nazwy_krajow.csv`), poza folderem aplikacji, więc pobranie nowej wersji ich nie nadpisze.
+- **Wykresy:** wynik względem kosztu lub wartości z granicą wynik/koszt (zawodnicy, od których nikt nie jest jednocześnie lepszy i tańszy) oraz top 10 w wybranej statystyce.
+- **Ligi i kraje:** ligi wykryte w zapisie (z przykładowymi klubami) i narodowości zawodników; w każdej sekcji od razu widać 5 najliczniejszych, resztę po „Pokaż więcej”, a te bez nazwy zawsze są na górze. Nazwę i mnożnik siły ligi oraz nazwę kraju wpisujesz ręcznie; zmiany działają od razu i zapisują się w katalogu `~/.fm_moneyball` (`nazwy_rozgrywek.csv`, `mnozniki_lig.csv`, `nazwy_krajow.csv`), poza folderem aplikacji, więc pobranie nowej wersji ich nie nadpisze.
 
 ### Wagi nowych pozycji
 
@@ -87,8 +87,8 @@ Zapis FM26 to kontener z sekcjami skompresowanymi algorytmem Zstandard, bez szyf
 
 Ograniczenia:
 
-- **Nazwy lig.** Zapis nie zawiera nazw lig, tylko ich identyfikatory. Domyślna mapa jest w `dane/nazwy_rozgrywek.csv`. Własne nazwy wpiszesz w zakładce „Ligi” albo nauczysz ze starych eksportów CSV (panel „Źródło danych”, sekcja „Nazwy lig”); trafiają do `~/.fm_moneyball/nazwy_rozgrywek.csv`. Identyfikatory są wspólne dla wszystkich zapisów FM26.
-- **Narodowości.** Zapis nie zawiera nazw krajów, więc aplikacja nadaje je sama: kraj nazwanej ligi to najczęstsza narodowość jej zawodników (Ekstraklasa → Polska), a kraje bez wczytanej ligi rozpoznaje po składach typowo krajowych klubów (np. Hibernian, Aberdeen, Motherwell → Szkocja). Gdyby któregoś kraju nie udało się nazwać, pokaże się jako „Kraj #id” i można go nazwać w zakładce „Ligi”. Zawodnik bez narodowości w zapisie ma „Nieznana”. Ligi bez nazwy są pokazywane jako „Rozgrywki #id” i dostają najniższy mnożnik ligowy. Mnożniki lig spoza wbudowanej tabeli (np. K League) zapisują się w `dane/mnozniki_lig.csv`.
+- **Nazwy lig.** Zapis nie zawiera nazw lig, tylko ich identyfikatory. Domyślna mapa jest w `dane/nazwy_rozgrywek.csv`. Własne nazwy wpiszesz w zakładce „Ligi i kraje” albo nauczysz ze starych eksportów CSV (panel „Źródło danych”, sekcja „Nazwy lig”); trafiają do `~/.fm_moneyball/nazwy_rozgrywek.csv`. Identyfikatory są wspólne dla wszystkich zapisów FM26.
+- **Narodowości.** Zapis nie zawiera nazw krajów, więc aplikacja nadaje je sama: kraj nazwanej ligi to najczęstsza narodowość jej zawodników (Ekstraklasa → Polska), a kraje bez wczytanej ligi rozpoznaje po składach typowo krajowych klubów (np. Hibernian, Aberdeen, Motherwell → Szkocja). Gdyby któregoś kraju nie udało się nazwać, pokaże się jako „Kraj #id” i można go nazwać w zakładce „Ligi i kraje”. Zawodnik bez narodowości w zapisie ma „Nieznana”. Ligi bez nazwy są pokazywane jako „Rozgrywki #id” i dostają najniższy mnożnik ligowy. Mnożniki lig spoza wbudowanej tabeli (np. K League) zapisują się w `dane/mnozniki_lig.csv`.
 - **Wolni agenci** (zawodnicy bez klubu, którzy grali w tym sezonie) trafiają do puli z ligą „Wolny agent”. Można to wyłączyć w „Opcjach odczytu zapisu”.
 - **Waluta.** Kwoty są zapisane w walucie bazowej. Domyślny kurs 1,157 odpowiada temu, co gra pokazuje w euro. Można go zmienić w „Opcjach odczytu zapisu”.
 - **Ceny.** Zapis zawiera rzeczywistą wartość transferową z gry. Gra pokazuje zamiast niej widełki zależne od wiedzy skautów (np. 80–325 tys. € przy wartości 315 tys. €). Dlatego ceny z zapisu są zwykle wyższe niż przy imporcie CSV, który brał środek widełek.
@@ -113,21 +113,22 @@ Skrypt wypisze liczbę odczytanych zawodników i lig, pokrycie kolumn oraz prób
 ```
 fm_moneyball/              logika niezależna od interfejsu
   __main__.py              uruchomienie: python -m fm_moneyball
-  serwer/                  API (FastAPI), stan i wczytywanie w tle; static/ = zbudowany frontend
-  analiza.py               ranking, filtry, kolumny, radar, podobni, koszt/opłacalność/okazje/ryzyko, moja kadra
+  serwer/                  API (FastAPI): api.py składa aplikację z trasy/ (zrodlo, ligi, analiza, frontend),
+                           modele.py (zapytania), obliczenia.py (wynik z pamięcią podręczną), stan.py
+                           (wczytywanie w tle); static/ = zbudowany frontend
+  analiza.py               ranking, filtry, kolumny, radar, podobni, koszt/okazje/ryzyko, moja kadra
   ligi.py                  mnożniki lig ustawione przez użytkownika
   kraje.py                 nazwy krajów (narodowości): z nazwanych lig i ręczne
   mapy.py                  pliki id,nazwa: domyślne (dane/) i użytkownika (~/.fm_moneyball)
   stale.py                 kolumny, cechy, wagi, mnożniki lig
   parsery.py               tekst z FM -> liczby
-  schemat.py               kolumny pochodne, ID, raport wczytania
+  schemat.py               kolumny pochodne, ID, nazwy lig i krajów
   model.py                 SCORE, percentyle, macierz stylu
   zrodla/csv_fm.py         eksport CSV + dane demo
   zrodla/zapis_fm.py       plik zapisu .fm (fmsave)
   zrodla/folder.py         folder zapisów gry
 narzedzia/zbadaj_zapis.py  diagnostyka zapisu
 frontend/                  interfejs React + TypeScript (Vite, Mantine, AG Grid, ECharts)
-app.py                     poprzedni interfejs (Streamlit)
 tests/                     testy (pytest)
 ```
 

@@ -44,7 +44,6 @@ export type Stan = {
 export type MetaPozycji = {
   pozycja: string;
   liczba: number;
-  ligi: { nazwa: string; liczba: number }[];
   nogi: string[];
   wiek: [number, number] | null;
   cena_max: number | null;
@@ -54,7 +53,6 @@ export type MetaPozycji = {
   ma_ukryte: boolean;
   ma_ryzyko: boolean;
   okazje: string[];
-  kraje: { nazwa: string; liczba: number }[];
 };
 
 export type Filtry = {
@@ -70,7 +68,6 @@ export type Filtry = {
   bez_mojego_klubu: boolean;
   okazje: string[];
   max_ryzyko: number | null;
-  min_oplacalnosc: number | null;
   kandydaci: boolean;
   min_score_kandydata: number;
   min_niedowartosciowanie: number | null;
@@ -143,7 +140,7 @@ export type PozycjaKadry = {
 export type Kadra = { klub: string | null; pozycje: PozycjaKadry[] };
 
 export type Kraj = {
-  id: number;
+  id: number | null;
   nazwa: string | null;
   zrodlo: 'ręcznie' | 'liga' | 'kluby' | null;
   reczna: boolean;

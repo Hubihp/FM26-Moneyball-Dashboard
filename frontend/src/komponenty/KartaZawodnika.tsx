@@ -63,7 +63,7 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
             ) : null}
             {w['Pareto'] ? (
               <Tooltip label="Nikt w tabeli nie ma jednocześnie wyższego SCORE i niższego kosztu">
-                <Badge color="teal" variant="outline">granica opłacalności</Badge>
+                <Badge color="teal" variant="outline">granica wynik/koszt</Badge>
               </Tooltip>
             ) : null}
             {okazje.map((o) => <Badge key={o} color="grape" variant="light">{o}</Badge>)}
@@ -88,7 +88,6 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
             <Pole etykieta="Noga" wartosc={String(w['Preferowana noga'] ?? '–')} />
             {w['CA'] !== undefined ? <Pole etykieta="CA / PA" wartosc={`${w['CA'] ?? '–'} / ${w['PA'] ?? '–'}`} /> : null}
             <Pole etykieta="Koszt (cena + 3 lata pensji)" wartosc={eur(w['Koszt'] as number | null)} />
-            <Pole etykieta="Opłacalność" wartosc={formatuj(w['Opłacalność'], 'dec2')} />
             <Pole etykieta="Wycena wg wyniku" wartosc={eur(w['Wycena wg wyniku'] as number | null)} />
             <Pole etykieta="Niedowartościowanie" wartosc={formatuj(w['Niedowartościowanie'], 'mnoznik')} />
             {w['Wynik ponad CA'] !== undefined ? (

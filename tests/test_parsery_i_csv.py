@@ -4,7 +4,7 @@ import pytest
 
 from fm_moneyball.parsery import do_liczb, parse_market_value, parse_wages
 from fm_moneyball.stale import POZYCJE
-from fm_moneyball.zrodla.csv_fm import generuj_demo_csv, wczytaj_csv, wykryj_pozycje
+from fm_moneyball.zrodla.csv_fm import generuj_demo_csv, wczytaj_csv
 
 
 @pytest.mark.parametrize("tekst", ["1 mln € - 4 mln €", "1 mln €\xa0-\xa04 mln €", "1 mln € – 4 mln €", "1 mln €–4 mln €"])
@@ -50,10 +50,3 @@ def test_nieczytelny_wiek_jest_liczony():
 def test_brak_kolumny_pilkarz():
     with pytest.raises(ValueError):
         wczytaj_csv("Imię;Wiek\nA;23\n".encode("utf-8"))
-
-
-def test_wykryj_pozycje_po_nazwie_pliku():
-    pusty = pd.DataFrame()
-    assert wykryj_pozycje("BR (1).csv", pusty) == "Bramkarz"
-    assert wykryj_pozycje("napastnik.csv", pusty) == "Napastnik"
-    assert wykryj_pozycje("cokolwiek.csv", pusty) is None

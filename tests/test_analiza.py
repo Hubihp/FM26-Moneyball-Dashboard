@@ -28,11 +28,10 @@ def _pula():
     })
 
 
-def test_koszt_oplacalnosc_i_pareto():
+def test_koszt_i_pareto():
     p = analiza.wzbogac(_pula(), DZIS)
     assert p.loc[0, 'Koszt'] == 1e6 + 3 * 100e3
-    assert p.loc[0, 'Opłacalność'] == (60 - 50) / 1.3
-    assert p.loc[2, 'Opłacalność'] == 0          # ponizej przecietnego
+    assert 'Opłacalność' not in p.columns
     assert p.loc[3, 'Koszt'] == 900e3             # wolny agent: sama placa
     pareto = analiza.oznacz_pareto(p)
     # Slaby (najtanszy), Wolny, Tani, Drogi (najlepszy) - Junior jest zdominowany przez Taniego
@@ -76,13 +75,6 @@ def test_moja_kadra_luka():
     assert [z["Piłkarz"] for z in kadra["zawodnicy"]] == ["Drogi", "Tani"]
     pusta = analiza.moja_kadra("Napastnik", pula, 99, DZIS)
     assert pusta["liczba"] == 0 and pusta["luka"] == pusta["cel"]
-
-
-def test_oplacalnosc_przy_koszcie_bliskim_zera():
-    pula = _pula()
-    pula.loc[3, 'Zarobki_Numeryczne'] = 1.0          # wolny agent z pensja ~0 -> koszt 3 EUR
-    p = analiza.wzbogac(pula, DZIS)
-    assert pd.isna(p.loc[3, 'Opłacalność']) and np.isfinite(p['Opłacalność'].dropna()).all()
 
 
 def test_maska_odniesienia_nie_zmienia_wyniku_nominalnych():

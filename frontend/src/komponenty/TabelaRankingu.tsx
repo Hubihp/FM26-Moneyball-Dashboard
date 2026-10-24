@@ -211,7 +211,10 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         }}
         onRowDoubleClicked={(e) => e.data && naWybor(String(e.data['ID']), e.data)}
         selectionColumnDef={{ pinned: 'left', width: 46, headerTooltip: 'Zaznacz do porównania' }}
-        defaultColDef={{ wrapHeaderText: true, autoHeaderHeight: true, width: 120 }}
+        // Stala wysokosc naglowka: autoHeaderHeight liczy ja tylko z wyrenderowanych kolumn (wirtualizacja),
+        // wiec po przewinieciu do dlugich nazw caly naglowek rosl. Dluzsze nazwy sa ucinane (pelna w podpowiedzi).
+        headerHeight={48}
+        defaultColDef={{ wrapHeaderText: true, autoHeaderHeight: false, width: 120 }}
         animateRows={false}
         tooltipShowDelay={300}
       />

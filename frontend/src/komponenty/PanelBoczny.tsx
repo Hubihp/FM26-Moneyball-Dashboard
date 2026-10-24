@@ -18,7 +18,6 @@ import {
 
 import type { Filtry, MetaPozycji } from '../api';
 import Boisko from './Boisko';
-import LigiIKraje from './LigiIKraje';
 import { eur } from '../format';
 
 export type Ustawienia = { k_baza: number; ignoruj_mnoznik: boolean; pokaz_ukryte: boolean };
@@ -41,7 +40,7 @@ type Props = {
 
 export const PUSTE_FILTRY: Filtry = {
   ligi: [], nogi: [], kraje: [], wiek: null, cena: null, bez_ceny: true, szukaj: '', kontrakt_mies: null, min_minut: 0,
-  bez_mojego_klubu: false, okazje: [], max_ryzyko: null, min_oplacalnosc: null, kandydaci: false,
+  bez_mojego_klubu: false, okazje: [], max_ryzyko: null, kandydaci: false,
   min_score_kandydata: 60, min_niedowartosciowanie: null,
 };
 
@@ -77,9 +76,6 @@ export default function PanelBoczny(p: Props) {
         </div>
 
         <TextInput label="Szukaj (piłkarz / klub)" value={filtry.szukaj} onChange={(e) => zmien('szukaj', e.currentTarget.value)} />
-
-        <LigiIKraje ligi={meta?.ligi ?? []} kraje={meta?.kraje ?? []} wybraneLigi={filtry.ligi}
-          wybraneKraje={filtry.kraje} setLigi={(v) => zmien('ligi', v)} setKraje={(v) => zmien('kraje', v)} />
 
         {meta?.wiek && (
           <div>
@@ -120,10 +116,6 @@ export default function PanelBoczny(p: Props) {
             { value: '2', label: '×2 (dwa razy tańszy)' },
             { value: '3', label: '×3 i więcej' },
           ]} />
-
-        <NumberInput label="Min. opłacalność" description="Punkty SCORE ponad przeciętnego na 1 mln € kosztu (3 lata)"
-          min={0} step={0.5} decimalScale={2} value={filtry.min_oplacalnosc ?? ''}
-          onChange={(v) => zmien('min_oplacalnosc', v === '' ? null : Number(v))} />
 
         {meta?.ma_ryzyko && p.ustawienia.pokaz_ukryte && (
           <div>

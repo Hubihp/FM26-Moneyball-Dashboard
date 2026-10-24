@@ -1,6 +1,5 @@
 """Zrodlo: eksport widoku z FM do CSV (jeden plik = jedna pozycja) oraz syntetyczne dane demo."""
 import io
-import re
 
 import numpy as np
 import pandas as pd
@@ -8,7 +7,7 @@ import pandas as pd
 from fm_moneyball.parsery import do_liczb, fmt_eur, parse_age, parse_market_value, parse_wages
 from fm_moneyball.schemat import dopelnij_schemat
 from fm_moneyball.stale import (KOLUMNY_PER_POZYCJA, KOLUMNY_STATYSTYK, NAZWY_KOLUMNY_MINUT,
-                                TLUMACZENIE_KOLUMN, WSKAZOWKI_NAZW_PLIKOW)
+                                TLUMACZENIE_KOLUMN)
 
 
 NAZWY_KOLUMNY_KRAJU = ["Nar", "Narodowość", "Nat", "Nationality", "Kraj"]
@@ -61,17 +60,6 @@ def wczytaj_csv(plik_bajty):
         df['Minuty'] = do_liczb(df['Minuty'], tysiace_z_kropka=True)
 
     return dopelnij_schemat(df), odrzucone
-
-
-def wykryj_pozycje(nazwa_pliku, df):
-    """Probuje odgadnac pozycje: po kolumnie 'Pozycja' (BR = bramkarz) lub po nazwie pliku."""
-    if 'Pozycja' in df.columns:
-        kody = df['Pozycja'].dropna().astype(str).str.strip().str.upper()
-        if len(kody) and kody.str.startswith('BR').mean() > 0.9:
-            return "Bramkarz"
-    nazwa = re.sub(r'\.csv$', '', nazwa_pliku, flags=re.I).strip().lower()
-    nazwa = re.sub(r'[\s_\-]*\(?\d+\)?$', '', nazwa)   # "BR (1)" -> "br"
-    return WSKAZOWKI_NAZW_PLIKOW.get(nazwa)
 
 
 # =============================================================================

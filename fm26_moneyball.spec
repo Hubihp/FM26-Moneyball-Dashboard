@@ -17,7 +17,7 @@ a = Analysis(
     ["fm26_moneyball.py"],
     datas=datas,
     hiddenimports=hiddenimports,
-    # stary interfejs Streamlit i narzedzia deweloperskie nie sa potrzebne w .exe
+    # biblioteki wykresow i narzedzia deweloperskie nie sa potrzebne w .exe
     excludes=["streamlit", "altair", "plotly", "matplotlib", "tkinter", "pytest", "IPython"],
 )
 pyz = PYZ(a.pure)
