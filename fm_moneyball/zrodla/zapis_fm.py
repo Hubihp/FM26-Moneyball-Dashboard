@@ -20,7 +20,6 @@ import pandas as pd
 from fm_moneyball.kraje import kraj_z_licznika, kraje_z_kotwic, narodowosci_lig
 from fm_moneyball.mapy import KATALOG_DANYCH, KATALOG_DOMOWY, wczytaj_mape, zapisz_mape
 from fm_moneyball.parsery import fmt_eur
-from fm_moneyball.role import ATRYBUTY_PL, KOLUMNA_ATRYBUTU
 from fm_moneyball.schemat import dopelnij_schemat
 from fm_moneyball.stale import MAPOWANIE_NAZW_LIG, POZYCJE, kolumna_oceny
 
@@ -124,7 +123,6 @@ class WynikZapisu:
     moje_kluby: list = field(default_factory=list)     # [{"uid", "nazwa"}] - wszystkie prowadzone druzyny
     ligi: list = field(default_factory=list)           # podsumowanie lig: klucz, domyslna, liczba, kluby, kraj
     kraje_auto: dict = field(default_factory=dict)     # nation_id -> nazwa kraju z klubow-kotwic
-    taktyki: list = field(default_factory=list)        # taktyki pierwszej druzyny mojego klubu (odczytaj_taktyki)
 
 
 # =============================================================================
@@ -285,9 +283,6 @@ def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0):
         wiersz[kolumna] = getattr(atrybuty, pole, None) if atrybuty is not None else None
     for pole, kolumna in OSOBOWOSC.items():
         wiersz[kolumna] = getattr(osobowosc, pole, None) if osobowosc is not None else None
-    # atrybuty (1-20) do dopasowania rol
-    for pole in ATRYBUTY_PL:
-        wiersz[KOLUMNA_ATRYBUTU.format(pole)] = getattr(atrybuty, pole, None) if atrybuty is not None else None
     wiersz.update(statystyki_kanoniczne(liczniki))
     return wiersz
 
@@ -697,11 +692,6 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
             liczniki = sumuj_statystyki(zapis.player_season_stats().where(kind=rodzaj), opcje.rodzaj_statystyk)
             etap(4)
             try:
-                taktyki = odczytaj_taktyki(zapis.tactics(), {m.club_uid for m in zarzadzane})
-            except Exception as e:   # taktyki sa dodatkiem (zakladka "Moja taktyka")
-                ostrzezenia.append(f"Nie udało się odczytać taktyk ({e}).")
-                taktyki = []
-            try:
                 kontuzje = policz_kontuzje(zapis.injuries(), info.game_date)
             except Exception as e:   # historia kontuzji jest dodatkiem - jej brak nie blokuje reszty
                 ostrzezenia.append(f"Nie udało się odczytać historii kontuzji ({e}).")
@@ -728,38 +718,7 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
         moje_kluby=moje,
         ligi=podsumuj_ligi(liga_klubu, kluby, narodowosci=narodowosci_lig(zawodnicy, liga_klubu)),
         kraje_auto=kraje_z_kotwic(kluby, zawodnicy),
-        taktyki=taktyki,
     )
-
-
-def _numer_bitu(wartosc):
-    return int(wartosc).bit_length() - 1 if wartosc else None
-
-
-def odczytaj_taktyki(taktyki, moje_kluby):
-    """
-    Taktyki pierwszych druzyn moich klubow -> [{klub_uid, indeks, nazwa, mentalnosc, miejsca}]. Zapis nie nazywa
-    pozycji ani rol (same numery bitow), wiec miejsce niesie surowe numery: pozycje IP/OOP (bity maski)
-    i role IP/OOP (numer jedynego ustawionego bitu). Nazwy nadaje kalibracja w aplikacji.
-    """
-    wynik = []
-    for t in taktyki:
-        if t.club_uid not in moje_kluby or t.team_slot not in (0, None):
-            continue
-        miejsca = []
-        for m in t.slots:
-            nieznane = m.unknown or {}
-            miejsca.append({
-                "nr": m.number,
-                "ip_pozycje": [int(p.raw) for p in m.in_possession_positions],
-                "oop_pozycje": [int(p.raw) for p in m.out_of_possession_positions],
-                "ip_rola": _numer_bitu(nieznane.get("in_possession_role_bits")),
-                "oop_rola": _numer_bitu(nieznane.get("out_of_possession_role_bits")),
-            })
-        mentalnosc = getattr(getattr(t, "mentality", None), "label", None)
-        wynik.append({"klub_uid": t.club_uid, "indeks": t.index, "nazwa": t.name or f"Taktyka {t.index + 1}",
-                      "mentalnosc": getattr(mentalnosc, "name", None), "miejsca": miejsca})
-    return sorted(wynik, key=lambda t: (t["klub_uid"], t["indeks"]))
 
 
 def zbuduj_mape_nazw_lig(sciezka, ramki_csv):

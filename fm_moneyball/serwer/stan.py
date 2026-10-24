@@ -38,7 +38,7 @@ log = logging.getLogger("fm_moneyball")
 CO_ILE_SPRAWDZAC = 15        # sekundy miedzy sprawdzeniami folderu zapisow
 # 2: domyslnie zawodnik we wszystkich pulach, w ktorych jest naturalny (wczesniej tylko glowna)
 WERSJA_USTAWIEN = 2
-WERSJA_CACHE = 6             # zmiana formatu wyniku = nowy klucz cache
+WERSJA_CACHE = 5             # zmiana formatu wyniku = nowy klucz cache
 ILE_W_CACHE = 3
 DEMO_DATA_GRY = date(2027, 1, 15)
 
@@ -78,8 +78,7 @@ def _demo():
 class Stan:
     def __init__(self, plik_ustawien=KATALOG_DOMOWY / "ustawienia.json", sledzenie=True,
                  katalog_cache=KATALOG_DOMOWY / "cache", plik_nazw=PLIK_NAZW_UZYTKOWNIKA,
-                 plik_mnoznikow=PLIK_MNOZNIKOW_UZYTKOWNIKA, plik_krajow=PLIK_KRAJOW_UZYTKOWNIKA,
-                 plik_kalibracji=KATALOG_DOMOWY / "role_taktyki.json"):
+                 plik_mnoznikow=PLIK_MNOZNIKOW_UZYTKOWNIKA, plik_krajow=PLIK_KRAJOW_UZYTKOWNIKA):
         self._blokada = threading.RLock()
         self._blokada_wczytywania = threading.Lock()
         self.plik_ustawien = Path(plik_ustawien) if plik_ustawien else None
@@ -87,8 +86,6 @@ class Stan:
         # edycje uzytkownika (nakladane na mapy domyslne z dane/)
         self.plik_nazw, self.plik_mnoznikow = Path(plik_nazw), Path(plik_mnoznikow)
         self.plik_krajow = Path(plik_krajow)
-        self.plik_kalibracji = Path(plik_kalibracji)   # numery pozycji i rol z taktyk -> nazwy
-        self.taktyki = []              # taktyki moich klubow z zapisu (surowe numery)
         self.nazwy_krajow = {}         # nation_id -> nazwa (reczne, z lig i z klubow-kotwic)
         self.zrodla_krajow = {}        # nation_id -> skad nazwa: ręcznie | liga | kluby
         self.kraje_auto = {}           # nation_id -> nazwa z klubow-kotwic (z odczytu zapisu)
@@ -343,16 +340,14 @@ class Stan:
             "z_cache": z_cache,
             "wczytano": datetime.now().isoformat(timespec="seconds"),
         }
-        return self._zakoncz(pokolenie, klucz, wynik.dane, meta, wynik.ligi, sciezka_odczytu, wynik.kraje_auto,
-                             getattr(wynik, "taktyki", []))
+        return self._zakoncz(pokolenie, klucz, wynik.dane, meta, wynik.ligi, sciezka_odczytu, wynik.kraje_auto)
 
-    def _zakoncz(self, pokolenie, klucz, dane, meta, ligi, sciezka_odczytu, kraje_auto, taktyki=()):
+    def _zakoncz(self, pokolenie, klucz, dane, meta, ligi, sciezka_odczytu, kraje_auto):
         with self._blokada:
             if pokolenie != self.pokolenie:
                 return False
             self.surowe, self.meta, self.ligi, self._klucz = dane, meta, ligi, klucz
             self.kraje_auto = kraje_auto or {}
-            self.taktyki = list(taktyki or [])
             self._sciezka_odczytu = sciezka_odczytu
             self._uzupelnij_moj_klub()
             self._zastosuj_ligi()

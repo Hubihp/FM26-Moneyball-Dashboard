@@ -2,7 +2,7 @@
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 
-from fm_moneyball import analiza, role
+from fm_moneyball import analiza
 from fm_moneyball.serwer.modele import KadraModel, ListaZyczenModel, PodobniModel, RadarModel, RankingModel
 from fm_moneyball.serwer.obliczenia import kandydat
 from fm_moneyball.stale import POZYCJE
@@ -26,16 +26,12 @@ def utworz(stan, obl):
             "ma_ukryte": 'CA' in df.columns and bool(df['CA'].notna().any()),
             "ma_ryzyko": 'Podatność na kontuzje' in df.columns and bool(df['Podatność na kontuzje'].notna().any()),
             "okazje": list(analiza.OKAZJE),
-            # role FM26 z wagami (dopasowanie liczone tylko przy atrybutach z zapisu gry)
-            "role": role.opis_rol(pozycja),
-            "ma_atrybuty": role.ma_atrybuty(df),
         }
 
     @router.post("/ranking")
     def ranking(z: RankingModel):
         policzona, widoczni, pominiete, model_wyceny, ukryci_moi = obl.wynik_i_filtr(z)
-        kolumny = analiza.kolumny_tabeli(z.pozycja, policzona, z.pokaz_ukryte,
-                                         analiza.kolumna_wybranej_roli(z.filtry))
+        kolumny = analiza.kolumny_tabeli(z.pozycja, policzona, z.pokaz_ukryte)
         return {
             "pozycja": z.pozycja,
             "kolumny": kolumny,
@@ -94,8 +90,7 @@ def utworz(stan, obl):
                     znalezieni.append(wiersz.assign(**{'Pozycja na liście': pozycja}))
         ramka = pd.concat(znalezieni, ignore_index=True) if znalezieni else pd.DataFrame()
         return {"kolumny": analiza.kolumny_listy(ramka),
-                "wiersze": analiza.do_json(ramka, analiza.POLA_WIERSZA + ['Pozycja na liście']
-                                           + analiza.kolumny_rol(ramka)),
+                "wiersze": analiza.do_json(ramka, analiza.POLA_WIERSZA + ['Pozycja na liście']),
                 "nieznalezieni": brak}
 
     return router

@@ -11,7 +11,7 @@ from datetime import date
 import pandas as pd
 from fastapi import HTTPException
 
-from fm_moneyball import analiza, role
+from fm_moneyball import analiza
 from fm_moneyball.serwer.modele import RankingModel
 from fm_moneyball.stale import POZYCJE
 from fm_moneyball.wycena import wycen
@@ -53,8 +53,7 @@ class Obliczenia:
             df, odniesienie = analiza.dolacz_kandydatow(df, self.stan.wszyscy_zawodnicy(), pozycja)
         policzona, pominiete = analiza.policz_wynik(df, wagi, ignoruj_mnoznik, k_baza, odniesienie)
         policzona, model_wyceny = wycen(policzona, odniesienie, self.data_gry())
-        policzona = role.dopasowania(analiza.wzbogac(policzona, self.data_gry()), pozycja)
-        wynik = (policzona, pominiete, model_wyceny)
+        wynik = (analiza.wzbogac(policzona, self.data_gry()), pominiete, model_wyceny)
         with self._blokada:
             self._policzone[klucz] = wynik
             while len(self._policzone) > ILE_POLICZONYCH:

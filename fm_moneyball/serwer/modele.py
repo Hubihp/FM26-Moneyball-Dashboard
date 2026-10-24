@@ -71,8 +71,6 @@ class FiltryModel(BaseModel):
     min_score_kandydata: float = 60
     min_niedowartosciowanie: float | None = None
     tylko_z_okazja: bool = False
-    rola: str | None = None
-    min_dopasowania: float | None = None
 
 
 class RankingModel(BaseModel):
@@ -93,9 +91,3 @@ class RadarModel(BaseModel):
 class PodobniModel(RankingModel):
     id: str
     n: int = 10
-
-
-class KalibracjaModel(BaseModel):
-    rodzaj: str                 # pozycja | rola
-    klucz: str                  # "3,17" albo "IP|DC|5"
-    wartosc: str | None = None  # grupa z poradnika albo nazwa roli; brak = usun

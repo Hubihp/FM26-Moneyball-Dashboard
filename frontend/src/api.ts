@@ -53,12 +53,7 @@ export type MetaPozycji = {
   ma_ukryte: boolean;
   ma_ryzyko: boolean;
   okazje: string[];
-  role: Record<Faza, OpisRoli[]>;
-  ma_atrybuty: boolean;
 };
-
-export type Faza = 'IP' | 'OOP';
-export type OpisRoli = { nazwa: string; kluczowe: string[]; dodatkowe: string[]; statystyki: string[] };
 
 export type Filtry = {
   ligi: string[];
@@ -77,8 +72,6 @@ export type Filtry = {
   min_score_kandydata: number;
   min_niedowartosciowanie: number | null;
   tylko_z_okazja?: boolean;
-  rola: string | null; // "IP|nazwa roli"
-  min_dopasowania: number | null;
 };
 
 export type ZapytanieRankingu = {
@@ -99,14 +92,7 @@ export type ModelWyceny = {
   proc_za_10_score: number | null;
   proc_za_rok_mlodszy: number | null;
 };
-export type Kolumna = {
-  naglowek: string;
-  pole: string;
-  format: Format;
-  statystyka: boolean;
-  nizsze_lepsze: boolean;
-  sortuj?: boolean; // domyslne sortowanie (dopasowanie do wybranej roli)
-};
+export type Kolumna = { naglowek: string; pole: string; format: Format; statystyka: boolean; nizsze_lepsze: boolean };
 export type Wiersz = Record<string, string | number | boolean | null>;
 
 export type Ranking = {
@@ -160,34 +146,6 @@ export type Kraj = {
   reczna: boolean;
   liczba: number;
   przyklady: string[];
-};
-
-export type FazaMiejsca = {
-  klucz_pozycji: string;
-  grupa: string | null;
-  bit_roli: number | null;
-  klucz_roli: string | null;
-  rola: string | null;
-};
-export type ZawodnikMiejsca = {
-  id: string;
-  pilkarz: string;
-  klub: string | null;
-  wiek: number | null;
-  pozycja: string | null;
-  cena: number | null;
-  ip: number | null;
-  oop: number | null;
-  razem: number;
-  moj: boolean;
-};
-export type MiejsceTaktyki = { nr: number; IP: FazaMiejsca; OOP: FazaMiejsca; zawodnicy: ZawodnikMiejsca[] };
-export type GrupaRol = { grupa: string; nazwa: string; pule: string[]; role: Record<Faza, string[]> };
-export type Taktyka = {
-  taktyki: { indeks: number; nazwa: string; mentalnosc: string | null }[];
-  grupy: GrupaRol[];
-  wybrana: number | null;
-  miejsca: MiejsceTaktyki[];
 };
 
 export type ListaZyczen = { kolumny: Kolumna[]; wiersze: Wiersz[]; nieznalezieni: string[] };
@@ -246,13 +204,6 @@ export const api = {
   mojaKadra: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number }) =>
     post<Kadra>('/api/moja-kadra', body),
   przeladuj: () => post<Stan>('/api/przeladuj', {}),
-  taktyka: (indeks: number | null) => zadanie<Taktyka>(`/api/taktyka${indeks === null ? '' : `?indeks=${indeks}`}`),
-  kalibruj: (rodzaj: 'pozycja' | 'rola', klucz: string, wartosc: string | null) =>
-    zadanie<unknown>('/api/taktyka/kalibracja', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rodzaj, klucz, wartosc }),
-    }),
   metaPozycji: (pozycja: string) => zadanie<MetaPozycji>(`/api/pozycja/${encodeURIComponent(pozycja)}`),
   ranking: (body: ZapytanieRankingu) => post<Ranking>('/api/ranking', body),
   radar: (pozycja: string, ids: string[], kandydaci = false) => post<Radar>('/api/radar', { pozycja, ids, kandydaci }),
