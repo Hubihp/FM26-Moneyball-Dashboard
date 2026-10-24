@@ -1,6 +1,5 @@
-import { Alert, Box, Chip, Group, Loader, Stack, Text } from '@mantine/core';
+import { Alert, Box, Chip, Group, Loader, Stack, Switch, Text } from '@mantine/core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
 
 import { api, type Wiersz, type ZapytanieRankingu } from '../api';
 import TabelaRankingu from './TabelaRankingu';
@@ -22,21 +21,28 @@ type Props = {
   naWybor: (id: string, wiersz?: Wiersz) => void;
   ulubione: Set<string>;
   przelaczUlubione: (wiersz: Wiersz) => void;
+  // wybor okazji i "pomin moj klub" sa trzymane w App (wspolne dla pozycji, zapamietane)
+  wybrane: string[];
+  setWybrane: (v: string[]) => void;
+  pominMoj: boolean;
+  setPominMoj: (v: boolean) => void;
 };
 
-// Ranking zawodnikow z okazjami transferowymi (filtry z panelu bocznego dalej obowiazuja)
-export default function Okazje({ zapytanie, okazje, wersja, mojKlubUid, naWybor, ulubione, przelaczUlubione }: Props) {
-  const [wybrane, setWybrane] = useState<string[]>(okazje.filter((o) => o !== 'kontrakt ≤ 6 mies.'));
+// Ranking zawodnikow z okazjami transferowymi (filtry z panelu bocznego dalej obowiazuja).
+// Ten sam znacznik z kolumny "Okazje" (analiza.wzbogac) - zadnych innych, ukrytych warunkow.
+export default function Okazje({ zapytanie, okazje, wersja, mojKlubUid, naWybor, ulubione, przelaczUlubione, wybrane,
+  setWybrane, pominMoj, setPominMoj }: Props) {
+  const znane = wybrane.filter((o) => okazje.includes(o));
   const pelne: ZapytanieRankingu = {
     ...zapytanie,
-    filtry: { ...zapytanie.filtry, okazje: wybrane, bez_mojego_klubu: true },
+    filtry: { ...zapytanie.filtry, okazje: znane, tylko_z_okazja: true, bez_mojego_klubu: pominMoj },
   };
   const ranking = useQuery({
     queryKey: ['okazje', wersja, pelne],
     queryFn: () => api.ranking(pelne),
-    enabled: wybrane.length > 0,
     placeholderData: keepPreviousData,
   });
+  const ukryci = ranking.data?.liczba_ukrytych_mojego_klubu ?? 0;
 
   return (
     <Stack p="sm" h="100%" gap="xs">
@@ -49,12 +55,23 @@ export default function Okazje({ zapytanie, okazje, wersja, mojKlubUid, naWybor,
         </Group>
       </Chip.Group>
       <Text size="xs" c="dimmed">
-        {wybrane.map((o) => `${o}: ${OPISY[o] ?? ''}`).join(' · ')}. Bez zawodników twojego klubu; filtry z lewego panelu
-        nadal działają. Kolumna „Opłacalność” = punkty SCORE ponad przeciętnego na 1 mln € kosztu (cena + 3 lata pensji).
+        {znane.length
+          ? znane.map((o) => `${o}: ${OPISY[o] ?? ''}`).join(' · ') + '.'
+          : 'Nic nie zaznaczono - lista pokazuje zawodników z dowolną okazją. Zaznacz rodzaje okazji, aby zawęzić listę.'}
+        {' '}Filtry z lewego panelu nadal działają. Zawodnik pojawia się tu wtedy i tylko wtedy, gdy ma dany znacznik
+        w kolumnie „Okazje” rankingu.
       </Text>
-      {wybrane.length === 0 && <Alert color="gray">Zaznacz co najmniej jeden rodzaj okazji.</Alert>}
+      {mojKlubUid !== null && mojKlubUid !== undefined && (
+        <Group gap="xs">
+          <Switch size="xs" checked={pominMoj} onChange={(e) => setPominMoj(e.currentTarget.checked)}
+            label="Pomiń zawodników mojego klubu" />
+          {pominMoj && ukryci > 0 && (
+            <Text size="xs" c="dimmed">(ukryto {ukryci} z twojego klubu)</Text>
+          )}
+        </Group>
+      )}
       {ranking.error && <Alert color="red">{(ranking.error as Error).message}</Alert>}
-      {ranking.data && wybrane.length > 0 && (
+      {ranking.data && (
         <>
           <Text size="sm">Znaleziono: {ranking.data.liczba}</Text>
           <Box style={{ flex: 1, minHeight: 300 }}>

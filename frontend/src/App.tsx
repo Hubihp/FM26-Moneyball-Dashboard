@@ -84,6 +84,9 @@ export default function App() {
   const [pozycjaZapisana, setPozycja] = usePamiec('fm-pozycja', 'Napastnik');
   const pozycja = POZYCJE.includes(pozycjaZapisana) ? pozycjaZapisana : 'Napastnik';
   const [lista, setLista] = usePamiec<WpisListy[]>('fm-lista-zyczen', []);
+  // Wybor w karcie "Okazje": wspolny dla wszystkich pozycji, zapamietany (domyslnie nic nie zaznaczone)
+  const [okazjeWybrane, setOkazjeWybrane] = usePamiec<string[]>('fm-okazje-wybrane', []);
+  const [okazjeBezMojego, setOkazjeBezMojego] = usePamiec('fm-okazje-bez-mojego', true);
   const ulubione = useMemo(() => new Set(lista.map((w) => w.klucz)), [lista]);
   const [ustawienia, setUstawienia] = usePamiec<Ustawienia>('fm-ustawienia',
     { k_baza: 5, ignoruj_mnoznik: false, pokaz_ukryte: false });
@@ -298,7 +301,9 @@ export default function App() {
             <Tabs.Panel value="okazje" style={{ flex: 1, minHeight: 0 }}>
               {zakladka === 'okazje' && meta.data && (
                 <Okazje zapytanie={zapytanieOpoznione} okazje={meta.data.okazje} wersja={wersja} mojKlubUid={mojKlubUid}
-                  naWybor={otworzKarte} ulubione={ulubione} przelaczUlubione={przelaczUlubione} />
+                  naWybor={otworzKarte} ulubione={ulubione} przelaczUlubione={przelaczUlubione}
+                  wybrane={okazjeWybrane} setWybrane={setOkazjeWybrane}
+                  pominMoj={okazjeBezMojego} setPominMoj={setOkazjeBezMojego} />
               )}
             </Tabs.Panel>
             <Tabs.Panel value="lista" style={{ flex: 1, minHeight: 0 }}>

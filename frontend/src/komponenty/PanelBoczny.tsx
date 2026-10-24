@@ -18,6 +18,7 @@ import {
 
 import type { Filtry, MetaPozycji } from '../api';
 import Boisko from './Boisko';
+import LigiIKraje from './LigiIKraje';
 import { eur } from '../format';
 
 export type Ustawienia = { k_baza: number; ignoruj_mnoznik: boolean; pokaz_ukryte: boolean };
@@ -77,8 +78,8 @@ export default function PanelBoczny(p: Props) {
 
         <TextInput label="Szukaj (piłkarz / klub)" value={filtry.szukaj} onChange={(e) => zmien('szukaj', e.currentTarget.value)} />
 
-        <MultiSelect label="Ligi" placeholder="Wszystkie" searchable clearable data={meta?.ligi ?? []} value={filtry.ligi}
-          onChange={(v) => zmien('ligi', v)} />
+        <LigiIKraje ligi={meta?.ligi ?? []} kraje={meta?.kraje ?? []} wybraneLigi={filtry.ligi}
+          wybraneKraje={filtry.kraje} setLigi={(v) => zmien('ligi', v)} setKraje={(v) => zmien('kraje', v)} />
 
         {meta?.wiek && (
           <div>
@@ -110,11 +111,6 @@ export default function PanelBoczny(p: Props) {
             ]} />
         )}
 
-        {meta?.okazje && (
-          <MultiSelect label="Okazje transferowe" placeholder="Dowolne" clearable data={meta.okazje} value={filtry.okazje}
-            onChange={(v) => zmien('okazje', v)} />
-        )}
-
         <Select label="Niedowartościowanie co najmniej" clearable placeholder="Dowolne"
           description="Wycena wg wyniku / cena"
           value={filtry.min_niedowartosciowanie ? String(filtry.min_niedowartosciowanie) : null}
@@ -135,12 +131,6 @@ export default function PanelBoczny(p: Props) {
             <Slider min={0} max={100} step={5} label={null} value={filtry.max_ryzyko ?? 100}
               onChange={(v) => zmien('max_ryzyko', v >= 100 ? null : v)} />
           </div>
-        )}
-
-        {meta?.kraje && meta.kraje.length > 0 && (
-          <MultiSelect label="Narodowość" placeholder="Dowolna" searchable clearable value={filtry.kraje}
-            data={meta.kraje.map((k) => ({ value: k.kraj, label: `${k.kraj} (${k.liczba})` }))}
-            onChange={(v) => zmien('kraje', v)} />
         )}
 
         <MultiSelect label="Lepsza noga" placeholder="Dowolna" clearable data={meta?.nogi ?? []} value={filtry.nogi}

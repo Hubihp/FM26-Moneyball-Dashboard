@@ -27,6 +27,7 @@ class Filtry:
     min_minut: int = 0
     bez_mojego_klubu: bool = False
     okazje: list = field(default_factory=list)   # zawodnik musi miec ktorykolwiek z tych znacznikow
+    tylko_z_okazja: bool = False                 # zawodnik musi miec jakakolwiek okazje (karta Okazje)
     max_ryzyko: int | None = None
     min_oplacalnosc: float | None = None
     min_niedowartosciowanie: float | None = None  # wycena wg wyniku / cena
@@ -197,6 +198,8 @@ def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
         koniec = start + pd.DateOffset(months=int(filtry.kontrakt_mies))
         wygasa = wynik['Wygasa_Data']
         wynik = wynik[wygasa.notna() & (wygasa >= start) & (wygasa <= koniec)]
+    if filtry.tylko_z_okazja and 'Okazje' in wynik.columns:
+        wynik = wynik[wynik['Okazje'].fillna("") != ""]
     if filtry.okazje and 'Okazje' in wynik.columns:
         maska = pd.Series(False, index=wynik.index)
         for znacznik in filtry.okazje:

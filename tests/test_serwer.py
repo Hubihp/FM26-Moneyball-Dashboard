@@ -31,7 +31,10 @@ def test_stan_po_wczytaniu_demo(klient):
 
 def test_meta_pozycji(klient):
     meta = klient.get("/api/pozycja/Napastnik").json()
-    assert meta["liczba"] == 150 and "Premier League (ANG 1)" in meta["ligi"]
+    ligi = {l["nazwa"]: l["liczba"] for l in meta["ligi"]}
+    assert meta["liczba"] == 150 and "Premier League (ANG 1)" in ligi and sum(ligi.values()) == 150
+    liczby = [l["liczba"] for l in meta["ligi"]]
+    assert liczby == sorted(liczby, reverse=True)
     assert meta["wagi_domyslne"]["Liczba goli na 90 min"] == 20
     assert klient.get("/api/pozycja/Nieznana").status_code == 404
 
@@ -174,7 +177,7 @@ def test_ligi_edycja_nazwy_i_mnoznika(tmp_path, monkeypatch):
         assert odp["ligi"][0]["nazwa"] == "Liga Testowa" and odp["ligi"][0]["mnoznik"] == 0.7
         assert k.put("/api/ligi/999", json={"nazwa": "X"}).status_code == 404
         meta = k.get("/api/pozycja/Napastnik").json()
-        assert meta["ligi"] == ["Liga Testowa"]
+        assert [l["nazwa"] for l in meta["ligi"]] == ["Liga Testowa"]
     assert "Liga Testowa" in (tmp_path / "nazwy.csv").read_text(encoding="utf-8")
     assert "0.7" in (tmp_path / "mnozniki.csv").read_text(encoding="utf-8")
 
@@ -227,7 +230,7 @@ def test_nowe_pozycje_w_demo(klient):
 
 def test_narodowosc_w_tabeli_i_filtr(klient):
     meta = klient.get("/api/pozycja/Napastnik").json()
-    kraje = {k["kraj"]: k["liczba"] for k in meta["kraje"]}
+    kraje = {k["nazwa"]: k["liczba"] for k in meta["kraje"]}
     assert kraje["Polska"] > 0 and sum(kraje.values()) == 150
     wynik = klient.post("/api/ranking", json={"pozycja": "Napastnik", "filtry": {"kraje": ["Polska"]}}).json()
     assert 0 < wynik["liczba"] < 150 and all(w["Kraj"] == "Polska" for w in wynik["wiersze"])
@@ -337,3 +340,27 @@ def test_wycena_wg_wyniku_w_rankingu(klient):
                                                "filtry": {"min_niedowartosciowanie": 2}}).json()["wiersze"]
     assert tanie and all(w["Niedowartościowanie"] >= 2 for w in tanie)
     assert "niedowartościowany" in klient.get("/api/pozycja/Napastnik").json()["okazje"]
+
+
+def test_okazje_spojne_z_tabela(klient):
+    """Znacznik okazji w tabeli i filtr tej okazji daja ten sam zbior zawodnikow (kazda pozycja, kazda okazja)."""
+    from fm_moneyball.stale import POZYCJE
+    okazje = klient.get("/api/pozycja/Napastnik").json()["okazje"]
+    for pozycja in POZYCJE:
+        wszyscy = klient.post("/api/ranking", json={"pozycja": pozycja}).json()["wiersze"]
+        for okazja in okazje:
+            ze_znacznikiem = {w["ID"] for w in wszyscy if okazja in (w["Okazje"] or "").split("; ")}
+            z_filtrem = klient.post("/api/ranking", json={"pozycja": pozycja, "filtry": {"okazje": [okazja]}}).json()
+            assert {w["ID"] for w in z_filtrem["wiersze"]} == ze_znacznikiem, (pozycja, okazja)
+        z_jakakolwiek = klient.post("/api/ranking", json={"pozycja": pozycja,
+                                                          "filtry": {"tylko_z_okazja": True}}).json()["wiersze"]
+        assert {w["ID"] for w in z_jakakolwiek} == {w["ID"] for w in wszyscy if w["Okazje"]}
+
+
+def test_ukryci_zawodnicy_mojego_klubu(klient):
+    uid = klient.get("/api/stan").json()["meta"]["moj_klub_uid"]
+    wszyscy = klient.post("/api/ranking", json={"pozycja": "Napastnik"}).json()
+    moi = [w for w in wszyscy["wiersze"] if w["Klub_UID"] == uid]
+    bez = klient.post("/api/ranking", json={"pozycja": "Napastnik", "filtry": {"bez_mojego_klubu": True}}).json()
+    assert moi and bez["liczba_ukrytych_mojego_klubu"] == len(moi)
+    assert bez["liczba"] == wszyscy["liczba"] - len(moi)

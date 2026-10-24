@@ -108,6 +108,7 @@ class FiltryModel(BaseModel):
     kandydaci: bool = False
     min_score_kandydata: float = 60
     min_niedowartosciowanie: float | None = None
+    tylko_z_okazja: bool = False
 
 
 class RankingModel(BaseModel):
@@ -175,8 +176,14 @@ def utworz_aplikacje(stan):
     def wynik_i_filtr(z: RankingModel):
         policzona, pominiete, model_wyceny = policz(z.pozycja, z.wagi, z.ignoruj_mnoznik, z.k_baza, z.filtry.kandydaci)
         filtry = analiza.Filtry(**z.filtry.model_dump())
-        widoczni = analiza.filtruj(policzona, filtry, data_gry(), stan.migawka()["meta"].get("moj_klub_uid"))
-        return policzona, analiza.oznacz_pareto(widoczni), pominiete, model_wyceny
+        moj_klub = stan.migawka()["meta"].get("moj_klub_uid")
+        widoczni = analiza.filtruj(policzona, filtry, data_gry(), moj_klub)
+        ukryci_moi = 0
+        if filtry.bez_mojego_klubu and moj_klub is not None:
+            # ilu zawodnikow mojego klubu spelnia pozostale filtry - interfejs mowi o nich wprost
+            filtry.bez_mojego_klubu = False
+            ukryci_moi = len(analiza.filtruj(policzona, filtry, data_gry(), moj_klub)) - len(widoczni)
+        return policzona, analiza.oznacz_pareto(widoczni), pominiete, model_wyceny, ukryci_moi
 
     def kandydat(ramka):
         if 'Kandydat' not in ramka.columns:
@@ -352,9 +359,11 @@ def utworz_aplikacje(stan):
         ceny = df['Wartość_Numeryczna'].dropna()
         return {
             "pozycja": pozycja, "liczba": len(df),
-            "ligi": analiza.kolejnosc_lig(df['Liga'].dropna().unique().tolist()) if 'Liga' in df.columns else [],
+            # ligi i kraje wg liczby zawodnikow (najliczniejsze pierwsze)
+            "ligi": [{"nazwa": k, "liczba": int(n)} for k, n in df['Liga'].dropna().value_counts().items()]
+                     if 'Liga' in df.columns else [],
             "nogi": sorted(df['Preferowana noga'].dropna().unique().tolist()) if 'Preferowana noga' in df.columns else [],
-            "kraje": [{"kraj": k, "liczba": int(n)} for k, n in df['Kraj'].dropna().value_counts().items()]
+            "kraje": [{"nazwa": k, "liczba": int(n)} for k, n in df['Kraj'].dropna().value_counts().items()]
                       if 'Kraj' in df.columns else [],
             "wiek": [int(df['Wiek'].min()), int(df['Wiek'].max())] if 'Wiek' in df.columns else None,
             "cena_max": float(ceny.max()) if not ceny.empty else None,
@@ -368,7 +377,7 @@ def utworz_aplikacje(stan):
 
     @app.post("/api/ranking")
     def ranking(z: RankingModel):
-        policzona, widoczni, pominiete, model_wyceny = wynik_i_filtr(z)
+        policzona, widoczni, pominiete, model_wyceny, ukryci_moi = wynik_i_filtr(z)
         kolumny = analiza.kolumny_tabeli(z.pozycja, policzona, z.pokaz_ukryte)
         return {
             "pozycja": z.pozycja,
@@ -380,6 +389,7 @@ def utworz_aplikacje(stan):
             "pominiete": pominiete,
             "statystyki": analiza.kolumny_statystyk(z.pozycja, policzona),
             "model_wyceny": model_wyceny,
+            "liczba_ukrytych_mojego_klubu": int(ukryci_moi),
         }
 
     @app.post("/api/radar")
@@ -388,7 +398,7 @@ def utworz_aplikacje(stan):
 
     @app.post("/api/podobni")
     def podobni(z: PodobniModel):
-        policzona, widoczni, _, _ = wynik_i_filtr(z)
+        policzona, widoczni, *_ = wynik_i_filtr(z)
         wynik = analiza.podobni(z.pozycja, policzona, widoczni.index, z.id, z.k_baza, z.n)
         pola = analiza.pola_wiersza(z.pozycja, policzona, z.pokaz_ukryte) + ['Podobieństwo']
         return {"wiersze": analiza.do_json(wynik, pola)}

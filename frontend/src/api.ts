@@ -44,7 +44,7 @@ export type Stan = {
 export type MetaPozycji = {
   pozycja: string;
   liczba: number;
-  ligi: string[];
+  ligi: { nazwa: string; liczba: number }[];
   nogi: string[];
   wiek: [number, number] | null;
   cena_max: number | null;
@@ -54,7 +54,7 @@ export type MetaPozycji = {
   ma_ukryte: boolean;
   ma_ryzyko: boolean;
   okazje: string[];
-  kraje: { kraj: string; liczba: number }[];
+  kraje: { nazwa: string; liczba: number }[];
 };
 
 export type Filtry = {
@@ -74,6 +74,7 @@ export type Filtry = {
   kandydaci: boolean;
   min_score_kandydata: number;
   min_niedowartosciowanie: number | null;
+  tylko_z_okazja?: boolean;
 };
 
 export type ZapytanieRankingu = {
@@ -104,6 +105,7 @@ export type Ranking = {
   liczba: number;
   liczba_wszystkich: number;
   liczba_kandydatow: number;
+  liczba_ukrytych_mojego_klubu: number;
   pominiete: string[];
   statystyki: string[];
   model_wyceny: ModelWyceny;
