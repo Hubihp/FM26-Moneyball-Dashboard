@@ -110,7 +110,8 @@ export default function App() {
     }
     setWagiWlasne(nowe);
   }, [wagiWlasne, setWagiWlasne]);
-  const [filtryPozycji, setFiltryPozycji] = useState<Record<string, Filtry>>({});
+  // filtry panelu osobno dla kazdej pozycji, zapamietane w przegladarce
+  const [filtryPozycji, setFiltryPozycji] = usePamiec<Record<string, Filtry>>('fm-filtry', {});
   const [wybrani, setWybrani] = useState<Record<string, string[]>>({});
   const [karta, setKarta] = useState<string | null>(null);
   const [kartaWiersz, setKartaWiersz] = useState<Wiersz | undefined>(undefined);
@@ -135,7 +136,9 @@ export default function App() {
     enabled: gotowe,
   });
 
-  const filtry = filtryPozycji[pozycja] ?? PUSTE_FILTRY;
+  // scalenie z domyslnymi (nowe pola filtrow); kandydaci wlaczeni tylko, gdy wybrano pozycje
+  const zapisane = { ...PUSTE_FILTRY, ...(filtryPozycji[pozycja] ?? {}) };
+  const filtry: Filtry = { ...zapisane, kandydaci: zapisane.kandydaci_z.length > 0 && pozycja !== 'Bramkarz' };
   const wagi = wagiWlasne[pozycja] ?? meta.data?.wagi_domyslne ?? {};
   const zapytanie: ZapytanieRankingu = useMemo(
     () => ({
@@ -178,7 +181,7 @@ export default function App() {
 
   const szukajNastepcy = (poz: string) => {
     setPozycja(poz);
-    setFiltryPozycji({ ...filtryPozycji, [poz]: { ...(filtryPozycji[poz] ?? PUSTE_FILTRY), bez_mojego_klubu: true } });
+    setFiltryPozycji({ ...filtryPozycji, [poz]: { ...PUSTE_FILTRY, ...(filtryPozycji[poz] ?? {}), bez_mojego_klubu: true } });
     setZakladka('ranking');
   };
   // Gwiazdka: dodaje zawodnika z pozycja, w ktorej jest teraz ogladany, albo usuwa go z listy
@@ -316,6 +319,7 @@ export default function App() {
                     naWybor={otworzKarte}
                     zaznaczeni={wybraniPozycji}
                     naZaznaczenie={zaznacz}
+                    kluczUkladu={`ranking|${pozycja}`}
                     ulubione={ulubione}
                     przelaczUlubione={przelaczUlubione}
                   />
@@ -384,6 +388,7 @@ export default function App() {
         zapytanie={zapytanie}
         wersja={wersja}
         mojKlubUid={mojKlubUid}
+        mojKlub={s?.meta.moj_klub}
         ulubiona={!!wierszKarty && ulubione.has(kluczZawodnika(wierszKarty))}
         przelaczUlubiona={() => wierszKarty && przelaczUlubione(wierszKarty)}
         zamknij={() => setKarta(null)}

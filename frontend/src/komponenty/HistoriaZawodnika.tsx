@@ -43,8 +43,8 @@ export default function HistoriaZawodnika({ id, wiersz, zapytanie, wersja }: Pro
       <Group gap="lg">
         <Text size="sm">Δ SCORE (sezon): <b style={{ color: typeof dScore === 'number' ? kolorZmiany(dScore) : undefined }}>
           {formatuj(dScore, 'zmiana')}</b></Text>
-        <Text size="sm">Rozwój na tle wieku: <b>{formatuj(wiersz['Rozwój vs wiek'], 'zmiana')}</b></Text>
-        <Text size="sm">Δ wartości: <b>{formatuj(wiersz['Δ wartości'], 'zmiana_proc')}</b></Text>
+        <Text size="sm">Δ percentyl: <b>{formatuj(wiersz['Δ percentyl'], 'zmiana')}</b></Text>
+        {poprzedni && <Text size="sm" c="dimmed">względem migawki z {formatuj(poprzedni.data, 'data')}</Text>}
         {wiersz['Nowe pozycje'] ? <Text size="sm">Nowe pozycje: <b>{String(wiersz['Nowe pozycje'])}</b></Text> : null}
       </Group>
       {dScore === null || dScore === undefined ? (

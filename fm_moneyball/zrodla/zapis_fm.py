@@ -118,6 +118,7 @@ class WynikZapisu:
     moje_kluby: list = field(default_factory=list)     # [{"uid", "nazwa"}] - wszystkie prowadzone druzyny
     ligi: list = field(default_factory=list)           # podsumowanie lig: klucz, domyslna, liczba, kluby, kraj
     kraje_auto: dict = field(default_factory=dict)     # nation_id -> nazwa kraju z klubow-kotwic
+    menedzer: str | None = None                        # czlowiek prowadzacy kariere (klucz historii)
 
 
 # =============================================================================
@@ -711,6 +712,8 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
                   "kluby_z_liga": len(liga_klubu), "w_aplikacji": sum(len(d) for d in dane.values()),
                   "czasy_s": czasy},
         moje_kluby=moje,
+        menedzer=next((str(m.manager_name or m.manager_staff_uid) for m in zarzadzane
+                       if getattr(m, "manager_name", None) or getattr(m, "manager_staff_uid", None)), None),
         ligi=podsumuj_ligi(liga_klubu, kluby, narodowosci=narodowosci_lig(zawodnicy, liga_klubu)),
         kraje_auto=kraje_z_kotwic(kluby, zawodnicy),
     )

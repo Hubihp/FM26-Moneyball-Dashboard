@@ -64,7 +64,7 @@ KOLUMNY_STATYSTYK = [v for v in TLUMACZENIE_KOLUMN.values() if v != "Cena"] + KO
 
 # Kolumny, ktorych NIE traktujemy jako statystyk meczowych
 NIE_STATYSTYKI = {
-    'SCORE', 'Percentyl', 'Wiarygodność', 'Piłkarz', 'ID', 'Wiek', 'Klub', 'Liga', 'Pozycja', 'Cena',
+    'SCORE', 'Percentyl', 'Piłkarz', 'ID', 'Wiek', 'Klub', 'Liga', 'Pozycja', 'Cena',
     'Preferowana noga', 'Kraj', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Płaca', 'Wygasa',
     'Wygasa_Data', 'Minuty', 'Mnożnik_Ligi'
 }

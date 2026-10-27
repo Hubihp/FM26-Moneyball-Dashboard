@@ -62,25 +62,24 @@ export default function PanelBoczny(p: Props) {
       <Stack gap="sm" pb="xl">
         <Boisko pozycja={p.pozycja} liczby={p.liczby} naWybor={p.setPozycja} />
 
+        {p.pozycja !== 'Bramkarz' && (
         <div>
-          <Tooltip multiline w={300} withArrow
-            label="Zawodnicy grający nominalnie na innych pozycjach, oceniani według kryteriów wybranej pozycji - kandydaci do przekwalifikowania w grze. Nie zmieniają wyników zawodników tej pozycji.">
-            <Switch label="Kandydaci z innych pozycji" checked={filtry.kandydaci}
-              onChange={(e) => zmien('kandydaci', e.currentTarget.checked)} />
+          <Tooltip multiline w={300} withArrow position="right"
+            label="Zawodnicy grający nominalnie na wybranych pozycjach, oceniani według kryteriów tej pozycji - kandydaci do przekwalifikowania w grze. Nie zmieniają wyników zawodników tej pozycji. Puste pole = wyłączone.">
+            <MultiSelect size="xs" label="Kandydaci z innych pozycji" placeholder="Wyłączone - wybierz pozycje" clearable
+              data={p.pozycje.filter((x) => x !== p.pozycja && x !== 'Bramkarz')}
+              value={filtry.kandydaci_z}
+              onChange={(v) => setFiltry({ ...filtry, kandydaci_z: v, kandydaci: v.length > 0 })} />
           </Tooltip>
-          {filtry.kandydaci && (
+          {filtry.kandydaci_z.length > 0 && (
             <>
-              {p.pozycja !== 'Bramkarz' && (
-                <MultiSelect mt={6} size="xs" label="Z pozycji" placeholder="Wszystkie pozycje" clearable
-                  data={p.pozycje.filter((x) => x !== p.pozycja && x !== 'Bramkarz')}
-                  value={filtry.kandydaci_z} onChange={(v) => zmien('kandydaci_z', v)} />
-              )}
               <Text size="xs" mt={6}>Minimalny SCORE kandydata: {filtry.min_score_kandydata}</Text>
               <Slider min={40} max={80} step={1} label={null} value={filtry.min_score_kandydata}
                 onChange={(v) => zmien('min_score_kandydata', v)} />
             </>
           )}
         </div>
+        )}
 
         <TextInput label="Szukaj (piłkarz / klub)" value={filtry.szukaj} onChange={(e) => zmien('szukaj', e.currentTarget.value)} />
 

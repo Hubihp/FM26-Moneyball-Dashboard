@@ -65,6 +65,21 @@ export type PunktHistorii = {
   Wartość: number | null;
   statystyki: Record<string, number | null>;
 };
+export type CechaPorownania = {
+  nazwa: string;
+  nizsze_lepsze: boolean;
+  kandydat: number | null;
+  moj: number | null;
+  percentyl_kandydata: number | null;
+  percentyl_moj: number | null;
+  lepszy: 'kandydat' | 'moj' | null;
+};
+export type PorownanieZMoim = {
+  moj: Wiersz | null;
+  werdykt: 'wzmocnienie' | 'podobny poziom' | 'nie wzmacnia' | 'brak zawodnika' | 'twój zawodnik' | 'nieznany klub' | null;
+  roznica: number | null;
+  cechy: CechaPorownania[];
+};
 export type Historia = { punkty: PunktHistorii[]; statystyki: string[]; min_minut: number };
 
 export type Filtry = {
@@ -95,8 +110,7 @@ export type ZapytanieRankingu = {
   filtry: Filtry;
 };
 
-export type Format = 'score' | 'pasek' | 'int' | 'dec1' | 'dec2' | 'eur' | 'eur_tyg' | 'data' | 'tekst' | 'mnoznik'
-  | 'zmiana' | 'zmiana_proc';
+export type Format = 'score' | 'pasek' | 'int' | 'dec1' | 'dec2' | 'eur' | 'eur_tyg' | 'data' | 'tekst' | 'mnoznik' | 'zmiana';
 
 // Model ceny wg wyniku (fm_moneyball/wycena.py)
 export type ModelWyceny = {
@@ -220,6 +234,7 @@ export const api = {
   przeladuj: () => post<Stan>('/api/przeladuj', {}),
   metaPozycji: (pozycja: string) => zadanie<MetaPozycji>(`/api/pozycja/${encodeURIComponent(pozycja)}`),
   ranking: (body: ZapytanieRankingu) => post<Ranking>('/api/ranking', body),
+  porownanieZMoim: (body: ZapytanieRankingu & { id: string }) => post<PorownanieZMoim>('/api/porownanie-z-moim', body),
   historia: (body: { pozycja: string; id: string; wagi: Record<string, number> | null; ignoruj_mnoznik: boolean;
     k_baza: number }) => post<Historia>('/api/historia', body),
   radar: (pozycja: string, ids: string[], kandydaci = false) => post<Radar>('/api/radar', { pozycja, ids, kandydaci }),

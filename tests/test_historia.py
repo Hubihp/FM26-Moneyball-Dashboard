@@ -26,8 +26,8 @@ def _ramka(uidy, minuty=2000, pule="Napastnik"):
 
 
 def test_zapis_przycinanie_i_porownanie(tmp_path):
-    kat = historia.katalog_kariery(tmp_path, 7, "FC Barcelona")
-    assert kat.name == "7_FC_Barcelona"
+    kat = historia.katalog_kariery(tmp_path, "Jan Kowalski")
+    assert kat.name == "m_Jan_Kowalski" and historia.katalog_kariery(tmp_path, None).name == "kariera"
     for dzien in (date(2026, 5, 1), date(2026, 5, 20), date(2026, 9, 3), date(2027, 1, 10)):
         historia.zapisz_migawke(kat, {"Napastnik": _ramka([1, 2, 2])}, dzien)
     lista = historia.migawki(kat)
@@ -48,7 +48,8 @@ def test_dolicz_rozwoj_prog_minut_i_nazwisko():
     wtedy = _ramka([1, 2, 3, 4]).assign(SCORE=[52.0, 50.0, 49.0, 60.0], Percentyl=[60.0, 50, 49, 80],
                                         Minuty=[1500, 2000, 999, 2000], Wartość_Numeryczna=[5e5, 1e6, 1e6, 1e6])
     wynik = historia.dolicz_rozwoj(teraz, wtedy)
-    assert wynik.loc[0, 'Δ SCORE'] == 8 and wynik.loc[0, 'Δ wartości'] == 100 and wynik.loc[0, 'Δ minut'] == 500
+    assert wynik.loc[0, 'Δ SCORE'] == 8 and wynik.loc[0, 'Δ minut'] == 500
+    assert 'Δ wartości' not in wynik.columns and 'Rozwój vs wiek' not in wynik.columns
     assert wynik.loc[0, 'Nowe pozycje'] == "PS"
     assert np.isnan(wynik.loc[1, 'Δ SCORE'])            # teraz 900 minut < 1000
     assert np.isnan(wynik.loc[2, 'Δ SCORE'])            # wtedy 999 minut
@@ -75,14 +76,14 @@ def klient_z_historia(tmp_path, monkeypatch):
 
     def atrapa(sciezka, opcje, nazwy=None, postep=None):
         return WynikZapisu(dane=dane(), data_gry=date(2027, 1, 15), moj_klub="Premier FC 1", moj_klub_uid=1000,
-                           nazwa_zapisu="Kariera")
+                           nazwa_zapisu="Kariera", menedzer="Jan Kowalski")
     monkeypatch.setattr(modul, "wczytaj_zapis", atrapa)
     # migawka sprzed sezonu: ci sami zawodnicy, gole 2x mniejsze u pierwszej dziesiatki napastnikow
     poprzednie = dane()
     poprzednie["Napastnik"].loc[:9, 'Liczba goli na 90 min'] /= 2
     for df in poprzednie.values():
         df['Mnożnik_Ligi'] = 0.9
-    kat = historia.katalog_kariery(tmp_path / "historia", 1000, "Premier FC 1")
+    kat = historia.katalog_kariery(tmp_path / "historia", "Jan Kowalski")
     historia.zapisz_migawke(kat, poprzednie, date(2026, 5, 1))
     stan = Stan(plik_ustawien=tmp_path / "u.json", sledzenie=False, katalog_cache=None, plik_nazw=tmp_path / "n.csv",
                 plik_mnoznikow=tmp_path / "m.csv", plik_krajow=tmp_path / "k.csv",
@@ -123,3 +124,44 @@ def test_demo_bez_historii(tmp_path):
         assert "Δ SCORE (sezon)" not in [c["naglowek"] for c in wynik["kolumny"]]
         assert k.post("/api/historia", json={"pozycja": "Napastnik", "id": "x"}).json()["punkty"] == []
     assert not (tmp_path / "historia").exists()
+
+
+def test_historia_po_zmianie_klubu(tmp_path, monkeypatch):
+    """Trzy zapisy jednego menedzera: dwa z Tottenhamem, trzeci z Barcelona (zgloszony blad)."""
+    import fm_moneyball.serwer.stan as modul
+    from fm_moneyball.zrodla.zapis_fm import WynikZapisu
+    zapisy = [(date(2028, 3, 31), 1, "Tottenham"), (date(2030, 4, 17), 1, "Tottenham"), (date(2032, 3, 24), 2, "Barcelona")]
+    biezacy = {}
+
+    def atrapa(sciezka, opcje, nazwy=None, postep=None):
+        dzien, klub_uid, klub = biezacy["zapis"]
+        ramki, _ = modul._demo()
+        for i, (p, df) in enumerate(ramki.items()):
+            df['UID'] = range(1000 * i, 1000 * i + len(df))
+            df['Pule'] = p
+            df['Minuty'] = 2500.0
+        return WynikZapisu(dane=ramki, data_gry=dzien, moj_klub=klub, moj_klub_uid=klub_uid, nazwa_zapisu=klub,
+                           menedzer="Jan Kowalski", moje_kluby=[{"uid": klub_uid, "nazwa": klub}])
+    monkeypatch.setattr(modul, "wczytaj_zapis", atrapa)
+    # migawka zapisana przez poprzednia wersje (katalog po klubie) - ma trafic do wspolnej historii
+    stary = tmp_path / "historia" / "1_Tottenham"
+    historia.zapisz_migawke(stary, {"Napastnik": _ramka([1, 2])}, date(2027, 2, 1))
+    for nr, zapis in enumerate(zapisy):
+        biezacy["zapis"] = zapis
+        plik = tmp_path / f"zapis{nr}.fm"
+        plik.write_bytes(b"x" * (10 + nr))
+        stan = Stan(plik_ustawien=tmp_path / "u.json", sledzenie=False, katalog_cache=None,
+                    plik_nazw=tmp_path / "n.csv", plik_mnoznikow=tmp_path / "m.csv", plik_krajow=tmp_path / "k.csv",
+                    katalog_historii=tmp_path / "historia")
+        stan.ustaw_zrodlo("plik", plik=str(plik), w_tle=False)
+        assert stan.migawka()["meta"]["moj_klub"] == zapis[2]        # moj klub z biezacego zapisu
+    kat = historia.katalog_kariery(tmp_path / "historia", "Jan Kowalski")
+    assert [d for _, d in historia.migawki(kat)] == [date(2027, 2, 1)] + [z[0] for z in zapisy]
+    assert not stary.exists()
+    with TestClient(utworz_aplikacje(stan)) as k:
+        meta = k.get("/api/pozycja/Napastnik").json()
+        assert meta["data_porownania"] == "2030-04-17"               # zapis z Tottenhamem
+        wiersze = k.post("/api/ranking", json={"pozycja": "Napastnik"}).json()["wiersze"]
+        assert all(w["Δ SCORE"] is not None for w in wiersze)
+        hist = k.post("/api/historia", json={"pozycja": "Napastnik", "id": wiersze[0]["ID"]}).json()
+        assert [p["data"] for p in hist["punkty"]][-3:] == ["2028-03-31", "2030-04-17", "2032-03-24"]

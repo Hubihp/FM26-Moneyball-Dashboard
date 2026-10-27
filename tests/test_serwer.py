@@ -391,3 +391,18 @@ def test_ukryci_zawodnicy_mojego_klubu(klient):
     bez = klient.post("/api/ranking", json={"pozycja": "Napastnik", "filtry": {"bez_mojego_klubu": True}}).json()
     assert moi and bez["liczba_ukrytych_mojego_klubu"] == len(moi)
     assert bez["liczba"] == wszyscy["liczba"] - len(moi)
+
+
+def test_porownanie_z_moim_api(klient):
+    uid = klient.get("/api/stan").json()["meta"]["moj_klub_uid"]
+    wiersze = klient.post("/api/ranking", json={"pozycja": "Napastnik", "filtry": {"min_minut": 0}}).json()["wiersze"]
+    obcy = next(w for w in wiersze if w["Klub_UID"] != uid)
+    wynik = klient.post("/api/porownanie-z-moim", json={"pozycja": "Napastnik", "id": obcy["ID"]}).json()
+    assert wynik["moj"]["SCORE"] == max(w["SCORE"] for w in wiersze if w["Klub_UID"] == uid)
+    assert wynik["werdykt"] in {"wzmocnienie", "podobny poziom", "nie wzmacnia"}
+    assert wynik["roznica"] == pytest.approx(obcy["SCORE"] - wynik["moj"]["SCORE"])
+    assert {c["nazwa"] for c in wynik["cechy"]} == set(klient.get("/api/pozycja/Napastnik").json()["wagi_domyslne"])
+    moj = next(w for w in wiersze if w["Klub_UID"] == uid)
+    assert klient.post("/api/porownanie-z-moim", json={"pozycja": "Napastnik", "id": moj["ID"]}).json()["werdykt"] \
+        == "twój zawodnik"
+    assert klient.post("/api/porownanie-z-moim", json={"pozycja": "Napastnik", "id": "nie ma"}).status_code == 404

@@ -3,7 +3,8 @@ Historia zawodnikow: migawki kolejnych wczytan zapisu kariery i wskazniki rozwoj
 
 Zapis gry ma statystyki tylko biezacego sezonu, wiec historia powstaje z migawek: przy kazdym
 wczytaniu zapisu kariery zapisujemy jeden wiersz na zawodnika (UID) do pliku
-~/.fm_moneyball/historia/<moj klub>/<RRRR-MM-DD>.csv.gz (data w grze). W obrebie miesiaca zostaje
+~/.fm_moneyball/historia/<menedzer>/<RRRR-MM-DD>.csv.gz (data w grze). Kariera to menedzer, a nie
+klub - po zmianie klubu (np. Tottenham -> Barcelona) historia jest dalej jedna. W obrebie miesiaca zostaje
 najnowsza migawka. Zapisujemy surowe dane (statystyki /90, minuty, wartosc), a nie SCORE, wiec
 po zmianie wag historia przelicza sie sama.
 
@@ -11,6 +12,7 @@ Rozwoj = porownanie z ostatnia migawka z poprzedniego sezonu (sezon od 1 lipca).
 sie tylko dla zawodnikow z co najmniej MIN_MINUT minutami w obu sezonach.
 """
 import re
+import shutil
 from datetime import date
 from pathlib import Path
 
@@ -22,10 +24,10 @@ from fm_moneyball.stale import CECHY, KOLUMNY_STATYSTYK
 
 KATALOG_HISTORII = KATALOG_DOMOWY / "historia"
 MIN_MINUT = 1000             # prog minut w obu okresach, od ktorego liczymy rozwoj
-MIN_DO_REGRESJI = 20         # tylu zawodnikow z rozwojem potrzeba do "rozwoju na tle wieku"
+KARIERA_BEZ_MENEDZERA = "kariera"   # katalog, gdy zapis nie podaje menedzera
 POLA_MIGAWKI = ['ID', 'UID', 'Piłkarz', 'Wiek', 'Klub', 'Klub_UID', 'Liga', 'Mnożnik_Ligi', 'Pozycja', 'Pule',
                 'Minuty', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Wygasa_Data']
-KOLUMNY_ROZWOJU = ['Δ SCORE', 'Δ percentyl', 'Δ wartości', 'Δ minut', 'Rozwój vs wiek', 'Nowe pozycje']
+KOLUMNY_ROZWOJU = ['Δ SCORE', 'Δ percentyl', 'Δ minut', 'Nowe pozycje']
 
 _pamiec = {}                 # sciezka -> (mtime, ramka)
 
@@ -35,12 +37,46 @@ def sezon(data):
     return data.year if data.month >= 7 else data.year - 1
 
 
-def katalog_kariery(katalog, moj_klub_uid, moj_klub):
-    """Katalog historii kariery: kolejne zapisy tego samego klubu to jedna kariera."""
-    if moj_klub_uid is None:
+def katalog_kariery(katalog, menedzer):
+    """
+    Katalog historii kariery. Kariera = menedzer z zapisu (nie klub, ktory prowadzi), wiec zapisy
+    sprzed i po zmianie klubu laduja w jednym miejscu. Bez menedzera - wspolny katalog.
+    """
+    if katalog is None:
         return None
-    nazwa = re.sub(r"[^\w-]+", "_", str(moj_klub or "klub"), flags=re.UNICODE).strip("_")
-    return Path(katalog) / f"{int(moj_klub_uid)}_{nazwa}"
+    nazwa = re.sub(r"[^\w-]+", "_", str(menedzer), flags=re.UNICODE).strip("_") if menedzer else ""
+    return Path(katalog) / (f"m_{nazwa}" if nazwa else KARIERA_BEZ_MENEDZERA)
+
+
+_STARY_KATALOG = re.compile(r"^\d+_")    # dawny klucz kariery: <uid klubu>_<nazwa klubu>
+
+
+def przenies_stare(katalog, cel):
+    """
+    Jednorazowa migracja: migawki z dawnych katalogow klubowych trafiaja do katalogu kariery
+    (przy tej samej dacie zostaje nowszy plik, potem zasada "jedna migawka na miesiac").
+    """
+    if katalog is None or cel is None or not Path(katalog).is_dir():
+        return
+    cel = Path(cel)
+    for stary in Path(katalog).iterdir():
+        if not stary.is_dir() or not _STARY_KATALOG.match(stary.name) or stary == cel:
+            continue
+        cel.mkdir(parents=True, exist_ok=True)
+        for plik, _ in migawki(stary):
+            docelowy = cel / plik.name
+            if not docelowy.exists() or plik.stat().st_mtime > docelowy.stat().st_mtime:
+                shutil.move(str(plik), docelowy)
+            else:
+                plik.unlink()
+        shutil.rmtree(stary, ignore_errors=True)
+    # zasada "jedna migawka na miesiac" po polaczeniu katalogow (zostaje najpozniejsza data)
+    najnowsza = {}
+    for plik, dzien in migawki(cel):
+        klucz = (dzien.year, dzien.month)
+        if klucz in najnowsza:
+            najnowsza[klucz].unlink(missing_ok=True)
+        najnowsza[klucz] = plik
 
 
 def zapisz_migawke(katalog, dane, data_gry):
@@ -135,16 +171,9 @@ def dolicz_rozwoj(teraz, wtedy, min_minut=MIN_MINUT):
     ok = ten_sam & minuty
     teraz['Δ SCORE'] = (teraz['SCORE'] - p['SCORE']).where(ok)
     teraz['Δ percentyl'] = (teraz['Percentyl'] - p['Percentyl']).where(ok)
-    wartosc_wtedy = p['Wartość_Numeryczna'].where(p['Wartość_Numeryczna'] > 0)
-    teraz['Δ wartości'] = ((teraz['Wartość_Numeryczna'] / wartosc_wtedy - 1) * 100).where(ok)
     teraz['Δ minut'] = (teraz['Minuty'] - p['Minuty']).where(ok)
     teraz['Nowe pozycje'] = [
         ", ".join(s for s in str(t or "").split(", ") if s and s not in str(w or "").split(", ")) or None
         if czy else None
         for t, w, czy in zip(teraz['Pozycja'], p['Pozycja'], ten_sam)]
-    # rozwoj na tle wieku: reszta z regresji zmiany SCORE na wiek (mlodzi zwykle rosna szybciej)
-    z_rozwojem = teraz['Δ SCORE'].notna() & teraz['Wiek'].notna()
-    if z_rozwojem.sum() >= MIN_DO_REGRESJI and teraz.loc[z_rozwojem, 'Wiek'].nunique() > 1:
-        a, b = np.polyfit(teraz.loc[z_rozwojem, 'Wiek'].astype(float), teraz.loc[z_rozwojem, 'Δ SCORE'], 1)
-        teraz['Rozwój vs wiek'] = (teraz['Δ SCORE'] - (a * teraz['Wiek'] + b)).where(z_rozwojem)
     return teraz

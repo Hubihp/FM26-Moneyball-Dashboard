@@ -3,7 +3,7 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException
 
 from fm_moneyball import analiza, historia
-from fm_moneyball.serwer.modele import HistoriaModel, KadraModel, ListaZyczenModel, PodobniModel, RadarModel, RankingModel
+from fm_moneyball.serwer.modele import HistoriaModel, PorownanieZMoimModel, KadraModel, ListaZyczenModel, PodobniModel, RadarModel, RankingModel
 from fm_moneyball.serwer.obliczenia import kandydat
 from fm_moneyball.stale import POZYCJE
 
@@ -58,6 +58,18 @@ def utworz(stan, obl):
         if pd.isna(w['UID']):
             return {"punkty": [], "statystyki": [], "min_minut": historia.MIN_MINUT}
         return obl.historia_zawodnika(z.pozycja, int(w['UID']), w['Piłkarz'], z.wagi, z.ignoruj_mnoznik, z.k_baza)
+
+    @router.post("/porownanie-z-moim")
+    def porownanie_z_moim(z: PorownanieZMoimModel):
+        """Kandydat na tle najlepszego zawodnika mojego klubu (z biezacego zapisu) na tej pozycji."""
+        # pula z kandydatami: zawodnik spoza pozycji tez ma SCORE w jej skali
+        policzona, _, _ = obl.policz(z.pozycja, z.wagi, z.ignoruj_mnoznik, z.k_baza, kandydaci=True)
+        wiersz = policzona[policzona['ID'] == z.id]
+        if wiersz.empty:
+            raise HTTPException(404, "Nie znaleziono zawodnika.")
+        nominalni = policzona[~policzona['Kandydat'].fillna(False).astype(bool)] \
+            if 'Kandydat' in policzona.columns else policzona
+        return analiza.porownaj_z_moim(z.pozycja, nominalni, wiersz.iloc[0], stan.migawka()["meta"].get("moj_klub_uid"))
 
     @router.post("/radar")
     def radar(z: RadarModel):

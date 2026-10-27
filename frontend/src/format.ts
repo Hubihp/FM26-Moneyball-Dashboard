@@ -32,8 +32,6 @@ export function formatuj(wartosc: unknown, format: Format): string {
       return `${eur(wartosc / 52)} / tydz.`;
     case 'zmiana':
       return `${wartosc > 0 ? '+' : ''}${wartosc.toFixed(1).replace('.', ',')}`;
-    case 'zmiana_proc':
-      return `${wartosc > 0 ? '+' : ''}${Math.round(wartosc)}%`;
     default:
       return wartosc.toFixed(1).replace('.', ',');
   }

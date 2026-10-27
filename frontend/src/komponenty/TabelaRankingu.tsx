@@ -1,8 +1,9 @@
 import { AllCommunityModule, colorSchemeDark, ModuleRegistry, themeQuartz, type ColDef, type RowClassParams,
-  type SelectionChangedEvent } from 'ag-grid-community';
+  type ColumnState, type SelectionChangedEvent } from 'ag-grid-community';
 import { AG_GRID_LOCALE_PL } from '@ag-grid-community/locale';
 import { AgGridReact } from 'ag-grid-react';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Button, Checkbox, Group, Popover, ScrollArea, Stack } from '@mantine/core';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Kolumna, Wiersz } from '../api';
 import { formatuj, kolorNiedowartosciowania, kolorWyniku, kolorZmiany } from '../format';
@@ -64,7 +65,25 @@ type Props = {
   // lista zyczen: klucze zawodnikow z gwiazdka i przelaczanie gwiazdki
   ulubione?: Set<string>;
   przelaczUlubione?: (wiersz: Wiersz) => void;
+  // klucz zapamietanego ukladu (sortowanie, kolejnosc, szerokosc, ukryte kolumny), np. "ranking|Napastnik"
+  kluczUkladu?: string;
 };
+
+const PREFIKS_UKLADU = 'fm-uklad|';
+// Stale obiekty (nie tworzone przy kazdym renderze): nowy obiekt kazal siatce przebudowac kolumny,
+// co przywracalo domyslne sortowanie SCORE obok sortowania wybranego przez uzytkownika
+const KOLUMNA_ZAZNACZENIA = { pinned: 'left' as const, width: 46, headerTooltip: 'Zaznacz do porównania' };
+const DOMYSLNA_KOLUMNA = { wrapHeaderText: true, autoHeaderHeight: false, width: 120 };
+
+function wczytajUklad(klucz: string | undefined): ColumnState[] | null {
+  if (!klucz) return null;
+  try {
+    const zapis = window.localStorage.getItem(PREFIKS_UKLADU + klucz);
+    return zapis ? (JSON.parse(zapis) as ColumnState[]) : null;
+  } catch {
+    return null;
+  }
+}
 
 type Kontekst = { ulubione?: Set<string>; przelaczUlubione?: (wiersz: Wiersz) => void };
 
@@ -87,6 +106,21 @@ function Gwiazdka({ data, context }: { data?: Wiersz; context: Kontekst }) {
   );
 }
 
+// Niedowartosciowanie z oznaczeniem U21: cena mlodego zawodnika zawiera potencjal, ktorego model nie widzi
+function Niedowartosciowanie({ value, data }: { value: number | null; data?: Wiersz }) {
+  if (value === null || value === undefined) return <span>–</span>;
+  return (
+    <span>
+      {formatuj(value, 'mnoznik')}
+      {data?.['U21'] ? (
+        <span className="znacznik-u21" title="U21: cena zawiera potencjał, którego model nie widzi - wskaźnik jest zaniżony">
+          U21
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function Pasek({ value }: { value: number | null }) {
   if (value === null || value === undefined) return <span>–</span>;
   return (
@@ -101,8 +135,47 @@ const czyMoj = (w: Wiersz | undefined, uid: number | null | undefined) =>
   uid !== null && uid !== undefined && w?.['Klub_UID'] === uid;
 
 export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, zaznaczeni, naZaznaczenie, ulubione,
-  przelaczUlubione }: Props) {
+  przelaczUlubione, kluczUkladu }: Props) {
   const siatka = useRef<AgGridReact<Wiersz>>(null);
+  const [ukryte, setUkryte] = useState<string[]>([]);
+
+  // Uklad tabeli zapamietany w przegladarce: zapis po kazdej zmianie, odtworzenie po zbudowaniu kolumn
+  const odtwarzanie = useRef(false);
+  const zapiszUklad = useCallback(() => {
+    const api = siatka.current?.api;
+    if (!api) return;
+    const stan = api.getColumnState();
+    const nowe = stan.filter((c) => c.hide).map((c) => c.colId);
+    setUkryte((stare) => (stare.join('|') === nowe.join('|') ? stare : nowe));
+    if (!kluczUkladu || odtwarzanie.current) return;
+    try {
+      window.localStorage.setItem(PREFIKS_UKLADU + kluczUkladu, JSON.stringify(stan));
+    } catch {
+      // brak dostepu do localStorage - uklad nie zostanie zapamietany
+    }
+  }, [kluczUkladu]);
+  const odtworzUklad = useCallback(() => {
+    const api = siatka.current?.api;
+    const uklad = wczytajUklad(kluczUkladu);
+    if (!api || !uklad) return;
+    odtwarzanie.current = true;
+    api.applyColumnState({ state: uklad, applyOrder: true });
+    odtwarzanie.current = false;
+    setUkryte(uklad.filter((c) => c.hide).map((c) => c.colId));
+  }, [kluczUkladu]);
+  const przywrocUklad = () => {
+    try {
+      if (kluczUkladu) window.localStorage.removeItem(PREFIKS_UKLADU + kluczUkladu);
+    } catch {
+      // jw.
+    }
+    siatka.current?.api?.resetColumnState();
+    setUkryte([]);
+  };
+  const przelaczKolumne = (pole: string, widoczna: boolean) => {
+    siatka.current?.api?.setColumnsVisible([pole], widoczna);
+    zapiszUklad();
+  };
 
   // Pola wyboru zgodne ze wspolnym stanem porownania (np. po przejsciu z innej zakladki)
   const synchronizuj = useCallback(() => {
@@ -154,7 +227,8 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
           Object.assign(def, {
             width: 140,
             headerTooltip: 'Wycena wg wyniku / cena. ×2 = zawodnik gra jak typowy zawodnik dwa razy droższy '
-              + '(o tym samym wieku i kontrakcie).',
+              + '(o tym samym wieku i kontrakcie). U21: wskaźnik zaniżony - cena młodych zawiera potencjał.',
+            cellRenderer: Niedowartosciowanie,
             cellStyle: (p: { value: number | null }) => {
               const kolor = p.value === null || p.value === undefined ? undefined : kolorNiedowartosciowania(p.value);
               return kolor ? { color: kolor, fontWeight: 700 } : null;
@@ -178,8 +252,8 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
             headerTooltip: 'Skala T: 50 = przeciętny zawodnik pozycji w próbie, +10 = jedno odchylenie wyżej (z korektą ligową).',
           });
         }
-        if (k.format === 'zmiana' || k.format === 'zmiana_proc') {
-          const prog = k.format === 'zmiana' ? 2 : 10;
+        if (k.format === 'zmiana') {
+          const prog = 2;
           Object.assign(def, {
             width: 110,
             cellStyle: (p: { value: number | null }) => {
@@ -190,9 +264,6 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
           if (k.pole === 'Δ SCORE') {
             def.headerTooltip = 'Zmiana SCORE względem ostatniej migawki z poprzedniego sezonu (te same wagi); '
               + 'liczona przy co najmniej 1000 minutach w obu sezonach.';
-          }
-          if (k.pole === 'Rozwój vs wiek') {
-            def.headerTooltip = 'Zmiana SCORE ponad typową dla zawodników w tym wieku (młodzi zwykle rosną szybciej).';
           }
         }
                 if (k.format === 'pasek') {
@@ -226,7 +297,33 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
   );
 
   return (
-    <div style={{ height: '100%', width: '100%' }}>
+    <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <Group gap="xs" justify="flex-end">
+        <Popover position="bottom-end" shadow="md" withArrow>
+          <Popover.Target>
+            <Button size="compact-xs" variant="subtle">
+              Kolumny{ukryte.length ? ` (ukryte: ${ukryte.length})` : ''}
+            </Button>
+          </Popover.Target>
+          <Popover.Dropdown>
+            <ScrollArea.Autosize mah={360} type="auto">
+              <Stack gap={4}>
+                {kolumny.filter((k) => k.pole !== 'Piłkarz').map((k) => (
+                  <Checkbox key={k.pole} size="xs" label={k.naglowek} checked={!ukryte.includes(k.pole)}
+                    onChange={(e) => przelaczKolumne(k.pole, e.currentTarget.checked)} />
+                ))}
+              </Stack>
+            </ScrollArea.Autosize>
+          </Popover.Dropdown>
+        </Popover>
+        {kluczUkladu && (
+          <Button size="compact-xs" variant="subtle" color="gray" onClick={przywrocUklad}
+            title="Domyślne sortowanie, kolejność, szerokości i widoczność kolumn">
+            Przywróć układ
+          </Button>
+        )}
+      </Group>
+      <div style={{ flex: 1, minHeight: 0 }}>
       <AgGridReact<Wiersz>
         ref={siatka}
         theme={motywTabeli}
@@ -246,14 +343,22 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
           if (e.colDef.field === 'Piłkarz' && e.data) naWybor(String(e.data['ID']), e.data);
         }}
         onRowDoubleClicked={(e) => e.data && naWybor(String(e.data['ID']), e.data)}
-        selectionColumnDef={{ pinned: 'left', width: 46, headerTooltip: 'Zaznacz do porównania' }}
+        selectionColumnDef={KOLUMNA_ZAZNACZENIA}
         // Stala wysokosc naglowka: autoHeaderHeight liczy ja tylko z wyrenderowanych kolumn (wirtualizacja),
         // wiec po przewinieciu do dlugich nazw caly naglowek rosl. Dluzsze nazwy sa ucinane (pelna w podpowiedzi).
         headerHeight={48}
-        defaultColDef={{ wrapHeaderText: true, autoHeaderHeight: false, width: 120 }}
+        defaultColDef={DOMYSLNA_KOLUMNA}
         animateRows={false}
         tooltipShowDelay={300}
+        onNewColumnsLoaded={odtworzUklad}
+        onGridReady={odtworzUklad}
+        onSortChanged={zapiszUklad}
+        onColumnMoved={(e) => e.finished && zapiszUklad()}
+        onColumnResized={(e) => e.finished && e.source !== 'flex' && zapiszUklad()}
+        onColumnVisible={zapiszUklad}
+        onColumnPinned={zapiszUklad}
       />
+      </div>
     </div>
   );
 }

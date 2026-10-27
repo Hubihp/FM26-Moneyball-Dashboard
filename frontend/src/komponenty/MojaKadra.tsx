@@ -28,8 +28,8 @@ export default function MojaKadra({ wersja, wagi, ustawienia, szukajNastepcy, ot
   return (
     <Stack p="md">
       <Text size="sm" c="dimmed">
-        Pozycje od bramkarza do napastnika. Twoi zawodnicy są liczeni nawet poniżej progu minut, więc ich wynik może
-        mieć niską wiarygodność.
+        Pozycje od bramkarza do napastnika. Twoi zawodnicy są liczeni nawet poniżej progu minut, więc przy małej liczbie
+        minut ich wynik jest mniej pewny.
       </Text>
       <SimpleGrid cols={{ base: 1, lg: 2 }}>
         {pozycje.map((p) => (

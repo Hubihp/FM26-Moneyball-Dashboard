@@ -28,8 +28,8 @@ def test_nieznana_liga_nie_jest_premiowana():
 def test_korekta_ligowa_jest_addytywna():
     df = dopelnij_schemat(_pula())
     wagi = {'Oczekiwane asysty/90': 50, 'Przechwyty/90': 50}
-    bez, _, _ = oblicz_score(df, wagi, ignoruj_mnoznik=True, k_baza=5)
-    z, _, _ = oblicz_score(df, wagi, ignoruj_mnoznik=False, k_baza=5)
+    bez, _ = oblicz_score(df, wagi, ignoruj_mnoznik=True, k_baza=5)
+    z, _ = oblicz_score(df, wagi, ignoruj_mnoznik=False, k_baza=5)
     roznica = (z - bez).round(9)
     oczekiwana = 50 * (df['Liga'].map({"Premier League (ANG 1)": MNOZNIKI_LIG["Premier League"],
                                        "I liga (POL 2)": MNOZNIKI_LIG["I liga"]}) - 1)
@@ -57,8 +57,8 @@ def test_odchylenie_wazone_minutami_odporne_na_mala_probe():
 
 def test_brak_minut_dziala_jak_dawniej():
     df = _pula().drop(columns='Minuty')
-    score, wiarygodnosc, pominiete = oblicz_score(dopelnij_schemat(df), {'Przechwyty/90': 1}, True, 5)
-    assert score.mean() == pytest.approx(50) and wiarygodnosc.isna().all() and pominiete == []
+    score, pominiete = oblicz_score(dopelnij_schemat(df), {'Przechwyty/90': 1}, True, 5)
+    assert score.mean() == pytest.approx(50) and pominiete == []
 
 
 def test_macierz_stylu_pomija_stale_kolumny():

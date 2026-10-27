@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api, type Wiersz, type ZapytanieRankingu } from '../api';
 import { eur, formatuj } from '../format';
 import HistoriaZawodnika from './HistoriaZawodnika';
+import NaTleMojego from './NaTleMojego';
 import Wykres from './Wykres';
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
   zapytanie: ZapytanieRankingu;
   wersja: number;
   mojKlubUid: number | null | undefined;
+  mojKlub?: string | null;
   ulubiona: boolean;
   przelaczUlubiona: () => void;
   zamknij: () => void;
@@ -28,7 +30,7 @@ function Pole({ etykieta, wartosc }: { etykieta: string; wartosc: string }) {
   );
 }
 
-export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubUid, ulubiona, przelaczUlubiona, zamknij,
+export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubUid, mojKlub, ulubiona, przelaczUlubiona, zamknij,
   otworz, dodajDoPorownania }: Props) {
   const radar = useQuery({
     queryKey: ['radar', wersja, zapytanie.pozycja, id, zapytanie.filtry.kandydaci],
@@ -76,7 +78,6 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
           <SimpleGrid cols={4}>
             <Pole etykieta="SCORE" wartosc={formatuj(w['SCORE'], 'score')} />
             <Pole etykieta="Percentyl" wartosc={formatuj(w['Percentyl'], 'pasek')} />
-            <Pole etykieta="Wiarygodność" wartosc={formatuj(w['Wiarygodność'], 'pasek')} />
             <Pole etykieta="Wiek" wartosc={formatuj(w['Wiek'], 'int')} />
             <Pole etykieta="Wartość" wartosc={eur(w['Wartość_Numeryczna'] as number | null)} />
             <Pole etykieta="Płaca" wartosc={formatuj(w['Zarobki_Numeryczne'], 'eur_tyg')} />
@@ -85,11 +86,20 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
             <Pole etykieta="Noga" wartosc={String(w['Preferowana noga'] ?? '–')} />
             <Pole etykieta="Koszt (cena + 3 lata pensji)" wartosc={eur(w['Koszt'] as number | null)} />
             <Pole etykieta="Wycena wg wyniku" wartosc={eur(w['Wycena wg wyniku'] as number | null)} />
-            <Pole etykieta="Niedowartościowanie" wartosc={formatuj(w['Niedowartościowanie'], 'mnoznik')} />
+            <Pole etykieta={w['U21'] ? 'Niedowartościowanie (U21)' : 'Niedowartościowanie'}
+              wartosc={formatuj(w['Niedowartościowanie'], 'mnoznik')} />
             {w['Kontuzje_2_lata'] !== undefined ? (
               <Pole etykieta="Kontuzje (2 lata)" wartosc={formatuj(w['Kontuzje_2_lata'], 'int')} />
             ) : null}
           </SimpleGrid>
+          {w['U21'] ? (
+            <Text size="xs" c="dimmed">
+              U21: cena młodego zawodnika zawiera potencjał, którego model wyceny nie widzi (zna tylko wynik, wiek i
+              kontrakt), więc niedowartościowanie jest zaniżone - zawodnik może być tańszy, niż wynika z tej liczby.
+            </Text>
+          ) : null}
+
+          {!moj(w) && <NaTleMojego id={id} zapytanie={zapytanie} wersja={wersja} mojKlub={mojKlub} />}
 
 
           <Group grow>

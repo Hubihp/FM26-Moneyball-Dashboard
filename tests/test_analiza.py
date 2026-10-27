@@ -94,3 +94,33 @@ def test_maska_odniesienia_nie_zmienia_wyniku_nominalnych():
     k1, k2 = razem[razem['ID'] == "K1"].iloc[0], razem[razem['ID'] == "K2"].iloc[0]
     assert k1['SCORE'] > sama['SCORE'].max() - 1 and k1['Percentyl'] == 100 and k2['Percentyl'] < 10
     assert k1['Kandydat z pozycji'] == "Napastnik"
+
+
+def test_porownanie_z_moim_zawodnikiem():
+    pula = _pula().assign(Klub_UID=[1, 1, 2, 3, 4], **{'Przechwyty/90': [2.0, 1.0, 3.0, 0.5, 1.5],
+                                                       'Strata piłek na podanie': [0.1, 0.3, 0.2, 0.2, 0.05]})
+    pula['ID'] = pula['Piłkarz']
+    analiza.MERYTORYKA_WAG["Test"] = {'Przechwyty/90': 50, 'Strata piłek na podanie': 50}
+    try:
+        lepszy = pula.iloc[2].copy()
+        lepszy['SCORE'] = 80.0
+        wynik = analiza.porownaj_z_moim("Test", pula, lepszy, 1)
+        assert wynik["moj"]["Piłkarz"] == "Drogi" and wynik["werdykt"] == "wzmocnienie" and wynik["roznica"] == 10
+        cechy = {c["nazwa"]: c for c in wynik["cechy"]}
+        assert cechy['Przechwyty/90']["lepszy"] == "kandydat"
+        # mniej strat = lepiej: Drogi 0.3 vs kandydat 0.2
+        assert cechy['Strata piłek na podanie']["nizsze_lepsze"] and cechy['Strata piłek na podanie']["lepszy"] == "kandydat"
+        assert analiza.porownaj_z_moim("Test", pula, pula.iloc[4], 1)["werdykt"] == "nie wzmacnia"
+        podobny = pula.iloc[4].copy()
+        podobny['SCORE'] = 71.0
+        assert analiza.porownaj_z_moim("Test", pula, podobny, 1)["werdykt"] == "podobny poziom"
+        assert analiza.porownaj_z_moim("Test", pula, pula.iloc[0], 1)["werdykt"] == "twój zawodnik"
+        assert analiza.porownaj_z_moim("Test", pula, pula.iloc[0], 99)["werdykt"] == "brak zawodnika"
+    finally:
+        del analiza.MERYTORYKA_WAG["Test"]
+
+
+def test_oznaczenie_u21_i_brak_wiarygodnosci():
+    p = analiza.wzbogac(_pula(), DZIS)
+    assert list(p['U21']) == [False, False, False, False, True]
+    assert 'Wiarygodność' not in analiza.POLA_WIERSZA

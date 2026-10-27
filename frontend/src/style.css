@@ -204,3 +204,15 @@ body {
   overflow: hidden;
   line-height: 1.2;
 }
+
+/* Oznaczenie U21 przy niedowartosciowaniu (wskaznik zanizony - cena zawiera potencjal) */
+.znacznik-u21 {
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #ced4da;
+  background: rgba(134, 142, 150, 0.35);
+  vertical-align: middle;
+}

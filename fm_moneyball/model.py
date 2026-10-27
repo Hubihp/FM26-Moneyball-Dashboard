@@ -72,17 +72,17 @@ def oblicz_score(df, wagi, ignoruj_mnoznik, k_baza, odniesienie=None):
     to dokladnie to samo co dawne mnozenie (50 * mnoznik), ale kara nie zalezy od poziomu
     wyniku (mnozenie skali ze srodkiem 50 karalo slabych zawodnikow mniej niz mocnych).
     Wagi sa normalizowane do sumy 1. `odniesienie` - patrz oblicz_z (skala T tez liczona tylko na nim).
-    Zwraca (SCORE, Wiarygodnosc w %, lista pominietych cech).
+    Zwraca (SCORE, lista pominietych cech).
     """
     nazwy = [n for n, w in wagi.items() if w > 0]
-    z, n90 = oblicz_z(df, nazwy, k_baza, odniesienie)
+    z, _ = oblicz_z(df, nazwy, k_baza, odniesienie)
     ref = pd.Series(True, index=df.index) if odniesienie is None else odniesienie.reindex(df.index).fillna(False).astype(bool)
     uzyte = [n for n in nazwy if n in z]
     pominiete = [n for n in nazwy if n not in z]
     suma = sum(wagi[n] for n in uzyte)
 
     if not uzyte or suma <= 0:
-        return pd.Series(np.nan, index=df.index), pd.Series(np.nan, index=df.index), pominiete
+        return pd.Series(np.nan, index=df.index), pominiete
 
     kompozyt = sum(z[n] * (wagi[n] / suma) for n in uzyte)
     odch = kompozyt[ref].std(ddof=0)
@@ -93,12 +93,7 @@ def oblicz_score(df, wagi, ignoruj_mnoznik, k_baza, odniesienie=None):
 
     if not ignoruj_mnoznik and 'Mnożnik_Ligi' in df.columns:
         score = score + 50.0 * (df['Mnożnik_Ligi'] - 1.0)
-
-    if n90 is not None and k_baza > 0:
-        wiarygodnosc = n90 / (n90 + k_baza) * 100.0
-    else:
-        wiarygodnosc = pd.Series(np.nan, index=df.index)
-    return score, wiarygodnosc, pominiete
+    return score, pominiete
 
 
 def percentyl_w_puli(pula, wartosc):

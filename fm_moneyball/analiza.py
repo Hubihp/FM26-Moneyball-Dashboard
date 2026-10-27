@@ -41,6 +41,11 @@ PROG_NIEDOWARTOSCIOWANIA = 2.0   # wycena wg wyniku co najmniej 2x wyzsza niz ce
 MIN_SCORE_NIEDOWARTOSCIOWANEGO = 55.0   # ...u zawodnika wyraznie powyzej przecietnej
 PROG_SZYBKIEGO_ROZWOJU = 5.0     # wzrost SCORE wzgledem poprzedniego sezonu (historia zapisow)...
 MAKS_WIEK_ROZWOJU = 23           # ...u mlodego zawodnika
+# Do tego wieku cena zawiera potencjal, ktorego model wyceny nie widzi (zna tylko wynik, wiek i kontrakt):
+# "Niedowartosciowanie" jest u nich zanizone - interfejs oznacza je jako U21
+MAKS_WIEK_U21 = 21
+# Werdykt porownania z moim zawodnikiem: roznica SCORE, od ktorej kandydat jest wzmocnieniem
+PROG_WZMOCNIENIA = 3.0
 
 
 def wzbogac(pula, data_gry=None, horyzont_lat=3):
@@ -74,6 +79,7 @@ def wzbogac(pula, data_gry=None, horyzont_lat=3):
         maska = maska.fillna(False).astype(bool)
         okazje = okazje.where(~maska, okazje.where(okazje == "", okazje + "; ") + znacznik)
     pula['Okazje'] = okazje
+    pula['U21'] = pula['Wiek'] <= MAKS_WIEK_U21 if 'Wiek' in pula.columns else False
     return pula
 
 
@@ -98,12 +104,12 @@ def wagi_domyslne(pozycja, df):
 
 def policz_wynik(df, wagi, ignoruj_mnoznik=False, k_baza=5, odniesienie=None):
     """
-    Pula -> kopia z kolumnami SCORE, Percentyl, Wiarygodnosc; plus lista pominietych cech.
+    Pula -> kopia z kolumnami SCORE i Percentyl; plus lista pominietych cech.
     `odniesienie` (maska) - zawodnicy pozycji; pozostali (kandydaci z innych pozycji) sa oceniani
     na ich skali, a ich percentyl to miejsce wsrod zawodnikow pozycji.
     """
     pula = df.copy()
-    score, wiarygodnosc, pominiete = oblicz_score(pula, wagi, ignoruj_mnoznik, k_baza, odniesienie)
+    score, pominiete = oblicz_score(pula, wagi, ignoruj_mnoznik, k_baza, odniesienie)
     pula['SCORE'] = score
     if odniesienie is None:
         pula['Percentyl'] = score.rank(pct=True) * 100
@@ -118,7 +124,6 @@ def policz_wynik(df, wagi, ignoruj_mnoznik=False, k_baza=5, odniesienie=None):
             rowne = np.searchsorted(nominalni, inni.to_numpy(), side='right') - mniej
             percentyl[~ref] = np.where(inni.notna(), (mniej + 0.5 * rowne) / len(nominalni) * 100, np.nan)
         pula['Percentyl'] = percentyl
-    pula['Wiarygodność'] = wiarygodnosc
     return pula, pominiete
 
 
@@ -209,10 +214,9 @@ def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
 
 # --- kolumny tabeli -----------------------------------------------------------------------------
 # Format wartosci dla interfejsu: score, pasek (0-100), int, dec1, dec2, eur, eur_tyg, data, tekst
-_FORMATY = {'SCORE': 'score', 'Percentyl': 'pasek', 'Wiarygodność': 'pasek', 'Wiek': 'int', 'Minuty': 'int',
+_FORMATY = {'SCORE': 'score', 'Percentyl': 'pasek', 'Wiek': 'int', 'Minuty': 'int',
             'Ocena na pozycji': 'int', 'Strata piłek na podanie': 'dec2',
-            'Niedowartościowanie': 'mnoznik', 'Wycena wg wyniku': 'eur', 'Δ SCORE': 'zmiana',
-            'Rozwój vs wiek': 'zmiana', 'Δ wartości': 'zmiana_proc'}
+            'Niedowartościowanie': 'mnoznik', 'Wycena wg wyniku': 'eur', 'Δ SCORE': 'zmiana'}
 # Kolumny prezentowane z pol liczbowych (sortowanie po liczbie, nie po tekscie)
 _POLA = {'Cena': ('Wartość_Numeryczna', 'eur'), 'Płaca': ('Zarobki_Numeryczne', 'eur_tyg'),
          'Wygasa': ('Wygasa_Data', 'data'), 'Koszt (3 lata)': ('Koszt', 'eur')}
@@ -222,7 +226,7 @@ _TEKSTOWE = {'Piłkarz', 'Klub', 'Liga', 'Pozycja', 'Kraj', 'Preferowana noga', 
 _NAGLOWKI = {'Kraj': 'Narodowość', 'Pozycja': 'Pozycje', 'Δ SCORE': 'Δ SCORE (sezon)'}
 # Kolumny Moneyball (z wzbogac), nie sa statystykami meczowymi
 _MONEYBALL = {'Koszt (3 lata)', 'Okazje', 'Ocena na pozycji', 'Wycena wg wyniku',
-              'Niedowartościowanie', 'Δ SCORE', 'Rozwój vs wiek', 'Δ wartości'}
+              'Niedowartościowanie', 'Δ SCORE'}
 
 
 def _wstaw_po(lista, nowy, po):
@@ -246,9 +250,6 @@ def kolumny_tabeli(pozycja, pula):
     # rozwoj wzgledem poprzedniego sezonu (historia zapisow)
     if 'Δ SCORE' in pula.columns and pula['Δ SCORE'].notna().any():
         _wstaw_po(nazwy, 'Δ SCORE', 'Percentyl')
-        if pula['Rozwój vs wiek'].notna().any():
-            _wstaw_po(nazwy, 'Rozwój vs wiek', 'Δ SCORE')
-        _wstaw_po(nazwy, 'Δ wartości', 'Cena')
     if 'Niedowartościowanie' in pula.columns and pula['Niedowartościowanie'].notna().any():
         _wstaw_po(nazwy, 'Wycena wg wyniku', 'Cena')
         _wstaw_po(nazwy, 'Niedowartościowanie', 'Wycena wg wyniku')
@@ -301,11 +302,11 @@ def do_json(ramka, pola):
 
 
 POLA_WIERSZA = ['ID', 'UID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Kraj', 'Wiek', 'Pozycja', 'Preferowana noga', 'Minuty',
-                'SCORE', 'Percentyl', 'Wiarygodność', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Wygasa_Data',
+                'SCORE', 'Percentyl', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Wygasa_Data',
                 'Mnożnik_Ligi', 'Wypożyczony', 'Wypożyczenie_do', 'Wolny_agent', 'Lata_kontraktu', 'Koszt',
                 'Okazje', 'Pareto', 'Kandydat', 'Kandydat z pozycji', 'Ocena na pozycji',
                 'Wycena wg wyniku', 'Niedowartościowanie', 'Kontuzje_2_lata', 'Δ SCORE', 'Δ percentyl',
-                'Δ wartości', 'Δ minut', 'Rozwój vs wiek', 'Nowe pozycje']
+                'Δ minut', 'Nowe pozycje', 'U21']
 
 
 def pola_wiersza(pozycja, pula):
@@ -357,6 +358,44 @@ def podobni(pozycja, pula, widoczni_idx, id_, k_baza=5, n=10):
     return wyniki.sort_values('Podobieństwo', ascending=False).head(n)
 
 
+def porownaj_z_moim(pozycja, pula, kandydat, moj_klub_uid):
+    """
+    Kandydat na tle najlepszego (SCORE) zawodnika mojego klubu w puli pozycji: werdykt i kluczowe
+    statystyki pozycji (te z wagami) z wartoscia i percentylem w puli ("mniej = lepiej" odwrocone).
+    `kandydat` to wiersz (Series) z SCORE - takze spoza puli (kandydat z innej pozycji).
+    """
+    wynik = {"moj": None, "werdykt": None, "roznica": None, "cechy": []}
+    if moj_klub_uid is None or 'Klub_UID' not in pula.columns:
+        wynik["werdykt"] = "nieznany klub"
+        return wynik
+    if kandydat.get('Klub_UID') == moj_klub_uid:
+        wynik["werdykt"] = "twój zawodnik"
+        return wynik
+    moi = pula[(pula['Klub_UID'] == moj_klub_uid) & pula['SCORE'].notna()].sort_values('SCORE', ascending=False)
+    if moi.empty:
+        wynik["werdykt"] = "brak zawodnika"
+        return wynik
+    moj = moi.iloc[0]
+    roznica = float(kandydat['SCORE'] - moj['SCORE']) if pd.notna(kandydat.get('SCORE')) else None
+    wynik["moj"] = do_json(moi.head(1), ['ID', 'Piłkarz', 'Wiek', 'SCORE', 'Minuty', 'Klub'])[0]
+    wynik["roznica"] = roznica
+    wynik["werdykt"] = (None if roznica is None else "wzmocnienie" if roznica >= PROG_WZMOCNIENIA
+                        else "podobny poziom" if roznica > -PROG_WZMOCNIENIA else "nie wzmacnia")
+    for cecha in wagi_domyslne(pozycja, pula):
+        k, m = kandydat.get(cecha), moj.get(cecha)
+        pk = percentyl_w_puli(pula[cecha], k) if pd.notna(k) else None
+        pm = percentyl_w_puli(pula[cecha], m) if pd.notna(m) else None
+        if cecha in NIZSZE_LEPSZE:
+            pk, pm = (None if pk is None else 100 - pk), (None if pm is None else 100 - pm)
+        wynik["cechy"].append({
+            "nazwa": cecha, "nizsze_lepsze": cecha in NIZSZE_LEPSZE,
+            "kandydat": None if pd.isna(k) else float(k), "moj": None if pd.isna(m) else float(m),
+            "percentyl_kandydata": pk, "percentyl_moj": pm,
+            "lepszy": None if pk is None or pm is None or pk == pm else ("kandydat" if pk > pm else "moj"),
+        })
+    return wynik
+
+
 def znajdz_zawodnika(pula, klucz, pilkarz=""):
     """
     Wiersz zawodnika z listy zyczen: po UID z zapisu (z kontrola nazwiska - uid moze sie roznic
@@ -373,7 +412,7 @@ def znajdz_zawodnika(pula, klucz, pilkarz=""):
 
 # --- moja kadra -----------------------------------------------------------------------------------
 POLA_KADRY = ['ID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Wiek', 'Pozycja', 'Preferowana noga', 'Minuty', 'SCORE',
-              'Percentyl', 'Wiarygodność', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Wygasa_Data', 'Lata_kontraktu',
+              'Percentyl', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Wygasa_Data', 'Lata_kontraktu',
               'Wypożyczony', 'Koszt', 'Okazje']
 
 

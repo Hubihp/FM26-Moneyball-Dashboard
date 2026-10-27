@@ -40,7 +40,7 @@ log = logging.getLogger("fm_moneyball")
 CO_ILE_SPRAWDZAC = 15        # sekundy miedzy sprawdzeniami folderu zapisow
 # 2: domyslnie zawodnik we wszystkich pulach, w ktorych jest naturalny (wczesniej tylko glowna)
 WERSJA_USTAWIEN = 2
-WERSJA_CACHE = 8             # zmiana formatu wyniku = nowy klucz cache
+WERSJA_CACHE = 9             # zmiana formatu wyniku = nowy klucz cache
 ILE_W_CACHE = 3
 DEMO_DATA_GRY = date(2027, 1, 15)
 
@@ -337,6 +337,7 @@ class Stan:
         meta = {
             "nazwa_zapisu": wynik.nazwa_zapisu, "plik": opis, "build": wynik.build,
             "data_gry": wynik.data_gry.isoformat() if wynik.data_gry else None,
+            "menedzer": getattr(wynik, "menedzer", None),
             "moje_kluby": wynik.moje_kluby or ([{"uid": wynik.moj_klub_uid, "nazwa": wynik.moj_klub}]
                                                if wynik.moj_klub_uid is not None else []),
             "ostrzezenia": wynik.ostrzezenia, "liczniki": wynik.liczniki,
@@ -364,12 +365,12 @@ class Stan:
         """Katalog historii biezacej kariery (tylko zapis gry, nie demo/CSV) albo None."""
         if self.meta.get("demo") or not self.meta.get("data_gry") or self.katalog_historii is None:
             return None
-        return historia.katalog_kariery(self.katalog_historii, self.meta.get("moj_klub_uid"),
-                                        self.meta.get("moj_klub"))
+        return historia.katalog_kariery(self.katalog_historii, self.meta.get("menedzer"))
 
     def _zapisz_historie(self):
         # migawka do historii rozwoju; jej brak (np. brak miejsca na dysku) nie blokuje wczytania
         try:
+            historia.przenies_stare(self.katalog_historii, self.katalog_kariery())
             historia.zapisz_migawke(self.katalog_kariery(), self.dane, date.fromisoformat(self.meta["data_gry"]))
         except Exception as e:
             log.warning("Nie udało się zapisać migawki historii: %s", e)

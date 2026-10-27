@@ -80,7 +80,7 @@ export default function Okazje({ zapytanie, okazje, wersja, mojKlubUid, naWybor,
           <Box style={{ flex: 1, minHeight: 300 }}>
             <TabelaRankingu kolumny={ranking.data.kolumny} wiersze={ranking.data.wiersze} mojKlubUid={mojKlubUid}
               naWybor={naWybor} ulubione={ulubione} przelaczUlubione={przelaczUlubione}
-              zaznaczeni={zaznaczeni} naZaznaczenie={naZaznaczenie} />
+              zaznaczeni={zaznaczeni} naZaznaczenie={naZaznaczenie} kluczUkladu={`okazje|${zapytanie.pozycja}`} />
           </Box>
         </>
       )}

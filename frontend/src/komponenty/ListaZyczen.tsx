@@ -83,6 +83,7 @@ export default function ListaZyczen({ lista, setLista, wersja, wagi, ustawienia,
             przelaczUlubione={(w) => setLista(lista.filter((x) => x.klucz !== kluczZawodnika(w)))}
             zaznaczeni={zaznaczeni}
             naZaznaczenie={naZaznaczenie}
+            kluczUkladu="lista"
           />
         </Box>
       )}

@@ -57,6 +57,8 @@ export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naW
         w['SCORE'] as number],
       id: String(w['ID']),
       name: String(w['Piłkarz']),
+      // U21: romb - cena zawiera potencjal, ktorego model nie widzi (punkt jest zanizony)
+      ...(w['U21'] ? { symbol: 'diamond', symbolSize: 11, u21: true } : {}),
     });
     const wartosci = zCena.flatMap((w) => [w['Wartość_Numeryczna'] as number, w['Wycena wg wyniku'] as number]);
     return {
@@ -121,7 +123,8 @@ export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naW
           <Title order={5}>Cena vs wycena wg wyniku</Title>
           <Text size="xs" c="dimmed">
             Wycena = cena typowa dla zawodnika tej pozycji z takim samym wynikiem, wiekiem i kontraktem. Punkty nad linią
-            są tańsze, niż wynika z ich gry (okazje), pod linią - przepłacone. Kolor = wiek, bursztynowe = twój klub.
+            są tańsze, niż wynika z ich gry (okazje), pod linią - przepłacone. Kolor = wiek, bursztynowe = twój klub,
+            romb = U21 (cena zawiera potencjał, którego model nie widzi, więc taki zawodnik leży niżej, niż powinien).
             {modelWyceny?.r2 !== null && modelWyceny?.r2 !== undefined && (
               <> Model: R² {modelWyceny.r2.toFixed(2).replace('.', ',')} na {modelWyceny.liczba} zawodnikach
                 {modelWyceny.proc_za_10_score !== null ? `; +10 SCORE ≈ ${procent(modelWyceny.proc_za_10_score)} ceny` : ''}
@@ -142,10 +145,11 @@ export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naW
               grid: { left: 70, right: 90, top: 30, bottom: 50 },
               tooltip: {
                 formatter: (p: unknown) => {
-                  const d = (p as { data: { name?: string; value: number[] } }).data;
+                  const d = (p as { data: { name?: string; value: number[]; u21?: boolean } }).data;
                   if (!d.name) return '';
                   return `<b>${d.name}</b><br/>cena ${eur(d.value[0])}<br/>wycena ${eur(d.value[1])}`
-                    + `<br/>×${(d.value[1] / d.value[0]).toFixed(1).replace('.', ',')} · SCORE ${Math.round(d.value[3])}`;
+                    + `<br/>×${(d.value[1] / d.value[0]).toFixed(1).replace('.', ',')} · SCORE ${Math.round(d.value[3])}`
+                    + (d.u21 ? '<br/><i>U21 - wskaźnik zaniżony (potencjał)</i>' : '');
                 },
               },
               legend: { top: 0, left: 'center', data: ['Zawodnicy', 'Twój klub', 'Cena = wycena'] },

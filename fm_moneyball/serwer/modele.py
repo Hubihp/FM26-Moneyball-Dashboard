@@ -82,6 +82,10 @@ class RankingModel(BaseModel):
     filtry: FiltryModel = Field(default_factory=FiltryModel)
 
 
+class PorownanieZMoimModel(RankingModel):
+    id: str
+
+
 class HistoriaModel(BaseModel):
     pozycja: str
     id: str
