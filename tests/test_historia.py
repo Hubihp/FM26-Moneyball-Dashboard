@@ -100,7 +100,7 @@ def test_api_rozwoj_i_historia(klient_z_historia):
     meta = k.get("/api/pozycja/Napastnik").json()
     assert meta["ma_historie"] and meta["data_porownania"] == "2026-05-01" and meta["min_minut_rozwoju"] == 1000
     wynik = k.post("/api/ranking", json={"pozycja": "Napastnik"}).json()
-    assert "Δ SCORE (sezon)" in [c["naglowek"] for c in wynik["kolumny"]]
+    assert "Δ SCORE" in [c["naglowek"] for c in wynik["kolumny"]]
     rozwoj = {w["ID"]: w["Δ SCORE"] for w in wynik["wiersze"]}
     assert all(v is not None for v in rozwoj.values())
     szybcy = k.post("/api/ranking", json={"pozycja": "Napastnik", "filtry": {"min_rozwoj": 3}}).json()["wiersze"]
@@ -109,6 +109,13 @@ def test_api_rozwoj_i_historia(klient_z_historia):
     assert {w["Piłkarz"] for w in szybcy} <= poprawieni | {"Demo N 000"}
     # karta: dwie migawki z SCORE
     hist = k.post("/api/historia", json={"pozycja": "Napastnik", "id": szybcy[0]["ID"]}).json()
+    assert hist["brak"] == [] and all(p["mala_proba"] is False for p in hist["punkty"])
+    assert hist["delta"]["wzgledem"] == "2026-05-01" and hist["delta"]["mala_proba"] is False
+    assert hist["delta"]["wartosc"] == pytest.approx(hist["punkty"][1]["SCORE"] - hist["punkty"][0]["SCORE"])
+    wielu = k.post("/api/historia-wielu", json={"pozycja": "Napastnik",
+                                                "ids": [szybcy[0]["ID"], szybcy[1]["ID"], "nie ma"]}).json()
+    assert [z["pilkarz"] for z in wielu["zawodnicy"]][:2] == [szybcy[0]["Piłkarz"], szybcy[1]["Piłkarz"]]
+    assert len(wielu["zawodnicy"][1]["punkty"]) == 2 and wielu["zawodnicy"][2]["punkty"] == []
     assert [p["data"] for p in hist["punkty"]] == ["2026-05-01", "2027-01-15"]
     assert hist["punkty"][1]["SCORE"] > hist["punkty"][0]["SCORE"]
     assert "Liczba goli na 90 min" in hist["statystyki"] and hist["min_minut"] == 1000
@@ -121,7 +128,7 @@ def test_demo_bez_historii(tmp_path):
     with TestClient(utworz_aplikacje(stan)) as k:
         assert k.get("/api/pozycja/Napastnik").json()["ma_historie"] is False
         wynik = k.post("/api/ranking", json={"pozycja": "Napastnik"}).json()
-        assert "Δ SCORE (sezon)" not in [c["naglowek"] for c in wynik["kolumny"]]
+        assert "Δ SCORE" not in [c["naglowek"] for c in wynik["kolumny"]]
         assert k.post("/api/historia", json={"pozycja": "Napastnik", "id": "x"}).json()["punkty"] == []
     assert not (tmp_path / "historia").exists()
 
@@ -165,3 +172,13 @@ def test_historia_po_zmianie_klubu(tmp_path, monkeypatch):
         assert all(w["Δ SCORE"] is not None for w in wiersze)
         hist = k.post("/api/historia", json={"pozycja": "Napastnik", "id": wiersze[0]["ID"]}).json()
         assert [p["data"] for p in hist["punkty"]][-3:] == ["2028-03-31", "2030-04-17", "2032-03-24"]
+
+
+def test_mala_proba_w_historii(tmp_path):
+    """Okresy ponizej 1000 minut sa w historii (z flaga), a delta ma oznaczenie malej proby."""
+    from fm_moneyball.serwer.obliczenia import _zmiana_sezonowa
+    punkty = [{"data": "2026-03-01", "sezon": 2025, "SCORE": 50.0, "Minuty": 600.0, "mala_proba": True},
+              {"data": "2027-01-15", "sezon": 2026, "SCORE": 58.0, "Minuty": 2000.0, "mala_proba": False}]
+    delta = _zmiana_sezonowa(punkty)
+    assert delta["wartosc"] == 8 and delta["mala_proba"] is True and delta["wzgledem"] == "2026-03-01"
+    assert _zmiana_sezonowa(punkty[1:]) is None

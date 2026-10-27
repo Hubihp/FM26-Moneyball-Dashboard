@@ -136,9 +136,13 @@ export default function App() {
     enabled: gotowe,
   });
 
-  // scalenie z domyslnymi (nowe pola filtrow); kandydaci wlaczeni tylko, gdy wybrano pozycje
-  const zapisane = { ...PUSTE_FILTRY, ...(filtryPozycji[pozycja] ?? {}) };
-  const filtry: Filtry = { ...zapisane, kandydaci: zapisane.kandydaci_z.length > 0 && pozycja !== 'Bramkarz' };
+  // scalenie z domyslnymi (nowe pola filtrow); kandydaci wlaczeni tylko, gdy wybrano pozycje.
+  // useMemo: nowy obiekt przy kazdym renderze zmienialby zapytanie, a opoznione zapytanie wywolywalo
+  // kolejny render - aplikacja przerysowywala sie w petli (m.in. znikaly podpowiedzi wykresow)
+  const filtry: Filtry = useMemo(() => {
+    const zapisane = { ...PUSTE_FILTRY, ...(filtryPozycji[pozycja] ?? {}) };
+    return { ...zapisane, kandydaci: zapisane.kandydaci_z.length > 0 && pozycja !== 'Bramkarz' };
+  }, [filtryPozycji, pozycja]);
   const wagi = wagiWlasne[pozycja] ?? meta.data?.wagi_domyslne ?? {};
   const zapytanie: ZapytanieRankingu = useMemo(
     () => ({
@@ -363,7 +367,7 @@ export default function App() {
               {zakladka === 'porownanie' && (
                 <Suspense fallback={<Loader m="md" />}>
                   <Porownanie pozycja={pozycja} wersja={wersja} wiersze={wiersze} wybrani={wybraniPozycji}
-                    setWybrani={(ids) => setWybrani({ ...wybrani, [pozycja]: ids })} />
+                    setWybrani={(ids) => setWybrani({ ...wybrani, [pozycja]: ids })} zapytanie={zapytanie} />
                 </Suspense>
               )}
             </Tabs.Panel>

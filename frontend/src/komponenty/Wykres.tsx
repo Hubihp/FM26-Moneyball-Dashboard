@@ -25,7 +25,15 @@ export default function Wykres({ opcje, wysokosc = 420, naKlik }: Props) {
   useEffect(() => {
     if (!ref.current) return;
     wykres.current = echarts.init(ref.current, 'dark', { renderer: 'canvas' });
-    const obserwator = new ResizeObserver(() => wykres.current?.resize());
+    // resize tylko przy faktycznej zmianie rozmiaru (kazde resize chowa podpowiedz)
+    let rozmiar = '';
+    const obserwator = new ResizeObserver(([wpis]) => {
+      const nowy = `${Math.round(wpis.contentRect.width)}x${Math.round(wpis.contentRect.height)}`;
+      if (nowy !== rozmiar) {
+        rozmiar = nowy;
+        wykres.current?.resize();
+      }
+    });
     obserwator.observe(ref.current);
     return () => {
       obserwator.disconnect();
@@ -34,9 +42,19 @@ export default function Wykres({ opcje, wysokosc = 420, naKlik }: Props) {
     };
   }, []);
 
+  // Opcje przychodza jako nowy obiekt przy kazdym renderze rodzica; setOption (bez scalania) kasuje wykres
+  // i chowa podpowiedz, wiec wolamy go tylko przy faktycznej zmianie tresci (funkcje sa pomijane w kluczu)
+  const klucz = JSON.stringify(opcje);
+  const aktualne = useRef(opcje);
+  aktualne.current = opcje;
   useEffect(() => {
-    wykres.current?.setOption({ backgroundColor: 'transparent', ...opcje }, true);
-  }, [opcje]);
+    const o = aktualne.current;
+    wykres.current?.setOption({
+      backgroundColor: 'transparent', ...o,
+      // podpowiedz w granicach wykresu: nie wydluza strony i nie wywoluje pasow przewijania
+      tooltip: Array.isArray(o.tooltip) ? o.tooltip : { confine: true, ...(o.tooltip ?? {}) },
+    }, true);
+  }, [klucz]);
 
   useEffect(() => {
     const w = wykres.current;

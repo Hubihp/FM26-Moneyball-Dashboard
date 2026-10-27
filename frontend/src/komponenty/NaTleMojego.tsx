@@ -34,7 +34,7 @@ export default function NaTleMojego({ id, zapytanie, wersja, mojKlub }: Props) {
     <Stack gap="xs">
       {naglowek}
       <Group gap="sm">
-        {werdykt && <Badge size="xl" color={werdykt.kolor} variant="filled">{werdykt.tekst}</Badge>}
+        {werdykt && <Badge size="md" color={werdykt.kolor} variant="filled">{werdykt.tekst}</Badge>}
         {p.moj && (
           <Text size="sm">
             twój najlepszy na pozycji {zapytanie.pozycja}: <b>{String(p.moj['Piłkarz'])}</b> (SCORE{' '}

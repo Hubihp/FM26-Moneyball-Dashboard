@@ -88,30 +88,36 @@ class Obliczenia:
     def historia_zawodnika(self, pozycja, uid, pilkarz, wagi, ignoruj_mnoznik, k_baza):
         """
         Zawodnik w kolejnych migawkach: data, sezon, SCORE i percentyl w pozycji (gdy ja wtedy mial),
-        minuty, wartosc i statystyki /90 pozycji.
+        minuty (z oznaczeniem malej proby ponizej MIN_MINUT), wartosc i statystyki /90 pozycji.
+        Plus daty migawek bez zawodnika i zmiana SCORE wzgledem ostatniej migawki z wczesniejszego sezonu.
         """
         df = self.pula(pozycja)
         wagi = wagi if wagi is not None else analiza.wagi_domyslne(pozycja, df)
         wagi = {k: v for k, v in wagi.items() if k in df.columns}
         statystyki = analiza.kolumny_statystyk(pozycja, df)
-        punkty = []
+        punkty, brak = [], []
+        liczba = lambda x: None if x is None or pd.isna(x) else float(x)  # noqa: E731
         for sciezka, dzien in historia.migawki(self.stan.katalog_kariery()):
             wszyscy = historia.wczytaj(sciezka)
             wiersz = wszyscy[(wszyscy['UID'] == uid) & (wszyscy['Piłkarz'] == pilkarz)]
             if wiersz.empty:
+                brak.append(dzien.isoformat())
                 continue
             wiersz = wiersz.iloc[0]
             pula = self.pula_migawki(sciezka, pozycja, wagi, ignoruj_mnoznik, k_baza)
             w_puli = pula[pula['UID'] == uid] if pula is not None else None
-            liczba = lambda x: None if x is None or pd.isna(x) else float(x)  # noqa: E731
+            jest = w_puli is not None and not w_puli.empty
+            minuty = liczba(wiersz.get('Minuty'))
             punkty.append({
                 "data": dzien.isoformat(), "sezon": historia.sezon(dzien),
-                "SCORE": liczba(w_puli['SCORE'].iloc[0]) if w_puli is not None and not w_puli.empty else None,
-                "Percentyl": liczba(w_puli['Percentyl'].iloc[0]) if w_puli is not None and not w_puli.empty else None,
-                "Minuty": liczba(wiersz.get('Minuty')), "Wartość": liczba(wiersz.get('Wartość_Numeryczna')),
+                "SCORE": liczba(w_puli['SCORE'].iloc[0]) if jest else None,
+                "Percentyl": liczba(w_puli['Percentyl'].iloc[0]) if jest else None,
+                "Minuty": minuty, "mala_proba": minuty is None or minuty < historia.MIN_MINUT,
+                "Wartość": liczba(wiersz.get('Wartość_Numeryczna')),
                 "statystyki": {k: liczba(wiersz.get(k)) for k in statystyki},
             })
-        return {"punkty": punkty, "statystyki": statystyki, "min_minut": historia.MIN_MINUT}
+        return {"punkty": punkty, "statystyki": statystyki, "min_minut": historia.MIN_MINUT, "brak": brak,
+                "delta": _zmiana_sezonowa(punkty)}
 
     def wynik_i_filtr(self, z: RankingModel):
         """-> (policzona pula, widoczni po filtrach z Pareto, pominiete, model wyceny, ukryci z mojego klubu)"""
@@ -133,3 +139,20 @@ def kandydat(ramka):
     if 'Kandydat' not in ramka.columns:
         return pd.Series(False, index=ramka.index)
     return ramka['Kandydat'].fillna(False).astype(bool)
+
+
+def _zmiana_sezonowa(punkty):
+    """
+    SCORE ostatniej migawki minus SCORE ostatniej migawki z wczesniejszego sezonu (z SCORE).
+    Liczona takze przy malej probie - wtedy z flaga `mala_proba` (kolumna rankingu wymaga progu minut).
+    """
+    if not punkty or punkty[-1]["SCORE"] is None:
+        return None
+    teraz = punkty[-1]
+    wczesniej = [p for p in punkty if p["sezon"] < teraz["sezon"] and p["SCORE"] is not None]
+    if not wczesniej:
+        return None
+    wtedy = wczesniej[-1]
+    return {"wartosc": teraz["SCORE"] - wtedy["SCORE"], "wzgledem": wtedy["data"],
+            "minuty_wtedy": wtedy["Minuty"], "minuty_teraz": teraz["Minuty"],
+            "mala_proba": teraz["mala_proba"] or wtedy["mala_proba"]}

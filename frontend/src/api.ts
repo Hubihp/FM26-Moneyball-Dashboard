@@ -62,6 +62,7 @@ export type PunktHistorii = {
   SCORE: number | null;
   Percentyl: number | null;
   Minuty: number | null;
+  mala_proba: boolean; // mniej niz min_minut (1000) - dane z malej liczby minut
   Wartość: number | null;
   statystyki: Record<string, number | null>;
 };
@@ -80,7 +81,24 @@ export type PorownanieZMoim = {
   roznica: number | null;
   cechy: CechaPorownania[];
 };
-export type Historia = { punkty: PunktHistorii[]; statystyki: string[]; min_minut: number };
+export type ZmianaSezonowa = {
+  wartosc: number;
+  wzgledem: string;
+  minuty_wtedy: number | null;
+  minuty_teraz: number | null;
+  mala_proba: boolean;
+};
+export type Historia = {
+  punkty: PunktHistorii[];
+  statystyki: string[];
+  min_minut: number;
+  brak: string[]; // daty migawek bez zawodnika (np. ponizej progu wczytywania)
+  delta: ZmianaSezonowa | null;
+};
+export type HistoriaWielu = {
+  zawodnicy: (Omit<Historia, 'statystyki' | 'min_minut'> & { id: string; pilkarz: string | null; statystyki?: string[] })[];
+  min_minut: number;
+};
 
 export type Filtry = {
   ligi: string[];
@@ -237,6 +255,8 @@ export const api = {
   porownanieZMoim: (body: ZapytanieRankingu & { id: string }) => post<PorownanieZMoim>('/api/porownanie-z-moim', body),
   historia: (body: { pozycja: string; id: string; wagi: Record<string, number> | null; ignoruj_mnoznik: boolean;
     k_baza: number }) => post<Historia>('/api/historia', body),
+  historiaWielu: (body: { pozycja: string; ids: string[]; wagi: Record<string, number> | null; ignoruj_mnoznik: boolean;
+    k_baza: number }) => post<HistoriaWielu>('/api/historia-wielu', body),
   radar: (pozycja: string, ids: string[], kandydaci = false) => post<Radar>('/api/radar', { pozycja, ids, kandydaci }),
   podobni: (body: ZapytanieRankingu & { id: string; n: number }) => post<{ wiersze: Wiersz[] }>('/api/podobni', body),
   nazwyLig: async (pliki: File[]) => {

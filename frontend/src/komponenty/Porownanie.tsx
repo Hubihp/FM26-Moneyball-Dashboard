@@ -1,7 +1,8 @@
 import { Alert, Loader, MultiSelect, Stack, Table, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 
-import { api, type Wiersz } from '../api';
+import { api, type Wiersz, type ZapytanieRankingu } from '../api';
+import HistoriaPorownania from './HistoriaPorownania';
 import Wykres from './Wykres';
 
 type Props = {
@@ -10,6 +11,7 @@ type Props = {
   wiersze: Wiersz[];
   wybrani: string[];
   setWybrani: (ids: string[]) => void;
+  zapytanie: ZapytanieRankingu;
 };
 
 // Kolor komorki: najlepszy percentyl w wierszu na zielono, najgorszy na czerwono (percentyl jest juz
@@ -24,7 +26,7 @@ function koloryWiersza(percentyle: (number | null)[]): (string | undefined)[] {
     : p === max ? 'rgba(64, 192, 87, 0.28)' : p === min ? 'rgba(250, 82, 82, 0.28)' : undefined));
 }
 
-export default function Porownanie({ pozycja, wersja, wiersze, wybrani, setWybrani }: Props) {
+export default function Porownanie({ pozycja, wersja, wiersze, wybrani, setWybrani, zapytanie }: Props) {
   // zawodnicy spoza puli pozycji (kandydaci, lista zyczen) sa szukani wsrod wszystkich zawodnikow
   const radar = useQuery({
     queryKey: ['radar', wersja, pozycja, wybrani],
@@ -93,6 +95,7 @@ export default function Porownanie({ pozycja, wersja, wiersze, wybrani, setWybra
               })}
             </Table.Tbody>
           </Table>
+          <HistoriaPorownania wybrani={wybrani} zapytanie={zapytanie} wersja={wersja} />
         </>
       )}
     </Stack>

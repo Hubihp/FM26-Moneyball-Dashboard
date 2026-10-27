@@ -3,7 +3,7 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException
 
 from fm_moneyball import analiza, historia
-from fm_moneyball.serwer.modele import HistoriaModel, PorownanieZMoimModel, KadraModel, ListaZyczenModel, PodobniModel, RadarModel, RankingModel
+from fm_moneyball.serwer.modele import HistoriaModel, HistoriaWieluModel, PorownanieZMoimModel, KadraModel, ListaZyczenModel, PodobniModel, RadarModel, RankingModel
 from fm_moneyball.serwer.obliczenia import kandydat
 from fm_moneyball.stale import POZYCJE
 
@@ -58,6 +58,21 @@ def utworz(stan, obl):
         if pd.isna(w['UID']):
             return {"punkty": [], "statystyki": [], "min_minut": historia.MIN_MINUT}
         return obl.historia_zawodnika(z.pozycja, int(w['UID']), w['Piłkarz'], z.wagi, z.ignoruj_mnoznik, z.k_baza)
+
+    @router.post("/historia-wielu")
+    def historia_wielu(z: HistoriaWieluModel):
+        """Historia kilku zawodnikow (zakladka Porownanie) w skali jednej pozycji."""
+        wszyscy = stan.wszyscy_zawodnicy()
+        wynik = []
+        for id_ in z.ids:
+            wiersz = wszyscy[wszyscy['ID'] == id_] if wszyscy is not None and 'UID' in wszyscy.columns else None
+            if wiersz is None or wiersz.empty or pd.isna(wiersz.iloc[0]['UID']):
+                wynik.append({"id": id_, "pilkarz": None, "punkty": [], "brak": [], "delta": None})
+                continue
+            w = wiersz.iloc[0]
+            h = obl.historia_zawodnika(z.pozycja, int(w['UID']), w['Piłkarz'], z.wagi, z.ignoruj_mnoznik, z.k_baza)
+            wynik.append({"id": id_, "pilkarz": w['Piłkarz'], **h})
+        return {"zawodnicy": wynik, "min_minut": historia.MIN_MINUT}
 
     @router.post("/porownanie-z-moim")
     def porownanie_z_moim(z: PorownanieZMoimModel):

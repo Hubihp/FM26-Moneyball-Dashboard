@@ -94,6 +94,14 @@ class HistoriaModel(BaseModel):
     k_baza: float = 5
 
 
+class HistoriaWieluModel(BaseModel):
+    pozycja: str
+    ids: list[str]
+    wagi: dict[str, float] | None = None
+    ignoruj_mnoznik: bool = False
+    k_baza: float = 5
+
+
 class RadarModel(BaseModel):
     pozycja: str
     ids: list[str]
