@@ -66,7 +66,7 @@ class FiltryModel(BaseModel):
     min_minut: int = 0
     bez_mojego_klubu: bool = False
     okazje: list[str] = Field(default_factory=list)
-    max_ryzyko: int | None = None
+    min_rozwoj: float | None = None
     kandydaci: bool = False
     min_score_kandydata: float = 60
     min_niedowartosciowanie: float | None = None
@@ -80,7 +80,14 @@ class RankingModel(BaseModel):
     ignoruj_mnoznik: bool = False
     k_baza: float = 5
     filtry: FiltryModel = Field(default_factory=FiltryModel)
-    pokaz_ukryte: bool = False
+
+
+class HistoriaModel(BaseModel):
+    pozycja: str
+    id: str
+    wagi: dict[str, float] | None = None
+    ignoruj_mnoznik: bool = False
+    k_baza: float = 5
 
 
 class RadarModel(BaseModel):

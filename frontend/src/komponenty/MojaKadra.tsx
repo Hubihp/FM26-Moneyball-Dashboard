@@ -1,6 +1,5 @@
-import { Alert, Badge, Button, Card, Group, Loader, SegmentedControl, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { Alert, Badge, Button, Card, Group, Loader, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
 
 import { api, type Wiersz } from '../api';
 import { formatuj } from '../format';
@@ -14,12 +13,8 @@ type Props = {
   otworz: (pozycja: string, id: string, wiersz: Wiersz) => void;
 };
 
-const kolorLuki = (luka: number | null) => (luka === null ? 'gray' : luka > 10 ? 'red' : luka > 3 ? 'yellow' : 'teal');
-const zeZnakiem = (x: number) => `${x > 0 ? '+' : ''}${Math.round(x)}`;
-
-// Analiza kadry: na ktorych pozycjach najbardziej brakuje jakosci (luka do 80. percentyla puli)
+// Analiza kadry: moi zawodnicy na kazdej pozycji, od bramkarza do napastnika
 export default function MojaKadra({ wersja, wagi, ustawienia, szukajNastepcy, otworz }: Props) {
-  const [sortuj, setSortuj] = useState<'pozycja' | 'luka'>('pozycja');
   const kadra = useQuery({
     queryKey: ['kadra', wersja, wagi, ustawienia.k_baza, ustawienia.ignoruj_mnoznik],
     queryFn: () => api.mojaKadra({ wagi, ignoruj_mnoznik: ustawienia.ignoruj_mnoznik, k_baza: ustawienia.k_baza }),
@@ -28,20 +23,12 @@ export default function MojaKadra({ wersja, wagi, ustawienia, szukajNastepcy, ot
   if (kadra.isLoading) return <Loader m="md" />;
   if (kadra.error) return <Alert m="md" color="red">{(kadra.error as Error).message}</Alert>;
   if (!kadra.data) return null;
-  // serwer zwraca pozycje od bramkarza do napastnika; "luka" = od najwiekszego braku jakosci
-  const pozycje = sortuj === 'luka'
-    ? [...kadra.data.pozycje].sort((a, b) => (b.luka ?? 0) - (a.luka ?? 0))
-    : kadra.data.pozycje;
+  const pozycje = kadra.data.pozycje;
 
   return (
     <Stack p="md">
-      <Group justify="space-between" align="center">
-        <SegmentedControl size="xs" value={sortuj} onChange={(v) => setSortuj(v as typeof sortuj)}
-          data={[{ value: 'pozycja', label: 'Od bramkarza do napastnika' }, { value: 'luka', label: 'Od największej luki' }]} />
-      </Group>
       <Text size="sm" c="dimmed">
-        Luka = SCORE zawodnika z 80. percentyla puli minus twój najlepszy na
-        pozycji (dodatnia = brakuje ci jakości). Twoi zawodnicy są liczeni nawet poniżej progu minut, więc ich wynik może
+        Pozycje od bramkarza do napastnika. Twoi zawodnicy są liczeni nawet poniżej progu minut, więc ich wynik może
         mieć niską wiarygodność.
       </Text>
       <SimpleGrid cols={{ base: 1, lg: 2 }}>
@@ -49,18 +36,11 @@ export default function MojaKadra({ wersja, wagi, ustawienia, szukajNastepcy, ot
           <Card key={p.pozycja} withBorder padding="sm">
             <Group justify="space-between" mb="xs">
               <Title order={5}>{p.pozycja}</Title>
-              {p.liczba === 0 ? (
-                <Badge color="red" variant="light" size="lg">brak zawodnika</Badge>
-              ) : (
-                <Badge color={kolorLuki(p.luka)} variant="light" size="lg">
-                  luka {p.luka === null ? '–' : zeZnakiem(p.luka)}
-                </Badge>
-              )}
+              {p.liczba === 0 && <Badge color="red" variant="light" size="lg">brak zawodnika</Badge>}
             </Group>
             <Group gap="xs" mb="xs">
               <Badge variant="outline" color="gray">zawodników: {p.liczba}</Badge>
               <Badge variant="outline" color="gray">najlepszy: {formatuj(p.najlepszy, 'score')}</Badge>
-              <Badge variant="outline" color="gray">cel: {formatuj(p.cel, 'score')}</Badge>
               <Badge variant="outline" color="gray">śr. wiek: {formatuj(p.sredni_wiek, 'dec1')}</Badge>
               {p.konczace_kontrakty > 0 && (
                 <Badge variant="light" color="orange">kontrakt ≤ 12 mies.: {p.konczace_kontrakty}</Badge>

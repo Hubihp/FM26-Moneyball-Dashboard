@@ -225,12 +225,6 @@ def statystyki_kanoniczne(liczniki):
 WOLNY_AGENT = "Wolny agent"
 
 
-# Dane ukryte (skala 1-20): atrybut/cecha rekordu fmsave -> kolumna aplikacji
-ATRYBUTY_UKRYTE = {"consistency": "Regularność", "important_matches": "Ważne mecze",
-                   "injury_proneness": "Podatność na kontuzje", "determination": "Determinacja"}
-OSOBOWOSC = {"professionalism": "Profesjonalizm", "ambition": "Ambicja", "adaptability": "Adaptacja"}
-
-
 def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0):
     """Rekord Player (+ jego liczniki sezonowe, liga klubu, liczba kontuzji) -> slownik kolumn aplikacji."""
     kurs = opcje.kurs_waluty
@@ -243,8 +237,6 @@ def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0):
     kontrakt = getattr(zawodnik, "contract", None)
     tygodniowka = kontrakt.wage * kurs if kontrakt is not None and kontrakt.wage is not None else None
     koniec = kontrakt.end if kontrakt is not None else None
-    atrybuty = getattr(zawodnik, "attributes", None)
-    osobowosc = getattr(zawodnik, "personality", None)
     koniec_wyp = getattr(zawodnik, "loan_end", None) if getattr(zawodnik, "on_loan", False) else None
     domyslna = WOLNY_AGENT if wolny else (Liga(liga.competition_id, liga.database_id, None).etykieta if liga else None)
 
@@ -256,7 +248,6 @@ def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0):
         "Liga_klucz": liga.database_id if liga and not wolny else None,
         "Liga_domyslna": domyslna,
         "Wolny_agent": wolny,
-        "Reputacja_klubu": getattr(zawodnik, "club_reputation", None),
         "Wypożyczenie_do": pd.Timestamp(koniec_wyp) if koniec_wyp else pd.NaT,
         "Kontuzje_2_lata": kontuzje,
         # fmsave podaje kody wielkimi literami ("DC", "WBL") - stad .lower()
@@ -279,10 +270,6 @@ def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0):
     for grupa in POZYCJE:
         kody = [k for k, g in POZYCJA_Z_KODU.items() if g == grupa]
         wiersz[kolumna_oceny(grupa)] = max((oceny.get(k, 0) for k in kody), default=None) if oceny else None
-    for pole, kolumna in ATRYBUTY_UKRYTE.items():
-        wiersz[kolumna] = getattr(atrybuty, pole, None) if atrybuty is not None else None
-    for pole, kolumna in OSOBOWOSC.items():
-        wiersz[kolumna] = getattr(osobowosc, pole, None) if osobowosc is not None else None
     wiersz.update(statystyki_kanoniczne(liczniki))
     return wiersz
 

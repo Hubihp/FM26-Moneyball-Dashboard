@@ -20,7 +20,7 @@ import type { Filtry, MetaPozycji } from '../api';
 import Boisko from './Boisko';
 import { eur } from '../format';
 
-export type Ustawienia = { k_baza: number; ignoruj_mnoznik: boolean; pokaz_ukryte: boolean };
+export type Ustawienia = { k_baza: number; ignoruj_mnoznik: boolean };
 
 type Props = {
   pozycje: string[];
@@ -39,8 +39,10 @@ type Props = {
 };
 
 export const PUSTE_FILTRY: Filtry = {
-  ligi: [], nogi: [], kraje: [], wiek: null, cena: null, bez_ceny: true, szukaj: '', kontrakt_mies: null, min_minut: 0,
-  bez_mojego_klubu: false, okazje: [], max_ryzyko: null, kandydaci: false,
+  ligi: [], nogi: [], kraje: [], wiek: null, cena: null, bez_ceny: true, szukaj: '', kontrakt_mies: null,
+  // domyslnie co najmniej 1000 minut (wiarygodniejsze statystyki /90); mozna zmienic w panelu
+  min_minut: 1000,
+  bez_mojego_klubu: false, okazje: [], min_rozwoj: null, kandydaci: false,
   min_score_kandydata: 60, min_niedowartosciowanie: null, kandydaci_z: [],
 };
 
@@ -122,12 +124,17 @@ export default function PanelBoczny(p: Props) {
             { value: '3', label: '×3 i więcej' },
           ]} />
 
-        {meta?.ma_ryzyko && p.ustawienia.pokaz_ukryte && (
-          <div>
-            <Text size="sm" fw={500}>Maks. ryzyko: {filtry.max_ryzyko ?? 100}</Text>
-            <Slider min={0} max={100} step={5} label={null} value={filtry.max_ryzyko ?? 100}
-              onChange={(v) => zmien('max_ryzyko', v >= 100 ? null : v)} />
-          </div>
+        {meta?.ma_historie && (
+          <Select label="Rozwój w sezonie co najmniej" clearable placeholder="Dowolny"
+            description={`Zmiana SCORE względem poprzedniego sezonu (migawka z ${meta.data_porownania ?? '–'}); `
+              + `liczona przy co najmniej ${meta.min_minut_rozwoju} minutach w obu sezonach`}
+            value={filtry.min_rozwoj !== null ? String(filtry.min_rozwoj) : null}
+            onChange={(v) => zmien('min_rozwoj', v ? Number(v) : null)}
+            data={[
+              { value: '3', label: '+3 SCORE' },
+              { value: '5', label: '+5 SCORE (szybki rozwój)' },
+              { value: '10', label: '+10 SCORE i więcej' },
+            ]} />
         )}
 
         <MultiSelect label="Lepsza noga" placeholder="Dowolna" clearable data={meta?.nogi ?? []} value={filtry.nogi}
@@ -178,10 +185,6 @@ export default function PanelBoczny(p: Props) {
                 </div>
                 <Switch label="Ignoruj mnożnik ligowy" checked={p.ustawienia.ignoruj_mnoznik}
                   onChange={(e) => p.setUstawienia({ ...p.ustawienia, ignoruj_mnoznik: e.currentTarget.checked })} />
-                {meta?.ma_ukryte && (
-                  <Switch label="Pokaż dane ukryte w grze (ryzyko, cechy ukryte)" checked={p.ustawienia.pokaz_ukryte}
-                    onChange={(e) => p.setUstawienia({ ...p.ustawienia, pokaz_ukryte: e.currentTarget.checked })} />
-                )}
               </Stack>
             </Accordion.Panel>
           </Accordion.Item>

@@ -30,6 +30,10 @@ export function formatuj(wartosc: unknown, format: Format): string {
       return `×${wartosc.toFixed(1).replace('.', ',')}`;
     case 'eur_tyg':
       return `${eur(wartosc / 52)} / tydz.`;
+    case 'zmiana':
+      return `${wartosc > 0 ? '+' : ''}${wartosc.toFixed(1).replace('.', ',')}`;
+    case 'zmiana_proc':
+      return `${wartosc > 0 ? '+' : ''}${Math.round(wartosc)}%`;
     default:
       return wartosc.toFixed(1).replace('.', ',');
   }
@@ -41,6 +45,13 @@ export function kolorWyniku(score: number): string {
   const r = t < 0.5 ? 255 : Math.round(255 - (t - 0.5) * 2 * 102);
   const g = t < 0.5 ? Math.round(153 + t * 2 * 102) : 255;
   return `rgb(${r}, ${g}, 153)`;
+}
+
+// Kolor zmiany (rozwoj): zielony = wzrost, czerwony = spadek
+export function kolorZmiany(x: number, prog = 2): string | undefined {
+  if (x >= prog) return '#69db7c';
+  if (x <= -prog) return '#ff8787';
+  return undefined;
 }
 
 // Kolor niedowartosciowania (wycena wg wyniku / cena): zielony = tanszy, niz wynika z gry

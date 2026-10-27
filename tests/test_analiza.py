@@ -18,12 +18,8 @@ def _pula():
         'Wygasa_Data': pd.to_datetime(["2030-05-01", "2033-06-30", "2030-11-01", None, "2032-06-30"]),
         'Wolny_agent': [False, False, False, True, False],
         'Wypożyczenie_do': pd.to_datetime([None, None, "2030-03-01", None, None]),
-        'Reputacja_klubu': [3000, 9000, 2000, None, 8500],
         'Wiek': [24, 33, 28, 30, 19],
         'Minuty': [2500, 2800, 1500, 1200, 300],
-        'Podatność na kontuzje': [1.0, 20.0, 10.0, 10.0, np.nan],
-        'Regularność': [20.0, 1.0, 10.0, 10.0, np.nan],
-        'Ważne mecze': [20.0, 1.0, 10.0, 10.0, np.nan],
         'Kontuzje_2_lata': [0, 8, 1, 0, 0],
     })
 
@@ -42,39 +38,45 @@ def test_okazje():
     okazje = analiza.wzbogac(_pula(), DZIS)['Okazje']
     assert "kontrakt ≤ 6 mies." in okazje[0] and "kontrakt ≤ 12 mies." in okazje[0]
     assert "kontrakt ≤ 6 mies." not in okazje[2] and "kontrakt ≤ 12 mies." in okazje[2]
-    assert "koniec wypożyczenia" in okazje[2]
-    assert okazje[3] == "wolny agent"
-    assert okazje[4] == "talent bez minut"
-    assert okazje[1] == ""
-    f = analiza.Filtry(okazje=["wolny agent", "talent bez minut"], bez_ceny=True)
-    assert list(analiza.filtruj(analiza.wzbogac(_pula(), DZIS), f, DZIS)['Piłkarz']) == ["Wolny", "Junior"]
+    assert okazje[1] == "" and okazje[3] == "" and okazje[4] == ""     # bez "wolny agent" i "talent bez minut"
+    assert set(analiza.OKAZJE) == {"niedowartościowany", "kontrakt ≤ 6 mies.", "kontrakt ≤ 12 mies.", "szybki rozwój"}
+    f = analiza.Filtry(okazje=["kontrakt ≤ 6 mies."], bez_ceny=True)
+    assert list(analiza.filtruj(analiza.wzbogac(_pula(), DZIS), f, DZIS)['Piłkarz']) == ["Tani"]
 
 
-def test_ryzyko():
-    p = analiza.wzbogac(_pula(), DZIS)
-    assert p.loc[0, 'Ryzyko'] == 0
-    assert p.loc[1, 'Ryzyko'] > 90
-    assert pd.isna(p.loc[4, 'Ryzyko'])
-    f = analiza.Filtry(max_ryzyko=50, bez_ceny=True)
-    assert "Drogi" not in analiza.filtruj(p, f, DZIS)['Piłkarz'].tolist()
+def test_szybki_rozwoj_i_filtr_rozwoju():
+    pula = _pula().assign(**{'Δ SCORE': [2.0, 8.0, np.nan, 6.0, 7.0]})
+    okazje = analiza.wzbogac(pula, DZIS)['Okazje']
+    assert "szybki rozwój" in okazje[4]                 # +7 i 19 lat
+    assert "szybki rozwój" not in okazje[1]             # +8, ale 33 lata
+    widoczni = analiza.filtruj(analiza.wzbogac(pula, DZIS), analiza.Filtry(min_rozwoj=5, bez_ceny=True), DZIS)
+    assert set(widoczni['Piłkarz']) == {"Drogi", "Wolny", "Junior"}
 
 
-def test_bez_danych_ukrytych_brak_ryzyka():
-    p = analiza.wzbogac(_pula().drop(columns=['Podatność na kontuzje']), DZIS)
+def test_bez_danych_ukrytych():
+    p = analiza.wzbogac(_pula().assign(**{'Podatność na kontuzje': 20.0}), DZIS)
     assert 'Ryzyko' not in p.columns
+    assert not any(k in analiza.POLA_WIERSZA for k in ('Ryzyko', 'Podatność na kontuzje', 'Determinacja'))
 
 
-def test_moja_kadra_luka():
+def test_filtr_minut_bez_kolumny_minut():
+    pula = analiza.wzbogac(_pula().assign(Minuty=np.nan), DZIS)
+    assert len(analiza.filtruj(pula, analiza.Filtry(min_minut=1000, bez_ceny=True), DZIS)) == 5
+    pelna = analiza.wzbogac(_pula(), DZIS)
+    assert set(analiza.filtruj(pelna, analiza.Filtry(min_minut=1000, bez_ceny=True), DZIS)['Piłkarz']) == \
+        {"Tani", "Drogi", "Słaby", "Wolny"}
+
+
+def test_moja_kadra():
     pula = _pula()
     pula['Klub_UID'] = [1, 1, 2, 3, 4]
-    kadra = analiza.moja_kadra("Napastnik", pula, 1, DZIS, percentyl_celu=80)
+    kadra = analiza.moja_kadra("Napastnik", pula, 1, DZIS)
     assert kadra["liczba"] == 2 and kadra["najlepszy"] == 70
-    assert kadra["cel"] == np.percentile(pula['SCORE'], 80)
-    assert kadra["luka"] == kadra["cel"] - 70
+    assert "luka" not in kadra and "cel" not in kadra
     assert kadra["konczace_kontrakty"] == 1
     assert [z["Piłkarz"] for z in kadra["zawodnicy"]] == ["Drogi", "Tani"]
     pusta = analiza.moja_kadra("Napastnik", pula, 99, DZIS)
-    assert pusta["liczba"] == 0 and pusta["luka"] == pusta["cel"]
+    assert pusta["liczba"] == 0 and pusta["najlepszy"] is None
 
 
 def test_maska_odniesienia_nie_zmienia_wyniku_nominalnych():

@@ -2,10 +2,10 @@ import { AllCommunityModule, colorSchemeDark, ModuleRegistry, themeQuartz, type 
   type SelectionChangedEvent } from 'ag-grid-community';
 import { AG_GRID_LOCALE_PL } from '@ag-grid-community/locale';
 import { AgGridReact } from 'ag-grid-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import type { Kolumna, Wiersz } from '../api';
-import { formatuj, kolorNiedowartosciowania, kolorWyniku } from '../format';
+import { formatuj, kolorNiedowartosciowania, kolorWyniku, kolorZmiany } from '../format';
 import { kluczZawodnika } from '../pamiec';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -57,7 +57,10 @@ type Props = {
   wiersze: Wiersz[];
   mojKlubUid: number | null | undefined;
   naWybor: (id: string, wiersz?: Wiersz) => void;
-  naZaznaczenie?: (ids: string[]) => void;
+  // zaznaczanie do porownania: wspolny stan (zaznaczeni) dla Rankingu, Okazji i Listy zyczen;
+  // naZaznaczenie dostaje zaznaczonych w tej tabeli i ID wszystkich jej wierszy
+  zaznaczeni?: string[];
+  naZaznaczenie?: (ids: string[], wszystkie: string[]) => void;
   // lista zyczen: klucze zawodnikow z gwiazdka i przelaczanie gwiazdki
   ulubione?: Set<string>;
   przelaczUlubione?: (wiersz: Wiersz) => void;
@@ -97,9 +100,22 @@ function Pasek({ value }: { value: number | null }) {
 const czyMoj = (w: Wiersz | undefined, uid: number | null | undefined) =>
   uid !== null && uid !== undefined && w?.['Klub_UID'] === uid;
 
-export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, naZaznaczenie, ulubione,
+export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, zaznaczeni, naZaznaczenie, ulubione,
   przelaczUlubione }: Props) {
   const siatka = useRef<AgGridReact<Wiersz>>(null);
+
+  // Pola wyboru zgodne ze wspolnym stanem porownania (np. po przejsciu z innej zakladki)
+  const synchronizuj = useCallback(() => {
+    const api = siatka.current?.api;
+    if (!api || !zaznaczeni) return;
+    api.forEachNode((n) => {
+      const chce = !!n.data && zaznaczeni.includes(String(n.data['ID']));
+      if (n.isSelected() !== chce) n.setSelected(chce, false, 'api');
+    });
+  }, [zaznaczeni]);
+  useEffect(() => {
+    synchronizuj();
+  }, [synchronizuj, wiersze]);
   const zGwiazdka = !!przelaczUlubione;
   const definicje = useMemo<ColDef<Wiersz>[]>(
     () => [
@@ -162,7 +178,24 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
             headerTooltip: 'Skala T: 50 = przeciętny zawodnik pozycji w próbie, +10 = jedno odchylenie wyżej (z korektą ligową).',
           });
         }
-        if (k.format === 'pasek') {
+        if (k.format === 'zmiana' || k.format === 'zmiana_proc') {
+          const prog = k.format === 'zmiana' ? 2 : 10;
+          Object.assign(def, {
+            width: 110,
+            cellStyle: (p: { value: number | null }) => {
+              const kolor = typeof p.value === 'number' ? kolorZmiany(p.value, prog) : undefined;
+              return kolor ? { color: kolor, fontWeight: 600 } : null;
+            },
+          });
+          if (k.pole === 'Δ SCORE') {
+            def.headerTooltip = 'Zmiana SCORE względem ostatniej migawki z poprzedniego sezonu (te same wagi); '
+              + 'liczona przy co najmniej 1000 minutach w obu sezonach.';
+          }
+          if (k.pole === 'Rozwój vs wiek') {
+            def.headerTooltip = 'Zmiana SCORE ponad typową dla zawodników w tym wieku (młodzi zwykle rosną szybciej).';
+          }
+        }
+                if (k.format === 'pasek') {
           Object.assign(def, { cellRenderer: Pasek, width: 110 });
         }
         if (k.format === 'data') {
@@ -204,8 +237,11 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         getRowId={(p) => String(p.data['ID']) + (p.data['Pozycja na liście'] ? `|${p.data['Pozycja na liście']}` : '')}
         getRowClass={klasaWiersza}
         rowSelection={naZaznaczenie ? { mode: 'multiRow', checkboxes: true, headerCheckbox: false, enableClickSelection: false } : undefined}
-        onSelectionChanged={(e: SelectionChangedEvent<Wiersz>) =>
-          naZaznaczenie?.(e.api.getSelectedRows().map((w) => String(w['ID'])))}
+        onSelectionChanged={(e: SelectionChangedEvent<Wiersz>) => {
+          if (e.source === 'api') return;      // zmiana z synchronizacji, nie od uzytkownika
+          naZaznaczenie?.(e.api.getSelectedRows().map((w) => String(w['ID'])), wiersze.map((w) => String(w['ID'])));
+        }}
+        onFirstDataRendered={synchronizuj}
         onCellClicked={(e) => {
           if (e.colDef.field === 'Piłkarz' && e.data) naWybor(String(e.data['ID']), e.data);
         }}

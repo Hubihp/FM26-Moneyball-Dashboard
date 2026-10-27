@@ -390,7 +390,7 @@ def test_wolni_agenci_i_moj_klub_poza_progiem_minut():
     assert "Napastnik" not in bez
 
 
-def test_dane_ukryte_kontuzje_i_klucz_ligi():
+def test_bez_danych_ukrytych_kontuzje_i_klucz_ligi():
     z = zawodnik(1, pozycje(stc=20),
                  attributes=NS(consistency=14, important_matches=9, injury_proneness=17, determination=12),
                  personality=NS(professionalism=18, ambition=11, adaptability=7),
@@ -399,7 +399,8 @@ def test_dane_ukryte_kontuzje_i_klucz_ligi():
                          kontuzje={1: 3})
     w = ramki["Napastnik"].iloc[0]
     assert w["Kraj_ID"] == 44
-    assert (w["Regularność"], w["Podatność na kontuzje"], w["Profesjonalizm"]) == (14, 17, 18)
+    # dane ukryte (cechy ukryte, osobowosc) nie sa juz odczytywane
+    assert not {"Regularność", "Podatność na kontuzje", "Profesjonalizm", "Determinacja", "CA"} & set(w.index)
     assert w["Kontuzje_2_lata"] == 3 and w["Wypożyczenie_do"] == pd.Timestamp(2032, 6, 30)
     assert w["Liga_klucz"] == 1 and w["Liga_domyslna"] == "Rozgrywki #1"
 

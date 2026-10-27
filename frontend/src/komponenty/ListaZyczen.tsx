@@ -1,6 +1,5 @@
 import { Alert, Box, Button, Group, Loader, Stack, Text } from '@mantine/core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
 
 import { api, type Wiersz } from '../api';
 import { kluczZawodnika, type WpisListy } from '../pamiec';
@@ -16,13 +15,13 @@ type Props = {
   mojKlubUid: number | null | undefined;
   naWybor: (pozycja: string, id: string, wiersz: Wiersz) => void;
   pozycja: string;
-  porownaj: (ids: string[]) => void;
+  zaznaczeni: string[];
+  naZaznaczenie: (ids: string[], wszystkie: string[]) => void;
 };
 
 // Zawodnicy oznaczeni gwiazdka - z aktualnym wynikiem w pozycji, z ktorej zostali dodani
 export default function ListaZyczen({ lista, setLista, wersja, wagi, ustawienia, mojKlubUid, naWybor, pozycja,
-  porownaj }: Props) {
-  const [zaznaczeni, setZaznaczeni] = useState<string[]>([]);
+  zaznaczeni, naZaznaczenie }: Props) {
   const zapytanie = {
     wpisy: lista.map((w) => ({ klucz: w.klucz, pozycja: w.pozycja, pilkarz: w.pilkarz })),
     wagi,
@@ -53,14 +52,10 @@ export default function ListaZyczen({ lista, setLista, wersja, wagi, ustawienia,
       <Group justify="space-between">
         <Text size="sm">
           Zawodników na liście: {lista.length}. Wynik liczony w pozycji, z której zawodnik został dodany, z bieżącymi
-          wagami. Gwiazdka usuwa z listy.
+          wagami. Gwiazdka usuwa z listy. Zaznacz do 4 zawodników do porównania (na tle pozycji {pozycja}).
         </Text>
         <Group gap="xs">
           {dane.isFetching && <Loader size="xs" />}
-          <Button size="xs" variant="light" disabled={!zaznaczeni.length} onClick={() => porownaj(zaznaczeni)}
-            title={`Porównanie na tle pozycji ${pozycja} (wybranej na boisku)`}>
-            Porównaj zaznaczonych ({zaznaczeni.length}{zaznaczeni.length > 4 ? ', pierwszych 4' : ''})
-          </Button>
           <Button size="xs" variant="subtle" color="red" onClick={() => setLista([])}>Wyczyść listę</Button>
         </Group>
       </Group>
@@ -86,7 +81,8 @@ export default function ListaZyczen({ lista, setLista, wersja, wagi, ustawienia,
             naWybor={(id, w) => w && naWybor(String(w['Pozycja na liście']), id, w)}
             ulubione={ulubione}
             przelaczUlubione={(w) => setLista(lista.filter((x) => x.klucz !== kluczZawodnika(w)))}
-            naZaznaczenie={setZaznaczeni}
+            zaznaczeni={zaznaczeni}
+            naZaznaczenie={naZaznaczenie}
           />
         </Box>
       )}

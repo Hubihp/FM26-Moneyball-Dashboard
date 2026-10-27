@@ -23,6 +23,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from fm_moneyball import historia
+from fm_moneyball.historia import KATALOG_HISTORII
 from fm_moneyball.kraje import PLIK_KRAJOW_UZYTKOWNIKA, nazwy_auto, wczytaj_nazwy_krajow
 from fm_moneyball.ligi import PLIK_MNOZNIKOW_UZYTKOWNIKA, wszystkie_mnozniki
 from fm_moneyball.mapy import KATALOG_DOMOWY
@@ -38,7 +40,7 @@ log = logging.getLogger("fm_moneyball")
 CO_ILE_SPRAWDZAC = 15        # sekundy miedzy sprawdzeniami folderu zapisow
 # 2: domyslnie zawodnik we wszystkich pulach, w ktorych jest naturalny (wczesniej tylko glowna)
 WERSJA_USTAWIEN = 2
-WERSJA_CACHE = 7             # zmiana formatu wyniku = nowy klucz cache
+WERSJA_CACHE = 8             # zmiana formatu wyniku = nowy klucz cache
 ILE_W_CACHE = 3
 DEMO_DATA_GRY = date(2027, 1, 15)
 
@@ -78,7 +80,8 @@ def _demo():
 class Stan:
     def __init__(self, plik_ustawien=KATALOG_DOMOWY / "ustawienia.json", sledzenie=True,
                  katalog_cache=KATALOG_DOMOWY / "cache", plik_nazw=PLIK_NAZW_UZYTKOWNIKA,
-                 plik_mnoznikow=PLIK_MNOZNIKOW_UZYTKOWNIKA, plik_krajow=PLIK_KRAJOW_UZYTKOWNIKA):
+                 plik_mnoznikow=PLIK_MNOZNIKOW_UZYTKOWNIKA, plik_krajow=PLIK_KRAJOW_UZYTKOWNIKA,
+                 katalog_historii=KATALOG_HISTORII):
         self._blokada = threading.RLock()
         self._blokada_wczytywania = threading.Lock()
         self.plik_ustawien = Path(plik_ustawien) if plik_ustawien else None
@@ -86,6 +89,7 @@ class Stan:
         # edycje uzytkownika (nakladane na mapy domyslne z dane/)
         self.plik_nazw, self.plik_mnoznikow = Path(plik_nazw), Path(plik_mnoznikow)
         self.plik_krajow = Path(plik_krajow)
+        self.katalog_historii = Path(katalog_historii) if katalog_historii else None
         self.nazwy_krajow = {}         # nation_id -> nazwa (reczne, z lig i z klubow-kotwic)
         self.zrodla_krajow = {}        # nation_id -> skad nazwa: ręcznie | liga | kluby
         self.kraje_auto = {}           # nation_id -> nazwa z klubow-kotwic (z odczytu zapisu)
@@ -351,9 +355,24 @@ class Stan:
             self._sciezka_odczytu = sciezka_odczytu
             self._uzupelnij_moj_klub()
             self._zastosuj_ligi()
+            self._zapisz_historie()
             self.status, self.komunikat, self.etap = "gotowe", "", None
             self.wersja += 1
             return True
+
+    def katalog_kariery(self):
+        """Katalog historii biezacej kariery (tylko zapis gry, nie demo/CSV) albo None."""
+        if self.meta.get("demo") or not self.meta.get("data_gry") or self.katalog_historii is None:
+            return None
+        return historia.katalog_kariery(self.katalog_historii, self.meta.get("moj_klub_uid"),
+                                        self.meta.get("moj_klub"))
+
+    def _zapisz_historie(self):
+        # migawka do historii rozwoju; jej brak (np. brak miejsca na dysku) nie blokuje wczytania
+        try:
+            historia.zapisz_migawke(self.katalog_kariery(), self.dane, date.fromisoformat(self.meta["data_gry"]))
+        except Exception as e:
+            log.warning("Nie udało się zapisać migawki historii: %s", e)
 
     def _uzupelnij_moj_klub(self):
         moje = self.meta.get("moje_kluby") or []

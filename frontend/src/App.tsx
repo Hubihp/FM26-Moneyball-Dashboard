@@ -97,7 +97,7 @@ export default function App() {
   const [okazjeBezMojego, setOkazjeBezMojego] = usePamiec('fm-okazje-bez-mojego', true);
   const ulubione = useMemo(() => new Set(lista.map((w) => w.klucz)), [lista]);
   const [ustawienia, setUstawienia] = usePamiec<Ustawienia>('fm-ustawienia',
-    { k_baza: 5, ignoruj_mnoznik: false, pokaz_ukryte: false });
+    { k_baza: 5, ignoruj_mnoznik: false });
   const [wagiWlasne, setWagiWlasne] = usePamiec<Record<string, Record<string, number>>>('fm-wagi', {});
   // jednorazowa migracja wlasnych wag dawnych pozycji na nowe (np. Skrzydlowy -> LS, PS, LP, PP)
   useEffect(() => {
@@ -143,7 +143,6 @@ export default function App() {
       wagi: wagiWlasne[pozycja] ?? null,
       ignoruj_mnoznik: ustawienia.ignoruj_mnoznik,
       k_baza: ustawienia.k_baza,
-      pokaz_ukryte: ustawienia.pokaz_ukryte,
       filtry,
     }),
     [pozycja, wagiWlasne, ustawienia, filtry],
@@ -167,10 +166,11 @@ export default function App() {
     setKartaWiersz(wiersz);
   };
   const wybraniPozycji = wybrani[pozycja] ?? [];
-  // zaznaczeni w Okazjach / na Liscie zyczen -> Porownanie biezacej pozycji
-  const porownaj = (ids: string[]) => {
-    setWybrani({ ...wybrani, [pozycja]: ids.slice(0, 4) });
-    setZakladka('porownanie');
+  // Zaznaczanie do porownania - wspolne dla Rankingu, Okazji i Listy zyczen: zaznaczeni w jednej tabeli
+  // zastepuja jej wczesniejsze zaznaczenia, a zawodnicy zaznaczeni w innych tabelach zostaja (maks. 4)
+  const zaznacz = (ids: string[], wszystkie: string[]) => {
+    const poza = wybraniPozycji.filter((id) => !wszystkie.includes(id));
+    setWybrani({ ...wybrani, [pozycja]: [...poza, ...ids.filter((id) => !poza.includes(id))].slice(-4) });
   };
   const s = stan.data;
   const mojKlubUid = s?.meta.moj_klub_uid;
@@ -314,7 +314,8 @@ export default function App() {
                     wiersze={wiersze}
                     mojKlubUid={mojKlubUid}
                     naWybor={otworzKarte}
-                    naZaznaczenie={(ids) => setWybrani({ ...wybrani, [pozycja]: ids.slice(0, 4) })}
+                    zaznaczeni={wybraniPozycji}
+                    naZaznaczenie={zaznacz}
                     ulubione={ulubione}
                     przelaczUlubione={przelaczUlubione}
                   />
@@ -327,13 +328,15 @@ export default function App() {
                 <Okazje zapytanie={zapytanieOpoznione} okazje={meta.data.okazje} wersja={wersja} mojKlubUid={mojKlubUid}
                   naWybor={otworzKarte} ulubione={ulubione} przelaczUlubione={przelaczUlubione}
                   wybrane={okazjeWybrane} setWybrane={setOkazjeWybrane}
-                  pominMoj={okazjeBezMojego} setPominMoj={setOkazjeBezMojego} porownaj={porownaj} />
+                  pominMoj={okazjeBezMojego} setPominMoj={setOkazjeBezMojego}
+                  zaznaczeni={wybraniPozycji} naZaznaczenie={zaznacz} />
               )}
             </Tabs.Panel>
             <Tabs.Panel value="lista" style={{ flex: 1, minHeight: 0 }}>
               {zakladka === 'lista' && (
                 <ListaZyczen lista={lista} setLista={setLista} wersja={wersja} wagi={wagiWlasne} ustawienia={ustawienia}
-                  mojKlubUid={mojKlubUid} pozycja={pozycja} porownaj={porownaj}
+                  mojKlubUid={mojKlubUid} pozycja={pozycja}
+                  zaznaczeni={wybraniPozycji} naZaznaczenie={zaznacz}
                   naWybor={(poz, id, wiersz) => {
                     setPozycja(poz);
                     otworzKarte(id, wiersz);

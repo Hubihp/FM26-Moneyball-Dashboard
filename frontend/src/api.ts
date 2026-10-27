@@ -50,10 +50,22 @@ export type MetaPozycji = {
   minuty_max: number | null;
   wagi_domyslne: Record<string, number>;
   ma_kontrakty: boolean;
-  ma_ukryte: boolean;
-  ma_ryzyko: boolean;
   okazje: string[];
+  ma_historie: boolean;
+  data_porownania: string | null;
+  min_minut_rozwoju: number;
 };
+
+export type PunktHistorii = {
+  data: string;
+  sezon: number;
+  SCORE: number | null;
+  Percentyl: number | null;
+  Minuty: number | null;
+  Wartość: number | null;
+  statystyki: Record<string, number | null>;
+};
+export type Historia = { punkty: PunktHistorii[]; statystyki: string[]; min_minut: number };
 
 export type Filtry = {
   ligi: string[];
@@ -67,7 +79,7 @@ export type Filtry = {
   min_minut: number;
   bez_mojego_klubu: boolean;
   okazje: string[];
-  max_ryzyko: number | null;
+  min_rozwoj: number | null; // zmiana SCORE wzgledem poprzedniego sezonu
   kandydaci: boolean;
   min_score_kandydata: number;
   min_niedowartosciowanie: number | null;
@@ -81,10 +93,10 @@ export type ZapytanieRankingu = {
   ignoruj_mnoznik: boolean;
   k_baza: number;
   filtry: Filtry;
-  pokaz_ukryte: boolean;
 };
 
-export type Format = 'score' | 'pasek' | 'int' | 'dec1' | 'dec2' | 'eur' | 'eur_tyg' | 'data' | 'tekst' | 'mnoznik';
+export type Format = 'score' | 'pasek' | 'int' | 'dec1' | 'dec2' | 'eur' | 'eur_tyg' | 'data' | 'tekst' | 'mnoznik'
+  | 'zmiana' | 'zmiana_proc';
 
 // Model ceny wg wyniku (fm_moneyball/wycena.py)
 export type ModelWyceny = {
@@ -135,8 +147,6 @@ export type PozycjaKadry = {
   pozycja: string;
   liczba: number;
   najlepszy: number | null;
-  cel: number | null;
-  luka: number | null;
   sredni_wiek: number | null;
   konczace_kontrakty: number;
   zawodnicy: Wiersz[];
@@ -210,6 +220,8 @@ export const api = {
   przeladuj: () => post<Stan>('/api/przeladuj', {}),
   metaPozycji: (pozycja: string) => zadanie<MetaPozycji>(`/api/pozycja/${encodeURIComponent(pozycja)}`),
   ranking: (body: ZapytanieRankingu) => post<Ranking>('/api/ranking', body),
+  historia: (body: { pozycja: string; id: string; wagi: Record<string, number> | null; ignoruj_mnoznik: boolean;
+    k_baza: number }) => post<Historia>('/api/historia', body),
   radar: (pozycja: string, ids: string[], kandydaci = false) => post<Radar>('/api/radar', { pozycja, ids, kandydaci }),
   podobni: (body: ZapytanieRankingu & { id: string; n: number }) => post<{ wiersze: Wiersz[] }>('/api/podobni', body),
   nazwyLig: async (pliki: File[]) => {

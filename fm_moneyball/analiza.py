@@ -28,19 +28,19 @@ class Filtry:
     bez_mojego_klubu: bool = False
     okazje: list = field(default_factory=list)   # zawodnik musi miec ktorykolwiek z tych znacznikow
     tylko_z_okazja: bool = False                 # zawodnik musi miec jakakolwiek okazje (karta Okazje)
-    max_ryzyko: int | None = None
+    min_rozwoj: float | None = None              # zmiana SCORE wzgledem poprzedniego sezonu (historia)
     min_niedowartosciowanie: float | None = None  # wycena wg wyniku / cena
     kandydaci: bool = False                      # pokaz kandydatow do przekwalifikowania z innych pozycji
     min_score_kandydata: float = 60.0
     kandydaci_z: list = field(default_factory=list)  # pozycje, z ktorych pochodza kandydaci (puste = wszystkie)
 
 
-# --- Moneyball: koszt, okazje, ryzyko ----------------------------------------------
-OKAZJE = ("niedowartościowany", "kontrakt ≤ 6 mies.", "kontrakt ≤ 12 mies.", "wolny agent", "koniec wypożyczenia",
-          "talent bez minut")
+# --- Moneyball: koszt, okazje -------------------------------------------------------------------
+OKAZJE = ("niedowartościowany", "kontrakt ≤ 6 mies.", "kontrakt ≤ 12 mies.", "szybki rozwój")
 PROG_NIEDOWARTOSCIOWANIA = 2.0   # wycena wg wyniku co najmniej 2x wyzsza niz cena...
 MIN_SCORE_NIEDOWARTOSCIOWANEGO = 55.0   # ...u zawodnika wyraznie powyzej przecietnej
-DUZY_KLUB = 7000            # reputacja klubu (1-10000), od ktorej klub uznajemy za duzy
+PROG_SZYBKIEGO_ROZWOJU = 5.0     # wzrost SCORE wzgledem poprzedniego sezonu (historia zapisow)...
+MAKS_WIEK_ROZWOJU = 23           # ...u mlodego zawodnika
 
 
 def wzbogac(pula, data_gry=None, horyzont_lat=3):
@@ -49,8 +49,6 @@ def wzbogac(pula, data_gry=None, horyzont_lat=3):
       Lata_kontraktu    - do konca kontraktu, od daty w grze
       Koszt             - wartosc transferowa + placa roczna x horyzont (wolny agent: sama placa)
       Okazje            - znaczniki okazji transferowych (tekst rozdzielony "; ")
-      Ryzyko            - 0-100 z danych ukrytych (podatnosc na kontuzje, regularnosc, wazne mecze,
-                          wiek, kontuzje w 2 lata); brak, gdy zrodlo nie ma danych ukrytych
     """
     pula = pula.copy()
     dzis = pd.Timestamp(data_gry or date.today())
@@ -68,27 +66,14 @@ def wzbogac(pula, data_gry=None, horyzont_lat=3):
     znaczniki |= {
         "kontrakt ≤ 6 mies.": (lata > 0) & (lata <= 0.5) & ~wolny,
         "kontrakt ≤ 12 mies.": (lata > 0) & (lata <= 1) & ~wolny,
-        "wolny agent": wolny,
     }
-    if 'Wypożyczenie_do' in pula.columns:
-        do_konca = (pula['Wypożyczenie_do'] - dzis).dt.days
-        znaczniki["koniec wypożyczenia"] = do_konca.between(0, 183)
-    if 'Reputacja_klubu' in pula.columns and 'Minuty' in pula.columns:
-        znaczniki["talent bez minut"] = ((pula['Wiek'] <= 21) & (pula['Minuty'] < 900)
-                                         & (pula['Reputacja_klubu'].fillna(0) >= DUZY_KLUB))
+    if 'Δ SCORE' in pula.columns:
+        znaczniki["szybki rozwój"] = (pula['Δ SCORE'] >= PROG_SZYBKIEGO_ROZWOJU) & (pula['Wiek'] <= MAKS_WIEK_ROZWOJU)
     okazje = pd.Series("", index=pula.index, dtype=object)
     for znacznik, maska in znaczniki.items():
         maska = maska.fillna(False).astype(bool)
         okazje = okazje.where(~maska, okazje.where(okazje == "", okazje + "; ") + znacznik)
     pula['Okazje'] = okazje
-
-    if 'Podatność na kontuzje' in pula.columns and pula['Podatność na kontuzje'].notna().any():
-        skala = lambda kol, odwroc=False: ((20 - pula[kol]) if odwroc else (pula[kol] - 1)) / 19
-        kontuzje = (pula['Kontuzje_2_lata'].fillna(0) / 4).clip(0, 1) if 'Kontuzje_2_lata' in pula.columns else 0
-        ryzyko = (35 * skala('Podatność na kontuzje') + 20 * skala('Regularność', True)
-                  + 15 * skala('Ważne mecze', True) + 15 * ((pula['Wiek'] - 30) / 5).clip(0, 1)
-                  + 15 * kontuzje)
-        pula['Ryzyko'] = ryzyko.round()
     return pula
 
 
@@ -193,7 +178,7 @@ def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
         wynik = wynik[wynik['Kraj'].isin(filtry.kraje)]
     if filtry.nogi and 'Preferowana noga' in wynik.columns:
         wynik = wynik[wynik['Preferowana noga'].isin(filtry.nogi)]
-    if filtry.min_minut and 'Minuty' in wynik.columns:
+    if filtry.min_minut and 'Minuty' in wynik.columns and wynik['Minuty'].notna().any():
         wynik = wynik[wynik['Minuty'].fillna(0) >= filtry.min_minut]
     if filtry.kontrakt_mies:
         start = pd.Timestamp(data_gry or date.today())
@@ -207,8 +192,8 @@ def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
         for znacznik in filtry.okazje:
             maska |= wynik['Okazje'].str.contains(znacznik, regex=False, na=False)
         wynik = wynik[maska]
-    if filtry.max_ryzyko is not None and 'Ryzyko' in wynik.columns:
-        wynik = wynik[wynik['Ryzyko'].isna() | (wynik['Ryzyko'] <= filtry.max_ryzyko)]
+    if filtry.min_rozwoj is not None and 'Δ SCORE' in wynik.columns:
+        wynik = wynik[wynik['Δ SCORE'] >= filtry.min_rozwoj]
     if filtry.min_niedowartosciowanie and 'Niedowartościowanie' in wynik.columns:
         wynik = wynik[wynik['Niedowartościowanie'] >= filtry.min_niedowartosciowanie]
     if filtry.bez_mojego_klubu and moj_klub_uid is not None and 'Klub_UID' in wynik.columns:
@@ -226,17 +211,18 @@ def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
 # Format wartosci dla interfejsu: score, pasek (0-100), int, dec1, dec2, eur, eur_tyg, data, tekst
 _FORMATY = {'SCORE': 'score', 'Percentyl': 'pasek', 'Wiarygodność': 'pasek', 'Wiek': 'int', 'Minuty': 'int',
             'Ocena na pozycji': 'int', 'Strata piłek na podanie': 'dec2',
-            'Ryzyko': 'int', 'Niedowartościowanie': 'mnoznik', 'Wycena wg wyniku': 'eur'}
+            'Niedowartościowanie': 'mnoznik', 'Wycena wg wyniku': 'eur', 'Δ SCORE': 'zmiana',
+            'Rozwój vs wiek': 'zmiana', 'Δ wartości': 'zmiana_proc'}
 # Kolumny prezentowane z pol liczbowych (sortowanie po liczbie, nie po tekscie)
 _POLA = {'Cena': ('Wartość_Numeryczna', 'eur'), 'Płaca': ('Zarobki_Numeryczne', 'eur_tyg'),
          'Wygasa': ('Wygasa_Data', 'data'), 'Koszt (3 lata)': ('Koszt', 'eur')}
 _TEKSTOWE = {'Piłkarz', 'Klub', 'Liga', 'Pozycja', 'Kraj', 'Preferowana noga', 'Okazje', 'Pozycja na liście',
              'Kandydat z pozycji'}
 # Naglowki inne niz nazwa kolumny w danych
-_NAGLOWKI = {'Kraj': 'Narodowość', 'Pozycja': 'Pozycje'}
+_NAGLOWKI = {'Kraj': 'Narodowość', 'Pozycja': 'Pozycje', 'Δ SCORE': 'Δ SCORE (sezon)'}
 # Kolumny Moneyball (z wzbogac), nie sa statystykami meczowymi
-_MONEYBALL = {'Koszt (3 lata)', 'Okazje', 'Ryzyko', 'Ocena na pozycji', 'Wycena wg wyniku',
-              'Niedowartościowanie'}
+_MONEYBALL = {'Koszt (3 lata)', 'Okazje', 'Ocena na pozycji', 'Wycena wg wyniku',
+              'Niedowartościowanie', 'Δ SCORE', 'Rozwój vs wiek', 'Δ wartości'}
 
 
 def _wstaw_po(lista, nowy, po):
@@ -244,7 +230,7 @@ def _wstaw_po(lista, nowy, po):
         lista.insert(lista.index(po) + 1 if po in lista else len(lista), nowy)
 
 
-def kolumny_tabeli(pozycja, pula, pokaz_ukryte=False):
+def kolumny_tabeli(pozycja, pula):
     """Lista kolumn tabeli: [{naglowek, pole, format, statystyka, nizsze_lepsze}]."""
     nazwy = [c for c in KOLUMNY_PER_POZYCJA.get(pozycja, []) if c in pula.columns]
     if 'Minuty' in pula.columns and pula['Minuty'].notna().any():
@@ -257,8 +243,12 @@ def kolumny_tabeli(pozycja, pula, pokaz_ukryte=False):
         po = 'Wygasa' if 'Wygasa' in nazwy else 'Cena'
         for kol in ('Okazje', 'Koszt (3 lata)'):
             _wstaw_po(nazwy, kol, po)
-        if pokaz_ukryte and 'Ryzyko' in pula.columns:
-            _wstaw_po(nazwy, 'Ryzyko', 'Okazje')
+    # rozwoj wzgledem poprzedniego sezonu (historia zapisow)
+    if 'Δ SCORE' in pula.columns and pula['Δ SCORE'].notna().any():
+        _wstaw_po(nazwy, 'Δ SCORE', 'Percentyl')
+        if pula['Rozwój vs wiek'].notna().any():
+            _wstaw_po(nazwy, 'Rozwój vs wiek', 'Δ SCORE')
+        _wstaw_po(nazwy, 'Δ wartości', 'Cena')
     if 'Niedowartościowanie' in pula.columns and pula['Niedowartościowanie'].notna().any():
         _wstaw_po(nazwy, 'Wycena wg wyniku', 'Cena')
         _wstaw_po(nazwy, 'Niedowartościowanie', 'Wycena wg wyniku')
@@ -273,7 +263,7 @@ def _opis_kolumny(nazwa):
     pole, fmt = _POLA.get(nazwa, (nazwa, _FORMATY.get(nazwa, 'tekst' if nazwa in _TEKSTOWE else 'dec1')))
     return {'naglowek': _NAGLOWKI.get(nazwa, nazwa), 'pole': pole, 'format': fmt,
             'statystyka': nazwa not in NIE_STATYSTYKI and nazwa not in _MONEYBALL and nazwa not in _TEKSTOWE,
-            'nizsze_lepsze': nazwa in NIZSZE_LEPSZE or nazwa == 'Ryzyko'}
+            'nizsze_lepsze': nazwa in NIZSZE_LEPSZE}
 
 
 # Kolumny listy zyczen (zawodnicy z roznych pozycji - tylko kolumny wspolne)
@@ -314,18 +304,12 @@ POLA_WIERSZA = ['ID', 'UID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Kraj', 'Wi
                 'SCORE', 'Percentyl', 'Wiarygodność', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Wygasa_Data',
                 'Mnożnik_Ligi', 'Wypożyczony', 'Wypożyczenie_do', 'Wolny_agent', 'Lata_kontraktu', 'Koszt',
                 'Okazje', 'Pareto', 'Kandydat', 'Kandydat z pozycji', 'Ocena na pozycji',
-                'Wycena wg wyniku', 'Niedowartościowanie']
-# Dane, ktorych gracz nie widzi wprost w grze - wysylane tylko przy wlaczonym przelaczniku
-POLA_UKRYTE = ['Ryzyko', 'Regularność', 'Ważne mecze', 'Podatność na kontuzje', 'Determinacja',
-               'Profesjonalizm', 'Ambicja', 'Adaptacja', 'Kontuzje_2_lata']
+                'Wycena wg wyniku', 'Niedowartościowanie', 'Kontuzje_2_lata', 'Δ SCORE', 'Δ percentyl',
+                'Δ wartości', 'Δ minut', 'Rozwój vs wiek', 'Nowe pozycje']
 
 
-def pola_wiersza(pozycja, pula, pokaz_ukryte=False):
-    pola = POLA_WIERSZA + (POLA_UKRYTE if pokaz_ukryte else []) + [
-        k['pole'] for k in kolumny_tabeli(pozycja, pula, pokaz_ukryte)]
-    if not pokaz_ukryte:
-        pola = [p for p in pola if p not in POLA_UKRYTE]
-    return pola
+def pola_wiersza(pozycja, pula):
+    return POLA_WIERSZA + [k['pole'] for k in kolumny_tabeli(pozycja, pula)]
 
 
 def kolejnosc_lig(ligi):
@@ -393,22 +377,15 @@ POLA_KADRY = ['ID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Wiek', 'Pozycja', '
               'Wypożyczony', 'Koszt', 'Okazje']
 
 
-def moja_kadra(pozycja, pula_policzona, moj_klub_uid, data_gry=None, percentyl_celu=80):
-    """
-    Moi zawodnicy na pozycji na tle puli: najlepszy SCORE, wiek, kontrakty, luka do celu
-    (`percentyl_celu` puli). Duza luka = priorytet transferowy.
-    """
+def moja_kadra(pozycja, pula_policzona, moj_klub_uid, data_gry=None):
+    """Moi zawodnicy na pozycji na tle puli: najlepszy SCORE, sredni wiek, konczace sie kontrakty."""
     pula = wzbogac(pula_policzona, data_gry)
     moi = pula[pula['Klub_UID'] == moj_klub_uid].sort_values('SCORE', ascending=False) \
         if 'Klub_UID' in pula.columns else pula.iloc[0:0]
-    cel = float(np.nanpercentile(pula['SCORE'], percentyl_celu)) if pula['SCORE'].notna().any() else None
-    najlepszy = float(moi['SCORE'].max()) if not moi.empty else None
     return {
         "pozycja": pozycja,
         "liczba": int(len(moi)),
-        "najlepszy": najlepszy,
-        "cel": cel,
-        "luka": (cel - najlepszy) if cel is not None and najlepszy is not None else cel,
+        "najlepszy": float(moi['SCORE'].max()) if not moi.empty else None,
         "sredni_wiek": float(moi['Wiek'].mean()) if not moi.empty else None,
         "konczace_kontrakty": int((moi['Lata_kontraktu'] <= 1).sum()) if not moi.empty else 0,
         "zawodnicy": do_json(moi, POLA_KADRY),

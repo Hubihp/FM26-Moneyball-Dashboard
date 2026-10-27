@@ -1,6 +1,5 @@
-import { Alert, Box, Button, Chip, Group, Loader, Stack, Switch, Text } from '@mantine/core';
+import { Alert, Box, Chip, Group, Loader, Stack, Switch, Text } from '@mantine/core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
 
 import { api, type Wiersz, type ZapytanieRankingu } from '../api';
 import TabelaRankingu from './TabelaRankingu';
@@ -9,9 +8,7 @@ const OPISY: Record<string, string> = {
   'niedowartościowany': 'gra jak zawodnik co najmniej 2 razy droższy (SCORE ≥ 55)',
   'kontrakt ≤ 6 mies.': 'może podpisać przedkontrakt z klubem zagranicznym',
   'kontrakt ≤ 12 mies.': 'klub sprzeda taniej, zanim straci go za darmo',
-  'wolny agent': 'bez klubu - koszt to tylko pensja',
-  'koniec wypożyczenia': 'wypożyczenie kończy się w ciągu pół roku',
-  'talent bez minut': 'do 21 lat, duży klub, mniej niż 900 minut - kandydat do wypożyczenia',
+  'szybki rozwój': 'do 23 lat, SCORE wyższy o co najmniej 5 niż w poprzednim sezonie (z historii zapisów)',
 };
 
 type Props = {
@@ -27,14 +24,14 @@ type Props = {
   setWybrane: (v: string[]) => void;
   pominMoj: boolean;
   setPominMoj: (v: boolean) => void;
-  porownaj: (ids: string[]) => void;
+  zaznaczeni: string[];
+  naZaznaczenie: (ids: string[], wszystkie: string[]) => void;
 };
 
 // Ranking zawodnikow z okazjami transferowymi (filtry z panelu bocznego dalej obowiazuja).
 // Ten sam znacznik z kolumny "Okazje" (analiza.wzbogac) - zadnych innych, ukrytych warunkow.
 export default function Okazje({ zapytanie, okazje, wersja, mojKlubUid, naWybor, ulubione, przelaczUlubione, wybrane,
-  setWybrane, pominMoj, setPominMoj, porownaj }: Props) {
-  const [zaznaczeni, setZaznaczeni] = useState<string[]>([]);
+  setWybrane, pominMoj, setPominMoj, zaznaczeni, naZaznaczenie }: Props) {
   const znane = wybrane.filter((o) => okazje.includes(o));
   const pelne: ZapytanieRankingu = {
     ...zapytanie,
@@ -76,15 +73,14 @@ export default function Okazje({ zapytanie, okazje, wersja, mojKlubUid, naWybor,
       {ranking.error && <Alert color="red">{(ranking.error as Error).message}</Alert>}
       {ranking.data && (
         <>
-          <Group justify="space-between">
-            <Text size="sm">Znaleziono: {ranking.data.liczba}</Text>
-            <Button size="xs" variant="light" disabled={!zaznaczeni.length} onClick={() => porownaj(zaznaczeni)}>
-              Porównaj zaznaczonych ({zaznaczeni.length}{zaznaczeni.length > 4 ? ', pierwszych 4' : ''})
-            </Button>
-          </Group>
+          <Text size="sm">
+            Znaleziono: {ranking.data.liczba}
+            <Text span size="xs" c="dimmed"> · kliknij nazwisko, aby otworzyć kartę · zaznacz do 4 zawodników do porównania</Text>
+          </Text>
           <Box style={{ flex: 1, minHeight: 300 }}>
             <TabelaRankingu kolumny={ranking.data.kolumny} wiersze={ranking.data.wiersze} mojKlubUid={mojKlubUid}
-              naWybor={naWybor} ulubione={ulubione} przelaczUlubione={przelaczUlubione} naZaznaczenie={setZaznaczeni} />
+              naWybor={naWybor} ulubione={ulubione} przelaczUlubione={przelaczUlubione}
+              zaznaczeni={zaznaczeni} naZaznaczenie={naZaznaczenie} />
           </Box>
         </>
       )}

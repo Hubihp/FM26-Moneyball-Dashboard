@@ -11,7 +11,7 @@ from datetime import date
 import pandas as pd
 from fastapi import HTTPException
 
-from fm_moneyball import analiza
+from fm_moneyball import analiza, historia
 from fm_moneyball.serwer.modele import RankingModel
 from fm_moneyball.stale import POZYCJE
 from fm_moneyball.wycena import wycen
@@ -55,12 +55,63 @@ class Obliczenia:
             df, odniesienie = analiza.dolacz_kandydatow(df, self.stan.wszyscy_zawodnicy(), pozycja, kandydaci_z)
         policzona, pominiete = analiza.policz_wynik(df, wagi, ignoruj_mnoznik, k_baza, odniesienie)
         policzona, model_wyceny = wycen(policzona, odniesienie, self.data_gry())
+        porownanie = historia.migawka_porownania(historia.migawki(self.stan.katalog_kariery()), self.data_gry())
+        if porownanie is not None:
+            wtedy = self.pula_migawki(porownanie[0], pozycja, wagi, ignoruj_mnoznik, k_baza)
+            policzona = historia.dolicz_rozwoj(policzona, wtedy)
         wynik = (analiza.wzbogac(policzona, self.data_gry()), pominiete, model_wyceny)
         with self._blokada:
             self._policzone[klucz] = wynik
             while len(self._policzone) > ILE_POLICZONYCH:
                 self._policzone.popitem(last=False)
         return wynik
+
+    def pula_migawki(self, sciezka, pozycja, wagi, ignoruj_mnoznik, k_baza):
+        """Zawodnicy pozycji z migawki historii z SCORE i percentylem liczonymi tymi samymi wagami."""
+        klucz = ("migawka", str(sciezka), sciezka.stat().st_mtime, pozycja, json.dumps(wagi, sort_keys=True),
+                 ignoruj_mnoznik, k_baza)
+        with self._blokada:
+            if klucz in self._policzone:
+                self._policzone.move_to_end(klucz)
+                return self._policzone[klucz]
+        df = historia.pula_migawki(historia.wczytaj(sciezka), pozycja)
+        wynik = None
+        if not df.empty:
+            wynik, _ = analiza.policz_wynik(df, {k: v for k, v in wagi.items() if k in df.columns},
+                                            ignoruj_mnoznik, k_baza)
+        with self._blokada:
+            self._policzone[klucz] = wynik
+            while len(self._policzone) > ILE_POLICZONYCH:
+                self._policzone.popitem(last=False)
+        return wynik
+
+    def historia_zawodnika(self, pozycja, uid, pilkarz, wagi, ignoruj_mnoznik, k_baza):
+        """
+        Zawodnik w kolejnych migawkach: data, sezon, SCORE i percentyl w pozycji (gdy ja wtedy mial),
+        minuty, wartosc i statystyki /90 pozycji.
+        """
+        df = self.pula(pozycja)
+        wagi = wagi if wagi is not None else analiza.wagi_domyslne(pozycja, df)
+        wagi = {k: v for k, v in wagi.items() if k in df.columns}
+        statystyki = analiza.kolumny_statystyk(pozycja, df)
+        punkty = []
+        for sciezka, dzien in historia.migawki(self.stan.katalog_kariery()):
+            wszyscy = historia.wczytaj(sciezka)
+            wiersz = wszyscy[(wszyscy['UID'] == uid) & (wszyscy['Piłkarz'] == pilkarz)]
+            if wiersz.empty:
+                continue
+            wiersz = wiersz.iloc[0]
+            pula = self.pula_migawki(sciezka, pozycja, wagi, ignoruj_mnoznik, k_baza)
+            w_puli = pula[pula['UID'] == uid] if pula is not None else None
+            liczba = lambda x: None if x is None or pd.isna(x) else float(x)  # noqa: E731
+            punkty.append({
+                "data": dzien.isoformat(), "sezon": historia.sezon(dzien),
+                "SCORE": liczba(w_puli['SCORE'].iloc[0]) if w_puli is not None and not w_puli.empty else None,
+                "Percentyl": liczba(w_puli['Percentyl'].iloc[0]) if w_puli is not None and not w_puli.empty else None,
+                "Minuty": liczba(wiersz.get('Minuty')), "Wartość": liczba(wiersz.get('Wartość_Numeryczna')),
+                "statystyki": {k: liczba(wiersz.get(k)) for k in statystyki},
+            })
+        return {"punkty": punkty, "statystyki": statystyki, "min_minut": historia.MIN_MINUT}
 
     def wynik_i_filtr(self, z: RankingModel):
         """-> (policzona pula, widoczni po filtrach z Pareto, pominiete, model wyceny, ukryci z mojego klubu)"""

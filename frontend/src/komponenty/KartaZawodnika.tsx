@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { api, type Wiersz, type ZapytanieRankingu } from '../api';
 import { eur, formatuj } from '../format';
+import HistoriaZawodnika from './HistoriaZawodnika';
 import Wykres from './Wykres';
 
 type Props = {
@@ -27,9 +28,6 @@ function Pole({ etykieta, wartosc }: { etykieta: string; wartosc: string }) {
   );
 }
 
-const UKRYTE = ['Regularność', 'Ważne mecze', 'Podatność na kontuzje', 'Determinacja', 'Profesjonalizm', 'Ambicja',
-  'Adaptacja'];
-
 export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubUid, ulubiona, przelaczUlubiona, zamknij,
   otworz, dodajDoPorownania }: Props) {
   const radar = useQuery({
@@ -47,7 +45,6 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
   const seria = radar.data?.seria[0];
   const moj = (x: Wiersz) => mojKlubUid !== null && mojKlubUid !== undefined && x['Klub_UID'] === mojKlubUid;
   const okazje = typeof w['Okazje'] === 'string' && w['Okazje'] ? (w['Okazje'] as string).split('; ') : [];
-  const ukryte = UKRYTE.filter((k) => typeof w[k] === 'number');
 
   return (
     <Drawer opened={!!id} onClose={zamknij} position="right" size="xl" title={<Title order={4}>{String(w['Piłkarz'] ?? id ?? '')}</Title>}>
@@ -89,20 +86,11 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
             <Pole etykieta="Koszt (cena + 3 lata pensji)" wartosc={eur(w['Koszt'] as number | null)} />
             <Pole etykieta="Wycena wg wyniku" wartosc={eur(w['Wycena wg wyniku'] as number | null)} />
             <Pole etykieta="Niedowartościowanie" wartosc={formatuj(w['Niedowartościowanie'], 'mnoznik')} />
-            {w['Ryzyko'] !== undefined ? <Pole etykieta="Ryzyko (0-100)" wartosc={formatuj(w['Ryzyko'], 'int')} /> : null}
             {w['Kontuzje_2_lata'] !== undefined ? (
               <Pole etykieta="Kontuzje (2 lata)" wartosc={formatuj(w['Kontuzje_2_lata'], 'int')} />
             ) : null}
           </SimpleGrid>
 
-          {ukryte.length > 0 && (
-            <>
-              <Title order={6}>Atrybuty ukryte i osobowość (1-20)</Title>
-              <SimpleGrid cols={4}>
-                {ukryte.map((k) => <Pole key={k} etykieta={k} wartosc={formatuj(w[k], 'int')} />)}
-              </SimpleGrid>
-            </>
-          )}
 
           <Group grow>
             <Button variant="light" onClick={() => dodajDoPorownania(id)}>Dodaj do porównania</Button>
@@ -110,6 +98,8 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
               {ulubiona ? 'Usuń z listy życzeń' : 'Dodaj do listy życzeń'}
             </Button>
           </Group>
+
+          {wiersz && <HistoriaZawodnika id={id} wiersz={wiersz} zapytanie={zapytanie} wersja={wersja} />}
 
           <Title order={5}>Profil statystyk (percentyl w pozycji)</Title>
           {radar.isLoading && <Loader size="sm" />}

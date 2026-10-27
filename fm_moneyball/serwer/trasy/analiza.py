@@ -2,8 +2,8 @@
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 
-from fm_moneyball import analiza
-from fm_moneyball.serwer.modele import KadraModel, ListaZyczenModel, PodobniModel, RadarModel, RankingModel
+from fm_moneyball import analiza, historia
+from fm_moneyball.serwer.modele import HistoriaModel, KadraModel, ListaZyczenModel, PodobniModel, RadarModel, RankingModel
 from fm_moneyball.serwer.obliczenia import kandydat
 from fm_moneyball.stale import POZYCJE
 
@@ -12,9 +12,10 @@ def utworz(stan, obl):
     router = APIRouter(prefix="/api")
 
     @router.get("/pozycja/{pozycja}")
-    def meta_pozycji(pozycja: str, pokaz_ukryte: bool = False):
+    def meta_pozycji(pozycja: str):
         df = obl.pula(pozycja)
         ceny = df['Wartość_Numeryczna'].dropna()
+        porownanie = historia.migawka_porownania(historia.migawki(stan.katalog_kariery()), obl.data_gry())
         return {
             "pozycja": pozycja, "liczba": len(df),
             "nogi": sorted(df['Preferowana noga'].dropna().unique().tolist()) if 'Preferowana noga' in df.columns else [],
@@ -23,20 +24,21 @@ def utworz(stan, obl):
             "minuty_max": int(df['Minuty'].max()) if 'Minuty' in df.columns and df['Minuty'].notna().any() else None,
             "wagi_domyslne": analiza.wagi_domyslne(pozycja, df),
             "ma_kontrakty": bool(df['Wygasa_Data'].notna().any()),
-            "ma_ukryte": any(k in df.columns and bool(df[k].notna().any())
-                             for k in ('Podatność na kontuzje', 'Determinacja')),
-            "ma_ryzyko": 'Podatność na kontuzje' in df.columns and bool(df['Podatność na kontuzje'].notna().any()),
             "okazje": list(analiza.OKAZJE),
+            # historia rozwoju: migawki poprzednich wczytan tej kariery
+            "ma_historie": porownanie is not None,
+            "data_porownania": porownanie[1].isoformat() if porownanie is not None else None,
+            "min_minut_rozwoju": historia.MIN_MINUT,
         }
 
     @router.post("/ranking")
     def ranking(z: RankingModel):
         policzona, widoczni, pominiete, model_wyceny, ukryci_moi = obl.wynik_i_filtr(z)
-        kolumny = analiza.kolumny_tabeli(z.pozycja, policzona, z.pokaz_ukryte)
+        kolumny = analiza.kolumny_tabeli(z.pozycja, policzona)
         return {
             "pozycja": z.pozycja,
             "kolumny": kolumny,
-            "wiersze": analiza.do_json(widoczni, analiza.pola_wiersza(z.pozycja, policzona, z.pokaz_ukryte)),
+            "wiersze": analiza.do_json(widoczni, analiza.pola_wiersza(z.pozycja, policzona)),
             # liczby zawodnikow pozycji; kandydaci z innych pozycji osobno
             "liczba": int((~kandydat(widoczni)).sum()), "liczba_wszystkich": int((~kandydat(policzona)).sum()),
             "liczba_kandydatow": int(kandydat(widoczni).sum()),
@@ -46,6 +48,17 @@ def utworz(stan, obl):
             "liczba_ukrytych_mojego_klubu": int(ukryci_moi),
         }
 
+    @router.post("/historia")
+    def historia_zawodnika(z: HistoriaModel):
+        wszyscy = stan.wszyscy_zawodnicy()
+        wiersz = wszyscy[wszyscy['ID'] == z.id] if wszyscy is not None else None
+        if wiersz is None or wiersz.empty or 'UID' not in wiersz.columns:
+            return {"punkty": [], "statystyki": [], "min_minut": historia.MIN_MINUT}
+        w = wiersz.iloc[0]
+        if pd.isna(w['UID']):
+            return {"punkty": [], "statystyki": [], "min_minut": historia.MIN_MINUT}
+        return obl.historia_zawodnika(z.pozycja, int(w['UID']), w['Piłkarz'], z.wagi, z.ignoruj_mnoznik, z.k_baza)
+
     @router.post("/radar")
     def radar(z: RadarModel):
         return analiza.radar(z.pozycja, obl.pula(z.pozycja), z.ids, stan.wszyscy_zawodnicy() if z.kandydaci else None)
@@ -54,7 +67,7 @@ def utworz(stan, obl):
     def podobni(z: PodobniModel):
         policzona, widoczni, *_ = obl.wynik_i_filtr(z)
         wynik = analiza.podobni(z.pozycja, policzona, widoczni.index, z.id, z.k_baza, z.n)
-        pola = analiza.pola_wiersza(z.pozycja, policzona, z.pokaz_ukryte) + ['Podobieństwo']
+        pola = analiza.pola_wiersza(z.pozycja, policzona) + ['Podobieństwo']
         return {"wiersze": analiza.do_json(wynik, pola)}
 
     @router.post("/moja-kadra")
