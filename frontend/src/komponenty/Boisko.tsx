@@ -1,21 +1,22 @@
 import { Text, Tooltip } from '@mantine/core';
 
-// Miejsca na boisku (x, y w % od lewej i od gory) -> pula zawodnikow w aplikacji.
-// Lewa i prawa strona to ta sama pula (np. oba BO = Boczny Obronca), wiec maja ten sam skrot
-// i swieca razem. Strone zawodnika widac w kolumnie "Pozycje" tabeli (LO, PO, LWAH...).
-const MIEJSCA: { skrot: string; nazwa: string; pozycja: string; x: number; y: number }[] = [
-  { skrot: 'N', nazwa: 'Napastnik', pozycja: 'Napastnik', x: 50, y: 9 },
-  { skrot: 'OP', nazwa: 'Ofensywny pomocnik', pozycja: 'Ofensywny Pomocnik', x: 50, y: 23 },
-  { skrot: 'S', nazwa: 'Lewy skrzydłowy', pozycja: 'Skrzydłowy', x: 14, y: 30 },
-  { skrot: 'S', nazwa: 'Prawy skrzydłowy', pozycja: 'Skrzydłowy', x: 86, y: 30 },
-  { skrot: 'ŚP', nazwa: 'Środkowy pomocnik', pozycja: 'Środkowy Pomocnik', x: 50, y: 39 },
-  { skrot: 'DP', nazwa: 'Defensywny pomocnik', pozycja: 'Defensywny Pomocnik', x: 50, y: 55 },
-  { skrot: 'WAH', nazwa: 'Lewy wahadłowy', pozycja: 'Wahadłowy', x: 11, y: 51 },
-  { skrot: 'WAH', nazwa: 'Prawy wahadłowy', pozycja: 'Wahadłowy', x: 89, y: 51 },
-  { skrot: 'BO', nazwa: 'Lewy obrońca', pozycja: 'Boczny Obrońca', x: 20, y: 72 },
-  { skrot: 'BO', nazwa: 'Prawy obrońca', pozycja: 'Boczny Obrońca', x: 80, y: 72 },
-  { skrot: 'ŚO', nazwa: 'Środkowy obrońca', pozycja: 'Środkowy Obrońca', x: 50, y: 74 },
-  { skrot: 'BR', nazwa: 'Bramkarz', pozycja: 'Bramkarz', x: 50, y: 91 },
+// Miejsca na boisku (x, y w % od lewej i od gory) -> pozycja (pula zawodnikow) w aplikacji.
+// Kazde miejsce to osobna pozycja: w puli sa tylko zawodnicy, ktorzy maja ja w kolumnie "Pozycje".
+const MIEJSCA: { skrot: string; pozycja: string; x: number; y: number }[] = [
+  { skrot: 'N', pozycja: 'Napastnik', x: 50, y: 9 },
+  { skrot: 'LS', pozycja: 'Lewy Skrzydłowy', x: 14, y: 22 },
+  { skrot: 'OP', pozycja: 'Ofensywny Pomocnik', x: 50, y: 24 },
+  { skrot: 'PS', pozycja: 'Prawy Skrzydłowy', x: 86, y: 22 },
+  { skrot: 'LP', pozycja: 'Lewy Pomocnik', x: 12, y: 39 },
+  { skrot: 'ŚP', pozycja: 'Środkowy Pomocnik', x: 50, y: 40 },
+  { skrot: 'PP', pozycja: 'Prawy Pomocnik', x: 88, y: 39 },
+  { skrot: 'LWAH', pozycja: 'Lewy Wahadłowy', x: 11, y: 56 },
+  { skrot: 'DP', pozycja: 'Defensywny Pomocnik', x: 50, y: 56 },
+  { skrot: 'PWAH', pozycja: 'Prawy Wahadłowy', x: 89, y: 56 },
+  { skrot: 'LO', pozycja: 'Lewy Obrońca', x: 16, y: 73 },
+  { skrot: 'ŚO', pozycja: 'Środkowy Obrońca', x: 50, y: 74 },
+  { skrot: 'PO', pozycja: 'Prawy Obrońca', x: 84, y: 73 },
+  { skrot: 'BR', pozycja: 'Bramkarz', x: 50, y: 91 },
 ];
 
 type Props = { pozycja: string; liczby: Record<string, number>; naWybor: (pozycja: string) => void };
@@ -36,12 +37,12 @@ export default function Boisko({ pozycja, liczby, naWybor }: Props) {
           const ile = liczby[m.pozycja] ?? 0;
           const wybrana = m.pozycja === pozycja;
           return (
-            <Tooltip key={m.nazwa} label={`${m.nazwa} · pula: ${m.pozycja} (${liczba(ile)})`} withArrow openDelay={250}>
+            <Tooltip key={m.pozycja} label={`${m.pozycja} (${liczba(ile)})`} withArrow openDelay={250}>
               <button
                 type="button"
-                className={`boisko-miejsce${wybrana ? ' wybrane' : ''}${ile ? '' : ' puste'}`}
+                className={`boisko-miejsce${wybrana ? ' wybrane' : ''}${ile ? '' : ' puste'}${m.skrot.length > 3 ? ' dlugi' : ''}`}
                 style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                aria-label={`${m.nazwa} (${m.pozycja})`}
+                aria-label={m.pozycja}
                 aria-pressed={wybrana}
                 disabled={!ile && !wybrana}
                 onClick={() => naWybor(m.pozycja)}

@@ -4,12 +4,9 @@ Wykrywacz niedowartosciowanych zawodnikow: model ceny rynkowej w obrebie puli po
     log(cena) ~ SCORE + wiek + wiek^2 + min(lata kontraktu, 5)
 
 "Wycena wg wyniku" to cena typowa dla zawodnika z takim wynikiem, wiekiem i kontraktem.
-Model celowo nie zna ligi, reputacji klubu ani CA: zawodnik z mniejszej ligi czy klubu, ktory
+Model celowo nie zna ligi ani reputacji klubu: zawodnik z mniejszej ligi czy klubu, ktory
 gra tak samo dobrze, a kosztuje mniej, to wlasnie okazja, ktorej szukamy (SCORE ma juz korekte
 sily ligi). "Niedowartosciowanie" = wycena / cena: 2,0 znaczy, ze gra jak zawodnik dwa razy drozszy.
-
-Przy danych ukrytych dochodzi "Wynik ponad CA": o ile SCORE zawodnika przewyzsza wynik typowy
-dla jego CA w tej puli (statystyki lepsze niz atrybuty - albo odwrotnie, gdy ujemny).
 """
 from datetime import date
 
@@ -57,7 +54,7 @@ def _dopasuj(X, y):
 def wycen(pula, odniesienie=None, data_gry=None):
     """
     Pula z SCORE -> (kopia z kolumnami
-    'Wycena wg wyniku', 'Niedowartościowanie', opcjonalnie 'Wynik ponad CA'; opis modelu).
+    'Wycena wg wyniku', 'Niedowartościowanie'; opis modelu).
     Model uczy sie na zawodnikach pozycji (`odniesienie`) z cena > 0; wycene dostaja wszyscy.
     """
     pula = pula.copy()
@@ -90,10 +87,4 @@ def wycen(pula, odniesienie=None, data_gry=None):
                 "liczba": int(uczace.sum()),
                 "proc_za_10_score": round(float(np.expm1(10 * beta[1]) * 100), 1),
                 "proc_za_rok_mlodszy": round(float(np.expm1(-za_rok) * 100), 1)}
-
-    if 'CA' in pula.columns and pula.loc[ref, 'CA'].notna().sum() >= MIN_ZAWODNIKOW:
-        ca = pula['CA'].astype(float)
-        uczace_ca = ref & ca.notna() & pula['SCORE'].notna()
-        a, b = np.polyfit(ca[uczace_ca], pula.loc[uczace_ca, 'SCORE'].astype(float), 1)
-        pula['Wynik ponad CA'] = pula['SCORE'] - (a * ca + b)
     return pula, opis

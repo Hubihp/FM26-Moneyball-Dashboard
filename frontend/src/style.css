@@ -144,6 +144,10 @@ body {
   transition: background 120ms, box-shadow 120ms, transform 120ms;
 }
 
+.boisko-miejsce.dlugi {
+  font-size: 3.3cqw;
+}
+
 .boisko-miejsce:hover:not(:disabled) {
   background: #3b3b3b;
   transform: translate(-50%, -50%) scale(1.08);

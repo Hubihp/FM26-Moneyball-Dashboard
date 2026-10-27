@@ -59,14 +59,13 @@ def test_kandydaci_nie_zmieniaja_wyceny_pozycji():
     assert z_obcymi.loc[~maska, 'Niedowartościowanie'].median() < 0.1
 
 
-def test_wynik_ponad_ca_i_znacznik_okazji():
+def test_znacznik_okazji_i_brak_ca():
     pula = _pula()
-    pula['CA'] = (pula['SCORE'] - 50) * 2 + 120
-    pula.loc[5, ['SCORE', 'CA']] = [75.0, 110.0]       # gra duzo lepiej niz wskazuja atrybuty
+    pula['CA'] = 120.0                                  # CA nie jest juz uzywane
     pula.loc[6, 'Wartość_Numeryczna'] /= 4
     pula.loc[6, 'SCORE'] = max(pula.loc[6, 'SCORE'], 60.0)
     wynik, _ = wycen(pula, data_gry=DZIS)
-    assert wynik.loc[5, 'Wynik ponad CA'] > 20 and abs(wynik['Wynik ponad CA'].median()) < 1
+    assert 'Wynik ponad CA' not in wynik.columns
     wzbogacona = analiza.wzbogac(wynik, DZIS)
     assert "niedowartościowany" in wzbogacona.loc[6, 'Okazje']
     widoczni = analiza.filtruj(wzbogacona, analiza.Filtry(min_niedowartosciowanie=2), DZIS)

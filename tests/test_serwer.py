@@ -73,12 +73,13 @@ def test_kontrakty_wygasajace(klient):
 
 
 def test_radar_i_podobni(klient):
-    wiersze = klient.post("/api/ranking", json={"pozycja": "Skrzydłowy"}).json()["wiersze"]
+    wiersze = klient.post("/api/ranking", json={"pozycja": "Prawy Skrzydłowy"}).json()["wiersze"]
     ids = [wiersze[0]["ID"], wiersze[1]["ID"]]
-    radar = klient.post("/api/radar", json={"pozycja": "Skrzydłowy", "ids": ids}).json()
+    radar = klient.post("/api/radar", json={"pozycja": "Prawy Skrzydłowy", "ids": ids}).json()
+    assert radar["seria"][0]["pilkarz"] == wiersze[0]["Piłkarz"]
     assert len(radar["seria"]) == 2 and len(radar["etykiety"]) == len(radar["seria"][0]["percentyle"])
     assert all(0 <= p <= 100 for p in radar["seria"][0]["percentyle"])
-    podobni = klient.post("/api/podobni", json={"pozycja": "Skrzydłowy", "id": ids[0], "n": 5}).json()["wiersze"]
+    podobni = klient.post("/api/podobni", json={"pozycja": "Prawy Skrzydłowy", "id": ids[0], "n": 5}).json()["wiersze"]
     assert len(podobni) == 5 and ids[0] not in [p["ID"] for p in podobni]
     assert podobni[0]["Podobieństwo"] >= podobni[-1]["Podobieństwo"]
 
@@ -219,7 +220,11 @@ def test_serwuje_zbudowany_frontend(klient):
 
 def test_nowe_pozycje_w_demo(klient):
     stan = klient.get("/api/stan").json()
-    assert stan["pozycje"]["Wahadłowy"] == 150 and stan["pozycje"]["Ofensywny Pomocnik"] == 150
+    from fm_moneyball.stale import POZYCJE
+    assert list(stan["pozycje"]) == POZYCJE and all(n == 150 for n in stan["pozycje"].values())
+    # pozycja zawiera tylko zawodnikow, ktorzy ja maja (PS, a nie wszyscy skrzydlowi)
+    ps = klient.post("/api/ranking", json={"pozycja": "Prawy Skrzydłowy"}).json()["wiersze"]
+    assert ps and all("PS" in w["Pozycja"].split(", ") for w in ps)
     meta = klient.get("/api/pozycja/Ofensywny Pomocnik").json()
     assert meta["wagi_domyslne"]["Oczekiwane asysty/90"] == 25
     # cechy tylko z zapisu (100% sytuacje) sa pomijane w danych CSV/demo
@@ -287,32 +292,50 @@ def test_lista_zyczen_po_uid_i_kraje(tmp_path, monkeypatch):
 
 
 def test_kandydaci_do_przekwalifikowania(klient):
-    zwykly = klient.post("/api/ranking", json={"pozycja": "Boczny Obrońca"}).json()
+    zwykly = klient.post("/api/ranking", json={"pozycja": "Prawy Obrońca"}).json()
     z_kandydatami = klient.post("/api/ranking", json={
-        "pozycja": "Boczny Obrońca", "filtry": {"kandydaci": True, "min_score_kandydata": 55}}).json()
-    assert z_kandydatami["pozycja"] == "Boczny Obrońca"
+        "pozycja": "Prawy Obrońca", "filtry": {"kandydaci": True, "min_score_kandydata": 55}}).json()
+    assert z_kandydatami["pozycja"] == "Prawy Obrońca"
     nominalni = {w["ID"]: w["SCORE"] for w in z_kandydatami["wiersze"] if not w["Kandydat"]}
     kandydaci = [w for w in z_kandydatami["wiersze"] if w["Kandydat"]]
     # kandydaci nie zmieniaja wyniku zawodnikow pozycji
     assert nominalni == pytest.approx({w["ID"]: w["SCORE"] for w in zwykly["wiersze"]})
     assert kandydaci and all(w["SCORE"] >= 55 for w in kandydaci)
     assert z_kandydatami["liczba_wszystkich"] == 150 and z_kandydatami["liczba_kandydatow"] == len(kandydaci)
-    assert {w["Kandydat z pozycji"] for w in kandydaci} <= {"Środkowy Obrońca", "Wahadłowy", "Defensywny Pomocnik",
-                                                            "Środkowy Pomocnik", "Ofensywny Pomocnik", "Skrzydłowy",
-                                                            "Napastnik"}           # bez bramkarzy
+    from fm_moneyball.stale import POZYCJE
+    assert {w["Kandydat z pozycji"] for w in kandydaci} <= set(POZYCJE) - {"Bramkarz", "Prawy Obrońca"}
     assert "Kandydat z pozycji" in [k["naglowek"] for k in z_kandydatami["kolumny"]]
     assert all(0 <= w["Percentyl"] <= 100 for w in kandydaci)
     # radar i podobni dla kandydata
     kid = kandydaci[0]["ID"]
-    radar = klient.post("/api/radar", json={"pozycja": "Boczny Obrońca", "ids": [kid], "kandydaci": True}).json()
+    radar = klient.post("/api/radar", json={"pozycja": "Prawy Obrońca", "ids": [kid], "kandydaci": True}).json()
     assert radar["seria"][0]["id"] == kid
-    podobni = klient.post("/api/podobni", json={"pozycja": "Boczny Obrońca", "id": kid, "n": 3,
+    podobni = klient.post("/api/podobni", json={"pozycja": "Prawy Obrońca", "id": kid, "n": 3,
                                                 "filtry": {"kandydaci": True}}).json()["wiersze"]
     assert len(podobni) == 3
     # bramkarz nie ma kandydatow z pola
     gk = klient.post("/api/ranking", json={"pozycja": "Bramkarz", "filtry": {"kandydaci": True,
                                                                              "min_score_kandydata": 0}}).json()
     assert not any(w["Kandydat"] for w in gk["wiersze"])
+    # kandydaci tylko z wybranych pozycji
+    wybrane = klient.post("/api/ranking", json={"pozycja": "Prawy Obrońca", "filtry": {
+        "kandydaci": True, "min_score_kandydata": 0, "kandydaci_z": ["Lewy Obrońca", "Prawy Wahadłowy"]}}).json()
+    zrodla = {w["Kandydat z pozycji"] for w in wybrane["wiersze"] if w["Kandydat"]}
+    assert zrodla == {"Lewy Obrońca", "Prawy Wahadłowy"}
+
+
+def test_lista_zyczen_kandydat_i_stara_pozycja(klient):
+    # zawodnik dodany jako kandydat z innej pozycji (blad: "Nie znaleziono")
+    wiersze = klient.post("/api/ranking", json={"pozycja": "Prawy Skrzydłowy", "filtry": {
+        "kandydaci": True, "min_score_kandydata": 0}}).json()["wiersze"]
+    kandydat = next(w for w in wiersze if w["Kandydat"])
+    stary = klient.post("/api/ranking", json={"pozycja": "Lewy Obrońca"}).json()["wiersze"][0]
+    lista = klient.post("/api/lista-zyczen", json={"wpisy": [
+        {"klucz": kandydat["ID"], "pozycja": "Prawy Skrzydłowy", "pilkarz": kandydat["Piłkarz"]},
+        {"klucz": stary["ID"], "pozycja": "Boczny Obrońca", "pilkarz": stary["Piłkarz"]}]}).json()
+    assert lista["nieznalezieni"] == []
+    pozycje = {w["ID"]: w["Pozycja na liście"] for w in lista["wiersze"]}
+    assert pozycje == {kandydat["ID"]: "Prawy Skrzydłowy", stary["ID"]: "Lewy Obrońca"}
 
 
 def test_index_bez_cache(klient):

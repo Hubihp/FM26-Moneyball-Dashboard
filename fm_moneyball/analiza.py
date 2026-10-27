@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from fm_moneyball.model import maska_odniesienia, macierz_stylu, oblicz_score, percentyl_w_puli
-from fm_moneyball.stale import (KOLUMNY_PER_POZYCJA, KOLUMNY_UKRYTE, MAPOWANIE_NAZW_LIG, MERYTORYKA_WAG,
+from fm_moneyball.stale import (KOLUMNY_PER_POZYCJA, MAPOWANIE_NAZW_LIG, MERYTORYKA_WAG,
                                 NEUTRALNE, NIE_STATYSTYKI, NIZSZE_LEPSZE, kolumna_oceny)
 
 
@@ -32,6 +32,7 @@ class Filtry:
     min_niedowartosciowanie: float | None = None  # wycena wg wyniku / cena
     kandydaci: bool = False                      # pokaz kandydatow do przekwalifikowania z innych pozycji
     min_score_kandydata: float = 60.0
+    kandydaci_z: list = field(default_factory=list)  # pozycje, z ktorych pochodza kandydaci (puste = wszystkie)
 
 
 # --- Moneyball: koszt, okazje, ryzyko ----------------------------------------------
@@ -136,9 +137,10 @@ def policz_wynik(df, wagi, ignoruj_mnoznik=False, k_baza=5, odniesienie=None):
     return pula, pominiete
 
 
-def dolacz_kandydatow(pula, wszyscy, pozycja):
+def dolacz_kandydatow(pula, wszyscy, pozycja, z_pozycji=()):
     """
     Pula pozycji + zawodnicy nominalnie z innych pozycji (kandydaci do przekwalifikowania).
+    `z_pozycji` zaweza kandydatow do zawodnikow majacych ktoras z tych pozycji (puste = wszyscy).
     Bramkarze sa kandydatami tylko na bramkarza i odwrotnie. Zwraca (ramka, maska nominalnych):
     maske podaje sie do policz_wynik, zeby kandydaci nie zmieniali skali wyniku pozycji.
     Kolumny: 'Kandydat', 'Kandydat z pozycji' (pozycja glowna), 'Ocena na pozycji' (1-20, z zapisu).
@@ -155,6 +157,14 @@ def dolacz_kandydatow(pula, wszyscy, pozycja):
             glowna = glowna.where(glowna.notna(), inni['Pula'].astype(object))
         bramkarz = glowna == 'Bramkarz'
         wybrani = bramkarz if pozycja == 'Bramkarz' else ~bramkarz
+        z_pozycji = [p for p in z_pozycji if p != pozycja]
+        if z_pozycji:
+            # wszystkie pozycje zawodnika: 'Pule' (zapis gry) albo jedna 'Pula' (demo, CSV)
+            pule = (inni['Pule'] if 'Pule' in inni.columns else pd.Series(None, index=inni.index, dtype=object))
+            pule = pule.where(pule.notna(), glowna).fillna("").astype(str).str.split("; ")
+            pasujaca = pule.map(lambda lista: next((p for p in lista if p in z_pozycji), None))
+            wybrani &= pasujaca.notna()
+            glowna = pasujaca.where(pasujaca.notna(), glowna)
         inni = inni[wybrani].assign(Kandydat=True, **{'Kandydat z pozycji': glowna[wybrani]})
         ramka = pd.concat([nominalni, inni], ignore_index=True)
     if kolumna_oceny(pozycja) in ramka.columns:
@@ -215,7 +225,7 @@ def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
 # --- kolumny tabeli -----------------------------------------------------------------------------
 # Format wartosci dla interfejsu: score, pasek (0-100), int, dec1, dec2, eur, eur_tyg, data, tekst
 _FORMATY = {'SCORE': 'score', 'Percentyl': 'pasek', 'Wiarygodność': 'pasek', 'Wiek': 'int', 'Minuty': 'int',
-            'CA': 'int', 'PA': 'int', 'Ocena na pozycji': 'int', 'Strata piłek na podanie': 'dec2',
+            'Ocena na pozycji': 'int', 'Strata piłek na podanie': 'dec2',
             'Ryzyko': 'int', 'Niedowartościowanie': 'mnoznik', 'Wycena wg wyniku': 'eur'}
 # Kolumny prezentowane z pol liczbowych (sortowanie po liczbie, nie po tekscie)
 _POLA = {'Cena': ('Wartość_Numeryczna', 'eur'), 'Płaca': ('Zarobki_Numeryczne', 'eur_tyg'),
@@ -226,7 +236,7 @@ _TEKSTOWE = {'Piłkarz', 'Klub', 'Liga', 'Pozycja', 'Kraj', 'Preferowana noga', 
 _NAGLOWKI = {'Kraj': 'Narodowość', 'Pozycja': 'Pozycje'}
 # Kolumny Moneyball (z wzbogac), nie sa statystykami meczowymi
 _MONEYBALL = {'Koszt (3 lata)', 'Okazje', 'Ryzyko', 'Ocena na pozycji', 'Wycena wg wyniku',
-              'Niedowartościowanie', 'Wynik ponad CA'}
+              'Niedowartościowanie'}
 
 
 def _wstaw_po(lista, nowy, po):
@@ -243,10 +253,6 @@ def kolumny_tabeli(pozycja, pula, pokaz_ukryte=False):
         _wstaw_po(nazwy, 'Płaca', 'Cena')
     if 'Wygasa' in pula.columns:
         _wstaw_po(nazwy, 'Wygasa', 'Płaca' if 'Płaca' in nazwy else 'Cena')
-    if pokaz_ukryte:
-        for kol in reversed(KOLUMNY_UKRYTE):
-            if kol in pula.columns and pula[kol].notna().any():
-                _wstaw_po(nazwy, kol, 'Wiek')
     if 'Koszt' in pula.columns:
         po = 'Wygasa' if 'Wygasa' in nazwy else 'Cena'
         for kol in ('Okazje', 'Koszt (3 lata)'):
@@ -256,8 +262,6 @@ def kolumny_tabeli(pozycja, pula, pokaz_ukryte=False):
     if 'Niedowartościowanie' in pula.columns and pula['Niedowartościowanie'].notna().any():
         _wstaw_po(nazwy, 'Wycena wg wyniku', 'Cena')
         _wstaw_po(nazwy, 'Niedowartościowanie', 'Wycena wg wyniku')
-    if pokaz_ukryte and 'Wynik ponad CA' in pula.columns and pula['Wynik ponad CA'].notna().any():
-        _wstaw_po(nazwy, 'Wynik ponad CA', 'Percentyl')
     if 'Kandydat' in pula.columns and pula['Kandydat'].any():
         _wstaw_po(nazwy, 'Kandydat z pozycji', 'Piłkarz')
         if 'Ocena na pozycji' in pula.columns and pula['Ocena na pozycji'].notna().any():
@@ -312,7 +316,7 @@ POLA_WIERSZA = ['ID', 'UID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Kraj', 'Wi
                 'Okazje', 'Pareto', 'Kandydat', 'Kandydat z pozycji', 'Ocena na pozycji',
                 'Wycena wg wyniku', 'Niedowartościowanie']
 # Dane, ktorych gracz nie widzi wprost w grze - wysylane tylko przy wlaczonym przelaczniku
-POLA_UKRYTE = ['CA', 'PA', 'Wynik ponad CA', 'Ryzyko', 'Regularność', 'Ważne mecze', 'Podatność na kontuzje', 'Determinacja',
+POLA_UKRYTE = ['Ryzyko', 'Regularność', 'Ważne mecze', 'Podatność na kontuzje', 'Determinacja',
                'Profesjonalizm', 'Ambicja', 'Adaptacja', 'Kontuzje_2_lata']
 
 
@@ -349,7 +353,7 @@ def radar(pozycja, pula, ids, inni=None):
             p = percentyl_w_puli(pula[c], wiersz.get(c))
             wartosci.append(round(100.0 - p if c in NIZSZE_LEPSZE else p, 1))
         surowe = [None if pd.isna(wiersz.get(c)) else round(float(wiersz.get(c)), 3) for c in kolumny]
-        seria.append({'id': id_, 'percentyle': wartosci, 'wartosci': surowe})
+        seria.append({'id': id_, 'pilkarz': wiersz.get('Piłkarz'), 'percentyle': wartosci, 'wartosci': surowe})
     etykiety = [c + " (mniej strat = wyżej)" if c in NIZSZE_LEPSZE else c for c in kolumny]
     return {'etykiety': etykiety, 'seria': seria}
 

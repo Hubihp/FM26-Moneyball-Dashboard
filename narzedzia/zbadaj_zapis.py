@@ -56,7 +56,7 @@ from fm_moneyball.zrodla.zapis_fm import (PLIK_NAZW_UZYTKOWNIKA, OpcjeZapisu, ka
                                           sumuj_statystyki,
                                           wczytaj_nazwy_rozgrywek, zapisz_nazwy_rozgrywek, zbuduj_ramki)
 
-KOLUMNY_PROBKI = ['Piłkarz', 'Wiek', 'Pozycja', 'Liga', 'Minuty', 'Cena', 'Płaca', 'Wygasa', 'CA', 'PA',
+KOLUMNY_PROBKI = ['Piłkarz', 'Wiek', 'Pozycja', 'Liga', 'Minuty', 'Cena', 'Płaca', 'Wygasa',
                   'Liczba goli na 90 min', 'Oczekiwane asysty/90', 'Kluczowe podania z gry/90',
                   'Stracone piłki/90', 'Skuteczność strzałów (%)', 'Uniknięte oczekiwane gole/90',
                   'Skuteczność obron (%)']

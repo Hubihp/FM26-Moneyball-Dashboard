@@ -41,7 +41,7 @@ type Props = {
 export const PUSTE_FILTRY: Filtry = {
   ligi: [], nogi: [], kraje: [], wiek: null, cena: null, bez_ceny: true, szukaj: '', kontrakt_mies: null, min_minut: 0,
   bez_mojego_klubu: false, okazje: [], max_ryzyko: null, kandydaci: false,
-  min_score_kandydata: 60, min_niedowartosciowanie: null,
+  min_score_kandydata: 60, min_niedowartosciowanie: null, kandydaci_z: [],
 };
 
 // Suwak ceny w skali pierwiastkowej: wiecej precyzji przy niskich kwotach
@@ -68,6 +68,11 @@ export default function PanelBoczny(p: Props) {
           </Tooltip>
           {filtry.kandydaci && (
             <>
+              {p.pozycja !== 'Bramkarz' && (
+                <MultiSelect mt={6} size="xs" label="Z pozycji" placeholder="Wszystkie pozycje" clearable
+                  data={p.pozycje.filter((x) => x !== p.pozycja && x !== 'Bramkarz')}
+                  value={filtry.kandydaci_z} onChange={(v) => zmien('kandydaci_z', v)} />
+              )}
               <Text size="xs" mt={6}>Minimalny SCORE kandydata: {filtry.min_score_kandydata}</Text>
               <Slider min={40} max={80} step={1} label={null} value={filtry.min_score_kandydata}
                 onChange={(v) => zmien('min_score_kandydata', v)} />
@@ -174,7 +179,7 @@ export default function PanelBoczny(p: Props) {
                 <Switch label="Ignoruj mnożnik ligowy" checked={p.ustawienia.ignoruj_mnoznik}
                   onChange={(e) => p.setUstawienia({ ...p.ustawienia, ignoruj_mnoznik: e.currentTarget.checked })} />
                 {meta?.ma_ukryte && (
-                  <Switch label="Pokaż dane ukryte w grze (CA/PA, ryzyko)" checked={p.ustawienia.pokaz_ukryte}
+                  <Switch label="Pokaż dane ukryte w grze (ryzyko, cechy ukryte)" checked={p.ustawienia.pokaz_ukryte}
                     onChange={(e) => p.setUstawienia({ ...p.ustawienia, pokaz_ukryte: e.currentTarget.checked })} />
                 )}
               </Stack>

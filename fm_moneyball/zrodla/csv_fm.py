@@ -7,7 +7,7 @@ import pandas as pd
 from fm_moneyball.parsery import do_liczb, fmt_eur, parse_age, parse_market_value, parse_wages
 from fm_moneyball.schemat import dopelnij_schemat
 from fm_moneyball.stale import (KOLUMNY_PER_POZYCJA, KOLUMNY_STATYSTYK, NAZWY_KOLUMNY_MINUT,
-                                TLUMACZENIE_KOLUMN)
+                                SKROT_POZYCJI_APLIKACJI, TLUMACZENIE_KOLUMN)
 
 
 NAZWY_KOLUMNY_KRAJU = ["Nar", "Narodowość", "Nat", "Nationality", "Kraj"]
@@ -65,16 +65,12 @@ def wczytaj_csv(plik_bajty):
 # =============================================================================
 # DANE DEMO (SYNTETYCZNE) - generowane w formacie zblizonym do eksportu z FM
 # =============================================================================
-# Stale ziarna (kolejnosc sprzed dodania pozycji Wahadlowy i Ofensywny Pomocnik), zeby dane demo
+# Stale ziarna (pozycje sprzed podzialu na strone lewa/prawa zachowuja swoje), zeby dane demo
 # istniejacych pozycji sie nie zmienialy
-ZIARNA_DEMO = {"Bramkarz": 0, "Środkowy Obrońca": 1, "Boczny Obrońca": 2, "Defensywny Pomocnik": 3,
-               "Środkowy Pomocnik": 4, "Skrzydłowy": 5, "Napastnik": 6, "Wahadłowy": 7, "Ofensywny Pomocnik": 8}
-
-
-# Pozycja w danych demo - polski skrot jak w danych z zapisu
-SKROT_DEMO = {"Bramkarz": "BR", "Środkowy Obrońca": "ŚO", "Boczny Obrońca": "LO, PO", "Wahadłowy": "LWAH, PWAH",
-              "Defensywny Pomocnik": "DP", "Środkowy Pomocnik": "ŚP", "Ofensywny Pomocnik": "OP",
-              "Skrzydłowy": "LS, PS", "Napastnik": "N"}
+ZIARNA_DEMO = {"Bramkarz": 0, "Środkowy Obrońca": 1, "Lewy Obrońca": 2, "Defensywny Pomocnik": 3,
+               "Środkowy Pomocnik": 4, "Lewy Skrzydłowy": 5, "Napastnik": 6, "Lewy Wahadłowy": 7,
+               "Ofensywny Pomocnik": 8, "Prawy Obrońca": 9, "Prawy Wahadłowy": 10, "Lewy Pomocnik": 11,
+               "Prawy Pomocnik": 12, "Prawy Skrzydłowy": 13}
 
 
 def generuj_demo_csv(pozycja, n=150):
@@ -82,7 +78,8 @@ def generuj_demo_csv(pozycja, n=150):
     ligi = ["Premier League", "LaLiga", "Bundesliga", "Ekstraklasa", "Eredivisie", "Ligue 1"]
     liga = rng.choice(ligi, n)
     klub = [f"{l.split()[0]} FC {rng.integers(1, 9)}" for l in liga]
-    nazwy = [f"Demo {pozycja.split()[0]} {i:03d}" for i in range(n)]
+    skrot = SKROT_POZYCJI_APLIKACJI[pozycja]
+    nazwy = [f"Demo {skrot} {i:03d}" for i in range(n)]
     nazwy[1] = nazwy[0]   # celowo dwa takie same nazwiska (test unikalnego ID)
 
     generatory = {
@@ -106,7 +103,7 @@ def generuj_demo_csv(pozycja, n=150):
         'Wiek': rng.integers(18, 37, n).astype(str),
         'Klub': klub,
         'Liga': liga,
-        'Pozycja': [SKROT_DEMO[pozycja]] * n,
+        'Pozycja': [skrot] * n,
         'Preferowana noga': rng.choice(["Wyłącznie prawonożny", "Wyłącznie lewonożny", "Obunożny"], n),
         # osobny generator, zeby nie zmieniac pozostalych danych demo
         'Kraj': np.random.default_rng(500 + ZIARNA_DEMO[pozycja]).choice(

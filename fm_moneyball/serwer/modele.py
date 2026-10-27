@@ -71,6 +71,7 @@ class FiltryModel(BaseModel):
     min_score_kandydata: float = 60
     min_niedowartosciowanie: float | None = None
     tylko_z_okazja: bool = False
+    kandydaci_z: list[str] = Field(default_factory=list)
 
 
 class RankingModel(BaseModel):

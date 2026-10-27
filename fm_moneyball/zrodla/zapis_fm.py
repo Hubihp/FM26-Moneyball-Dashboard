@@ -21,7 +21,7 @@ from fm_moneyball.kraje import kraj_z_licznika, kraje_z_kotwic, narodowosci_lig
 from fm_moneyball.mapy import KATALOG_DANYCH, KATALOG_DOMOWY, wczytaj_mape, zapisz_mape
 from fm_moneyball.parsery import fmt_eur
 from fm_moneyball.schemat import dopelnij_schemat
-from fm_moneyball.stale import MAPOWANIE_NAZW_LIG, POZYCJE, kolumna_oceny
+from fm_moneyball.stale import MAPOWANIE_NAZW_LIG, POZYCJE, SKROT_POZYCJI_APLIKACJI, kolumna_oceny
 
 PLIK_NAZW_ROZGRYWEK = KATALOG_DANYCH / "nazwy_rozgrywek.csv"
 PLIK_NAZW_UZYTKOWNIKA = KATALOG_DOMOWY / "nazwy_rozgrywek.csv"
@@ -30,17 +30,12 @@ PLIK_NAZW_UZYTKOWNIKA = KATALOG_DOMOWY / "nazwy_rozgrywek.csv"
 # pokazuje kwoty ok. 1,157 razy wieksze niz zapisane (to odpowiada kursowi GBP -> EUR).
 KURS_DOMYSLNY = 1.157
 
-# Kod pozycji z fmsave -> grupa pozycji w aplikacji
+# Kod pozycji z fmsave -> pozycja (pula) w aplikacji: 1:1, libero liczy sie jako srodkowy obronca
 POZYCJA_Z_KODU = {
-    "gk": "Bramkarz",
-    "dc": "Środkowy Obrońca", "sw": "Środkowy Obrońca",
-    "dl": "Boczny Obrońca", "dr": "Boczny Obrońca",
-    "wbl": "Wahadłowy", "wbr": "Wahadłowy",
-    "dm": "Defensywny Pomocnik",
-    "mc": "Środkowy Pomocnik",
-    "amc": "Ofensywny Pomocnik",
-    "ml": "Skrzydłowy", "mr": "Skrzydłowy", "aml": "Skrzydłowy", "amr": "Skrzydłowy",
-    "stc": "Napastnik",
+    "gk": "Bramkarz", "dc": "Środkowy Obrońca", "sw": "Środkowy Obrońca",
+    "dl": "Lewy Obrońca", "dr": "Prawy Obrońca", "wbl": "Lewy Wahadłowy", "wbr": "Prawy Wahadłowy",
+    "dm": "Defensywny Pomocnik", "mc": "Środkowy Pomocnik", "ml": "Lewy Pomocnik", "mr": "Prawy Pomocnik",
+    "amc": "Ofensywny Pomocnik", "aml": "Lewy Skrzydłowy", "amr": "Prawy Skrzydłowy", "stc": "Napastnik",
 }
 # Kod pozycji z fmsave -> polski skrot (jak na boisku w aplikacji)
 SKROT_POZYCJI = {"gk": "BR", "dc": "ŚO", "sw": "ŚO", "dl": "LO", "dr": "PO", "wbl": "LWAH", "wbr": "PWAH",
@@ -142,16 +137,24 @@ def glowna_pozycja(pozycje):
     return next(kod for kod in KOLEJNOSC_KODOW if oceny[kod] == najlepsza)
 
 
-def grupy_pozycji(pozycje, wszystkie_naturalne=False):
-    """Lista grup pozycji zawodnika: glowna, a opcjonalnie wszystkie naturalne (ocena >= 18)."""
+def grupy_pozycji(pozycje, wszystkie_naturalne=False, naturalne=None):
+    """
+    Lista pozycji (pul) zawodnika: glowna, a opcjonalnie wszystkie naturalne. Naturalne bierzemy
+    z `naturalne` (kody z natural_positions - to samo zrodlo co kolumna "Pozycje"), a bez nich
+    z ocen (>= 18).
+    """
     glowna = glowna_pozycja(pozycje)
     if glowna is None:
         return []
     grupy = [POZYCJA_Z_KODU[glowna]]
     if wszystkie_naturalne:
-        for kod, ocena in oceny_pozycji(pozycje).items():
-            grupa = POZYCJA_Z_KODU[kod]
-            if ocena >= OCENA_NATURALNA and grupa not in grupy:
+        if naturalne:
+            kody = [str(k).lower() for k in naturalne]
+        else:
+            kody = [kod for kod, ocena in oceny_pozycji(pozycje).items() if ocena >= OCENA_NATURALNA]
+        for kod in kody:
+            grupa = POZYCJA_Z_KODU.get(kod)
+            if grupa and grupa not in grupy:
                 grupy.append(grupa)
     return grupy
 
@@ -240,7 +243,6 @@ def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0):
     kontrakt = getattr(zawodnik, "contract", None)
     tygodniowka = kontrakt.wage * kurs if kontrakt is not None and kontrakt.wage is not None else None
     koniec = kontrakt.end if kontrakt is not None else None
-    ability = getattr(zawodnik, "ability", None)
     atrybuty = getattr(zawodnik, "attributes", None)
     osobowosc = getattr(zawodnik, "personality", None)
     koniec_wyp = getattr(zawodnik, "loan_end", None) if getattr(zawodnik, "on_loan", False) else None
@@ -268,8 +270,6 @@ def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0):
         "Zarobki_Numeryczne": np.nan if tygodniowka is None else float(tygodniowka) * 52,
         "Wygasa": f"{koniec.day}.{koniec.month}.{koniec.year}" if koniec else None,
         "Wygasa_Data": pd.Timestamp(koniec) if koniec else pd.NaT,
-        "CA": getattr(ability, "current", None),
-        "PA": getattr(ability, "potential", None),
         "Wypożyczony": bool(getattr(zawodnik, "on_loan", False)),
         "UID": zawodnik.uid,
         "Klub_UID": zawodnik.club_uid,
@@ -313,11 +313,19 @@ def zbuduj_ramki(zawodnicy, liczniki_po_uid, liga_klubu, opcje, moje_kluby=(), k
         minuty = (liczniki or {}).get("minutes") or 0
         if minuty < opcje.min_minut and not moj:
             continue
-        grupy = grupy_pozycji(zawodnik.positions, opcje.wszystkie_naturalne_pozycje)
+        grupy = grupy_pozycji(zawodnik.positions, opcje.wszystkie_naturalne_pozycje,
+                              getattr(zawodnik, "natural_positions", None))
         if not grupy:
             continue
         wiersz = wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje.get(zawodnik.uid, 0))
         wiersz["Pula_główna"] = grupy[0]
+        wiersz["Pule"] = "; ".join(grupy)
+        # kolumna "Pozycje" zawiera kazda pule zawodnika (takze glowna, gdy nie jest naturalna)
+        skroty = [s for s in (wiersz["Pozycja"] or "").split(", ") if s]
+        for grupa in grupy:
+            if SKROT_POZYCJI_APLIKACJI[grupa] not in skroty:
+                skroty.append(SKROT_POZYCJI_APLIKACJI[grupa])
+        wiersz["Pozycja"] = ", ".join(skroty) or None
         for grupa in grupy:
             wiersze[grupa].append(wiersz)
     return {p: dopelnij_schemat(pd.DataFrame(w)) for p, w in wiersze.items() if w}

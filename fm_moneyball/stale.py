@@ -5,8 +5,27 @@ def kolumna_oceny(pozycja):
     return f"Ocena|{pozycja}"
 
 
-POZYCJE = ["Bramkarz", "Środkowy Obrońca", "Boczny Obrońca", "Wahadłowy", "Defensywny Pomocnik",
-           "Środkowy Pomocnik", "Ofensywny Pomocnik", "Skrzydłowy", "Napastnik"]
+# 14 pozycji FM (kazda to osobna pula zawodnikow), od bramkarza do napastnika
+POZYCJE = ["Bramkarz", "Środkowy Obrońca", "Lewy Obrońca", "Prawy Obrońca", "Lewy Wahadłowy", "Prawy Wahadłowy",
+           "Defensywny Pomocnik", "Środkowy Pomocnik", "Lewy Pomocnik", "Prawy Pomocnik", "Ofensywny Pomocnik",
+           "Lewy Skrzydłowy", "Prawy Skrzydłowy", "Napastnik"]
+SKROT_POZYCJI_APLIKACJI = {
+    "Bramkarz": "BR", "Środkowy Obrońca": "ŚO", "Lewy Obrońca": "LO", "Prawy Obrońca": "PO",
+    "Lewy Wahadłowy": "LWAH", "Prawy Wahadłowy": "PWAH", "Defensywny Pomocnik": "DP", "Środkowy Pomocnik": "ŚP",
+    "Lewy Pomocnik": "LP", "Prawy Pomocnik": "PP", "Ofensywny Pomocnik": "OP", "Lewy Skrzydłowy": "LS",
+    "Prawy Skrzydłowy": "PS", "Napastnik": "N",
+}
+# Pozycje lewa/prawa dziela wagi i kolumny z "rodzina" (zadania statystyczne sa takie same)
+RODZINA_POZYCJI = {
+    "Lewy Obrońca": "Boczny Obrońca", "Prawy Obrońca": "Boczny Obrońca",
+    "Lewy Wahadłowy": "Wahadłowy", "Prawy Wahadłowy": "Wahadłowy",
+    "Lewy Pomocnik": "Skrzydłowy", "Prawy Pomocnik": "Skrzydłowy",
+    "Lewy Skrzydłowy": "Skrzydłowy", "Prawy Skrzydłowy": "Skrzydłowy",
+}
+
+
+def _na_pozycje(wg_rodzin, kopia):
+    return {p: kopia(wg_rodzin[RODZINA_POZYCJI.get(p, p)]) for p in POZYCJE}
 
 # Slownik tlumaczen kolumn statystycznych (nazwa w pliku CSV -> nazwa w aplikacji)
 TLUMACZENIE_KOLUMN = {
@@ -43,14 +62,11 @@ KOLUMNY_TYLKO_Z_ZAPISU = [
 # Kolumny liczbowe, ktore konwertujemy raz, przy wczytywaniu
 KOLUMNY_STATYSTYK = [v for v in TLUMACZENIE_KOLUMN.values() if v != "Cena"] + KOLUMNY_TYLKO_Z_ZAPISU
 
-# Dane, ktorych gracz nie widzi wprost w grze (dostepne tylko z pliku zapisu)
-KOLUMNY_UKRYTE = ['CA', 'PA']
-
 # Kolumny, ktorych NIE traktujemy jako statystyk meczowych
 NIE_STATYSTYKI = {
     'SCORE', 'Percentyl', 'Wiarygodność', 'Piłkarz', 'ID', 'Wiek', 'Klub', 'Liga', 'Pozycja', 'Cena',
     'Preferowana noga', 'Kraj', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Płaca', 'Wygasa',
-    'Wygasa_Data', 'Minuty', 'Mnożnik_Ligi', 'CA', 'PA'
+    'Wygasa_Data', 'Minuty', 'Mnożnik_Ligi'
 }
 
 # Statystyki, w ktorych MNIEJ znaczy LEPIEJ (uzywane w radarze i wykresach Top 10)
@@ -87,7 +103,7 @@ CECHY = {
 
 # Domyslne WAZNOSCI cech per pozycja (0-100). W obliczeniach sa normalizowane do sumy 1,
 # wiec liczy sie tylko ich wzajemna proporcja. Cechy, ktorych nie ma w danych, sa pomijane.
-MERYTORYKA_WAG = {
+_WAGI_RODZIN = {
     "Bramkarz": {
         'Uniknięte oczekiwane gole/90': 50, 'Skuteczność obron (%)': 20, 'Odzyskane piłki/90': 10,
         'Strata piłek na podanie': 20},
@@ -131,9 +147,10 @@ MERYTORYKA_WAG = {
         'Oczekiwane asysty/90': 15, 'Kluczowe podania z gry/90': 10, 'Liczba dryblingów/90': 10,
         'Udane próby pressingu/90': 5, 'Odzyskane piłki/90': 5, 'Skuteczność strzałów (%)': 10},
 }
+MERYTORYKA_WAG = _na_pozycje(_WAGI_RODZIN, dict)
 
 _PODSTAWA = ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Cena']
-KOLUMNY_PER_POZYCJA = {
+_KOLUMNY_RODZIN = {
     "Bramkarz": _PODSTAWA + ['Uniknięte oczekiwane gole/90', 'Skuteczność obron (%)', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90'],
     "Środkowy Obrońca": _PODSTAWA + ['Kluczowe podania z gry/90', 'Podania progresywne/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', '% wygranych pojedynków główkowych'],
     "Boczny Obrońca": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane dośrodkowania/90', 'Podania progresywne/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90'],
@@ -144,6 +161,7 @@ KOLUMNY_PER_POZYCJA = {
     "Skrzydłowy": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane dośrodkowania/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Celność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
     "Napastnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Skuteczność strzałów (%)', 'Celność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
 }
+KOLUMNY_PER_POZYCJA = _na_pozycje(_KOLUMNY_RODZIN, list)
 
 # Mnozniki lig bazowe (wartosci heurystyczne - nie sa walidowane na danych)
 MNOZNIKI_LIG = {

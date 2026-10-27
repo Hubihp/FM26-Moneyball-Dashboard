@@ -1,5 +1,6 @@
-import { Alert, Box, Chip, Group, Loader, Stack, Switch, Text } from '@mantine/core';
+import { Alert, Box, Button, Chip, Group, Loader, Stack, Switch, Text } from '@mantine/core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 
 import { api, type Wiersz, type ZapytanieRankingu } from '../api';
 import TabelaRankingu from './TabelaRankingu';
@@ -26,12 +27,14 @@ type Props = {
   setWybrane: (v: string[]) => void;
   pominMoj: boolean;
   setPominMoj: (v: boolean) => void;
+  porownaj: (ids: string[]) => void;
 };
 
 // Ranking zawodnikow z okazjami transferowymi (filtry z panelu bocznego dalej obowiazuja).
 // Ten sam znacznik z kolumny "Okazje" (analiza.wzbogac) - zadnych innych, ukrytych warunkow.
 export default function Okazje({ zapytanie, okazje, wersja, mojKlubUid, naWybor, ulubione, przelaczUlubione, wybrane,
-  setWybrane, pominMoj, setPominMoj }: Props) {
+  setWybrane, pominMoj, setPominMoj, porownaj }: Props) {
+  const [zaznaczeni, setZaznaczeni] = useState<string[]>([]);
   const znane = wybrane.filter((o) => okazje.includes(o));
   const pelne: ZapytanieRankingu = {
     ...zapytanie,
@@ -73,10 +76,15 @@ export default function Okazje({ zapytanie, okazje, wersja, mojKlubUid, naWybor,
       {ranking.error && <Alert color="red">{(ranking.error as Error).message}</Alert>}
       {ranking.data && (
         <>
-          <Text size="sm">Znaleziono: {ranking.data.liczba}</Text>
+          <Group justify="space-between">
+            <Text size="sm">Znaleziono: {ranking.data.liczba}</Text>
+            <Button size="xs" variant="light" disabled={!zaznaczeni.length} onClick={() => porownaj(zaznaczeni)}>
+              Porównaj zaznaczonych ({zaznaczeni.length}{zaznaczeni.length > 4 ? ', pierwszych 4' : ''})
+            </Button>
+          </Group>
           <Box style={{ flex: 1, minHeight: 300 }}>
             <TabelaRankingu kolumny={ranking.data.kolumny} wiersze={ranking.data.wiersze} mojKlubUid={mojKlubUid}
-              naWybor={naWybor} ulubione={ulubione} przelaczUlubione={przelaczUlubione} />
+              naWybor={naWybor} ulubione={ulubione} przelaczUlubione={przelaczUlubione} naZaznaczenie={setZaznaczeni} />
           </Box>
         </>
       )}

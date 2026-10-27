@@ -23,7 +23,8 @@ def utworz(stan, obl):
             "minuty_max": int(df['Minuty'].max()) if 'Minuty' in df.columns and df['Minuty'].notna().any() else None,
             "wagi_domyslne": analiza.wagi_domyslne(pozycja, df),
             "ma_kontrakty": bool(df['Wygasa_Data'].notna().any()),
-            "ma_ukryte": 'CA' in df.columns and bool(df['CA'].notna().any()),
+            "ma_ukryte": any(k in df.columns and bool(df[k].notna().any())
+                             for k in ('Podatność na kontuzje', 'Determinacja')),
             "ma_ryzyko": 'Podatność na kontuzje' in df.columns and bool(df['Podatność na kontuzje'].notna().any()),
             "okazje": list(analiza.OKAZJE),
         }
@@ -74,20 +75,40 @@ def utworz(stan, obl):
 
     @router.post("/lista-zyczen")
     def lista_zyczen(z: ListaZyczenModel):
+        """
+        Zawodnik jest szukany niezaleznie od pozycji, z ktorej go dodano: najpierw w puli tej pozycji,
+        potem w tej samej puli z kandydatami z innych pozycji (tak byl widoczny przy dodawaniu),
+        a na koncu w swojej glownej pozycji (np. wpis z nazwa pozycji sprzed zmiany ich podzialu).
+        """
+        policzone = {}
+
+        def pula_policzona(pozycja, kandydaci):
+            if (pozycja, kandydaci) not in policzone:
+                df = stan.pula(pozycja) if pozycja in POZYCJE else None
+                policzone[(pozycja, kandydaci)] = None if df is None or df.empty else obl.policz(
+                    pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza, kandydaci)[0]
+            return policzone[(pozycja, kandydaci)]
+
+        wszyscy = None
         znalezieni, brak = [], []
-        for pozycja in dict.fromkeys(w.pozycja for w in z.wpisy):
-            wpisy = [w for w in z.wpisy if w.pozycja == pozycja]
-            df = stan.pula(pozycja) if pozycja in POZYCJE else None
-            if df is None or df.empty:
-                brak += [w.klucz for w in wpisy]
-                continue
-            policzona, _, _ = obl.policz(pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
-            for w in wpisy:
-                wiersz = analiza.znajdz_zawodnika(policzona, w.klucz, w.pilkarz)
-                if wiersz.empty:
-                    brak.append(w.klucz)
-                else:
+        for w in z.wpisy:
+            proby = [(w.pozycja, False), (w.pozycja, True)]
+            if wszyscy is None:
+                wszyscy = stan.wszyscy_zawodnicy()
+            if wszyscy is not None:
+                gdzie = analiza.znajdz_zawodnika(wszyscy, w.klucz, w.pilkarz)
+                if not gdzie.empty:
+                    glowna = gdzie.iloc[0].get('Pula_główna')
+                    glowna = glowna if isinstance(glowna, str) else gdzie.iloc[0].get('Pula')
+                    proby.append((glowna, False))
+            for pozycja, kandydaci in proby:
+                policzona = pula_policzona(pozycja, kandydaci)
+                wiersz = analiza.znajdz_zawodnika(policzona, w.klucz, w.pilkarz) if policzona is not None else None
+                if wiersz is not None and not wiersz.empty:
                     znalezieni.append(wiersz.assign(**{'Pozycja na liście': pozycja}))
+                    break
+            else:
+                brak.append(w.klucz)
         ramka = pd.concat(znalezieni, ignore_index=True) if znalezieni else pd.DataFrame()
         return {"kolumny": analiza.kolumny_listy(ramka),
                 "wiersze": analiza.do_json(ramka, analiza.POLA_WIERSZA + ['Pozycja na liście']),

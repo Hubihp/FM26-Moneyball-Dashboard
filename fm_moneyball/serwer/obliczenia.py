@@ -38,19 +38,21 @@ class Obliczenia:
         tekst = self.stan.migawka()["meta"].get("data_gry")
         return date.fromisoformat(tekst) if tekst else None
 
-    def policz(self, pozycja, wagi, ignoruj_mnoznik, k_baza, kandydaci=False):
+    def policz(self, pozycja, wagi, ignoruj_mnoznik, k_baza, kandydaci=False, kandydaci_z=()):
         """-> (policzona pula, pominiete cechy, opis modelu wyceny)"""
         df = self.pula(pozycja)
         wagi = wagi if wagi is not None else analiza.wagi_domyslne(pozycja, df)
         wagi = {k: v for k, v in wagi.items() if k in df.columns}
-        klucz = (self.stan.wersja, pozycja, json.dumps(wagi, sort_keys=True), ignoruj_mnoznik, k_baza, kandydaci)
+        kandydaci_z = tuple(sorted(kandydaci_z)) if kandydaci else ()
+        klucz = (self.stan.wersja, pozycja, json.dumps(wagi, sort_keys=True), ignoruj_mnoznik, k_baza, kandydaci,
+                 kandydaci_z)
         with self._blokada:
             if klucz in self._policzone:
                 self._policzone.move_to_end(klucz)
                 return self._policzone[klucz]
         odniesienie = None
         if kandydaci:
-            df, odniesienie = analiza.dolacz_kandydatow(df, self.stan.wszyscy_zawodnicy(), pozycja)
+            df, odniesienie = analiza.dolacz_kandydatow(df, self.stan.wszyscy_zawodnicy(), pozycja, kandydaci_z)
         policzona, pominiete = analiza.policz_wynik(df, wagi, ignoruj_mnoznik, k_baza, odniesienie)
         policzona, model_wyceny = wycen(policzona, odniesienie, self.data_gry())
         wynik = (analiza.wzbogac(policzona, self.data_gry()), pominiete, model_wyceny)
@@ -63,7 +65,7 @@ class Obliczenia:
     def wynik_i_filtr(self, z: RankingModel):
         """-> (policzona pula, widoczni po filtrach z Pareto, pominiete, model wyceny, ukryci z mojego klubu)"""
         policzona, pominiete, model_wyceny = self.policz(z.pozycja, z.wagi, z.ignoruj_mnoznik, z.k_baza,
-                                                         z.filtry.kandydaci)
+                                                         z.filtry.kandydaci, z.filtry.kandydaci_z)
         filtry = analiza.Filtry(**z.filtry.model_dump())
         moj_klub = self.stan.migawka()["meta"].get("moj_klub_uid")
         widoczni = analiza.filtruj(policzona, filtry, self.data_gry(), moj_klub)

@@ -55,12 +55,15 @@ def test_pozycje():
     assert glowna_pozycja(pozycje(dc=20, dm=18)) == "dc"
     assert grupy_pozycji(pozycje(dc=20, dm=18)) == ["Środkowy Obrońca"]
     assert grupy_pozycji(pozycje(dc=20, dm=18), wszystkie_naturalne=True) == ["Środkowy Obrońca", "Defensywny Pomocnik"]
-    assert grupy_pozycji(pozycje(amr=20, stc=20)) == ["Skrzydłowy"]     # remis -> kolejnosc kodow
+    assert grupy_pozycji(pozycje(amr=20, stc=20)) == ["Prawy Skrzydłowy"]     # remis -> kolejnosc kodow
     assert glowna_pozycja(NS(**{k: 0 for k in KODY})) is None
-    # nowe pule: specjalisci trafiaja do Wahadlowy / Ofensywny Pomocnik, przy remisie wygrywa pozycja klasyczna
-    assert grupy_pozycji(pozycje(wbl=20, dl=17)) == ["Wahadłowy"]
-    assert grupy_pozycji(pozycje(wbl=20, dl=20)) == ["Boczny Obrońca"]
-    assert grupy_pozycji(pozycje(wbl=20, dl=20), wszystkie_naturalne=True) == ["Boczny Obrońca", "Wahadłowy"]
+    # 14 pozycji: strona lewa i prawa osobno, przy remisie wygrywa pozycja klasyczna
+    assert grupy_pozycji(pozycje(wbl=20, dl=17)) == ["Lewy Wahadłowy"]
+    assert grupy_pozycji(pozycje(wbl=20, dl=20)) == ["Lewy Obrońca"]
+    assert grupy_pozycji(pozycje(wbl=20, dl=20), wszystkie_naturalne=True) == ["Lewy Obrońca", "Lewy Wahadłowy"]
+    assert grupy_pozycji(pozycje(ml=20, mr=19), wszystkie_naturalne=True) == ["Lewy Pomocnik", "Prawy Pomocnik"]
+    # naturalne pozycje z natural_positions (to samo zrodlo co kolumna "Pozycje")
+    assert grupy_pozycji(pozycje(amr=20, aml=17), True, ("AMR", "AML")) == ["Prawy Skrzydłowy", "Lewy Skrzydłowy"]
     assert grupy_pozycji(pozycje(amc=20, mc=16)) == ["Ofensywny Pomocnik"]
     assert grupy_pozycji(pozycje(amc=20, mc=20)) == ["Środkowy Pomocnik"]
 
@@ -68,17 +71,19 @@ def test_pozycje():
 def test_polskie_skroty_pozycji():
     ramki = zbuduj_ramki([zawodnik(1, pozycje(wbl=20, dl=19, aml=18))],
                          sumuj_statystyki([wiersz_statystyk(1)], "league"), {10: _liga()}, OpcjeZapisu())
-    assert ramki["Wahadłowy"].iloc[0]["Pozycja"] == "LWAH, LO, LS"
+    assert set(ramki) == {"Lewy Wahadłowy", "Lewy Obrońca", "Lewy Skrzydłowy"}
+    w = ramki["Lewy Skrzydłowy"].iloc[0]
+    assert w["Pozycja"] == "LWAH, LO, LS" and w["Pule"] == "Lewy Wahadłowy; Lewy Obrońca; Lewy Skrzydłowy"
 
 
 def test_zawodnik_na_wszystkich_naturalnych_pozycjach():
     # jak Sirafily Mukhtar: naturalny srodkowy i prawy obronca - wczesniej tylko w puli SO (remis/najwyzsza ocena)
     z = zawodnik(1, pozycje(dc=20, dr=19, dm=16))
     ramki = zbuduj_ramki([z], sumuj_statystyki([wiersz_statystyk(1)], "league"), {10: _liga()}, OpcjeZapisu())
-    assert set(ramki) == {"Środkowy Obrońca", "Boczny Obrońca"}
-    w = ramki["Boczny Obrońca"].iloc[0]
+    assert set(ramki) == {"Środkowy Obrońca", "Prawy Obrońca"}
+    w = ramki["Prawy Obrońca"].iloc[0]
     assert w["Pozycja"] == "ŚO, PO" and w["Pula_główna"] == "Środkowy Obrońca"
-    assert w["Ocena|Boczny Obrońca"] == 19 and w["Ocena|Defensywny Pomocnik"] == 16
+    assert w["Ocena|Prawy Obrońca"] == 19 and w["Ocena|Defensywny Pomocnik"] == 16 and w["Ocena|Lewy Obrońca"] < 18
     # opcja wylaczona = tylko pozycja glowna
     tylko = zbuduj_ramki([z], sumuj_statystyki([wiersz_statystyk(1)], "league"), {10: _liga()},
                          OpcjeZapisu(wszystkie_naturalne_pozycje=False))

@@ -72,6 +72,7 @@ export type Filtry = {
   min_score_kandydata: number;
   min_niedowartosciowanie: number | null;
   tylko_z_okazja?: boolean;
+  kandydaci_z: string[]; // pozycje, z ktorych pochodza kandydaci (puste = wszystkie)
 };
 
 export type ZapytanieRankingu = {
@@ -108,7 +109,10 @@ export type Ranking = {
   model_wyceny: ModelWyceny;
 };
 
-export type Radar = { etykiety: string[]; seria: { id: string; percentyle: number[]; wartosci: (number | null)[] }[] };
+export type Radar = {
+  etykiety: string[];
+  seria: { id: string; pilkarz: string | null; percentyle: number[]; wartosci: (number | null)[] }[];
+};
 
 export type Zapisy = {
   folder: string | null;

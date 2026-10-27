@@ -35,8 +35,15 @@ const KartaZawodnika = lazy(() => import('./komponenty/KartaZawodnika'));
 const Porownanie = lazy(() => import('./komponenty/Porownanie'));
 const Wykresy = lazy(() => import('./komponenty/Wykresy'));
 
-const POZYCJE = ['Bramkarz', 'Środkowy Obrońca', 'Boczny Obrońca', 'Wahadłowy', 'Defensywny Pomocnik', 'Środkowy Pomocnik',
-  'Ofensywny Pomocnik', 'Skrzydłowy', 'Napastnik'];
+const POZYCJE = ['Bramkarz', 'Środkowy Obrońca', 'Lewy Obrońca', 'Prawy Obrońca', 'Lewy Wahadłowy', 'Prawy Wahadłowy',
+  'Defensywny Pomocnik', 'Środkowy Pomocnik', 'Lewy Pomocnik', 'Prawy Pomocnik', 'Ofensywny Pomocnik', 'Lewy Skrzydłowy',
+  'Prawy Skrzydłowy', 'Napastnik'];
+// Pozycje sprzed podzialu na strone lewa/prawa -> nowe (zapamietana pozycja i wlasne wagi)
+const STARE_POZYCJE: Record<string, string[]> = {
+  'Boczny Obrońca': ['Prawy Obrońca', 'Lewy Obrońca'],
+  'Wahadłowy': ['Prawy Wahadłowy', 'Lewy Wahadłowy'],
+  'Skrzydłowy': ['Prawy Skrzydłowy', 'Lewy Skrzydłowy', 'Prawy Pomocnik', 'Lewy Pomocnik'],
+};
 
 // Zdarzenia serwera (SSE): nowa wersja danych albo zmiana statusu wczytywania -> odswiezenie stanu
 function useZdarzeniaSerwera() {
@@ -82,7 +89,8 @@ export default function App() {
   // Pozycja w zwyklym stanie zapamietywanym w localStorage (bez synchronizacji miedzy kartami
   // przegladarki) - zmienia sie tylko po kliknieciu uzytkownika
   const [pozycjaZapisana, setPozycja] = usePamiec('fm-pozycja', 'Napastnik');
-  const pozycja = POZYCJE.includes(pozycjaZapisana) ? pozycjaZapisana : 'Napastnik';
+  const pozycja = POZYCJE.includes(pozycjaZapisana) ? pozycjaZapisana
+    : STARE_POZYCJE[pozycjaZapisana]?.[0] ?? 'Napastnik';
   const [lista, setLista] = usePamiec<WpisListy[]>('fm-lista-zyczen', []);
   // Wybor w karcie "Okazje": wspolny dla wszystkich pozycji, zapamietany (domyslnie nic nie zaznaczone)
   const [okazjeWybrane, setOkazjeWybrane] = usePamiec<string[]>('fm-okazje-wybrane', []);
@@ -91,6 +99,17 @@ export default function App() {
   const [ustawienia, setUstawienia] = usePamiec<Ustawienia>('fm-ustawienia',
     { k_baza: 5, ignoruj_mnoznik: false, pokaz_ukryte: false });
   const [wagiWlasne, setWagiWlasne] = usePamiec<Record<string, Record<string, number>>>('fm-wagi', {});
+  // jednorazowa migracja wlasnych wag dawnych pozycji na nowe (np. Skrzydlowy -> LS, PS, LP, PP)
+  useEffect(() => {
+    const stare = Object.keys(wagiWlasne).filter((p) => p in STARE_POZYCJE);
+    if (!stare.length) return;
+    const nowe = { ...wagiWlasne };
+    for (const p of stare) {
+      for (const n of STARE_POZYCJE[p]) nowe[n] = nowe[n] ?? wagiWlasne[p];
+      delete nowe[p];
+    }
+    setWagiWlasne(nowe);
+  }, [wagiWlasne, setWagiWlasne]);
   const [filtryPozycji, setFiltryPozycji] = useState<Record<string, Filtry>>({});
   const [wybrani, setWybrani] = useState<Record<string, string[]>>({});
   const [karta, setKarta] = useState<string | null>(null);
@@ -148,6 +167,11 @@ export default function App() {
     setKartaWiersz(wiersz);
   };
   const wybraniPozycji = wybrani[pozycja] ?? [];
+  // zaznaczeni w Okazjach / na Liscie zyczen -> Porownanie biezacej pozycji
+  const porownaj = (ids: string[]) => {
+    setWybrani({ ...wybrani, [pozycja]: ids.slice(0, 4) });
+    setZakladka('porownanie');
+  };
   const s = stan.data;
   const mojKlubUid = s?.meta.moj_klub_uid;
   const mojeKluby = s?.meta.moje_kluby ?? [];
@@ -303,13 +327,13 @@ export default function App() {
                 <Okazje zapytanie={zapytanieOpoznione} okazje={meta.data.okazje} wersja={wersja} mojKlubUid={mojKlubUid}
                   naWybor={otworzKarte} ulubione={ulubione} przelaczUlubione={przelaczUlubione}
                   wybrane={okazjeWybrane} setWybrane={setOkazjeWybrane}
-                  pominMoj={okazjeBezMojego} setPominMoj={setOkazjeBezMojego} />
+                  pominMoj={okazjeBezMojego} setPominMoj={setOkazjeBezMojego} porownaj={porownaj} />
               )}
             </Tabs.Panel>
             <Tabs.Panel value="lista" style={{ flex: 1, minHeight: 0 }}>
               {zakladka === 'lista' && (
                 <ListaZyczen lista={lista} setLista={setLista} wersja={wersja} wagi={wagiWlasne} ustawienia={ustawienia}
-                  mojKlubUid={mojKlubUid}
+                  mojKlubUid={mojKlubUid} pozycja={pozycja} porownaj={porownaj}
                   naWybor={(poz, id, wiersz) => {
                     setPozycja(poz);
                     otworzKarte(id, wiersz);
@@ -332,7 +356,7 @@ export default function App() {
               {zakladka === 'porownanie' && (
                 <Suspense fallback={<Loader m="md" />}>
                   <Porownanie pozycja={pozycja} wersja={wersja} wiersze={wiersze} wybrani={wybraniPozycji}
-                    setWybrani={(ids) => setWybrani({ ...wybrani, [pozycja]: ids })} kandydaci={filtry.kandydaci} />
+                    setWybrani={(ids) => setWybrani({ ...wybrani, [pozycja]: ids })} />
                 </Suspense>
               )}
             </Tabs.Panel>
