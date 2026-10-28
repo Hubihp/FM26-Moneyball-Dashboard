@@ -85,3 +85,16 @@ def test_bez_ekstrapolacji_poza_zakres_danych():
     # wewnatrz zakresu wycena bez zmian (oznaczonych tylko kilka skrajnych)
     assert wynik['Wycena_ograniczona'].iloc[:-1].mean() < 0.05
     assert opis["ograniczone"] >= 1 and opis["zakres_score"][1] < 140
+
+
+def test_kontrakt_odcinkami():
+    # jak w grze: przy kontrakcie < 1 roku cena spada gwaltownie, kolejne lata dodaja coraz mniej
+    pula = _pula(n=600)
+    lata = (pula['Wygasa_Data'] - pd.Timestamp(DZIS)).dt.days / 365.25
+    efekt = np.where(lata < 1, 3.0 * (lata - 1), 0.0) + 0.3 * np.minimum(lata, 2)
+    pula['Wartość_Numeryczna'] *= np.exp(efekt - 0.15 * lata)
+    wynik, _ = wycen(pula, data_gry=DZIS)
+    krotki, dlugi = wynik[lata < 0.7], wynik[lata > 3]
+    # bez odcinkow model z jedna prosta myli sie systematycznie w obu grupach
+    assert krotki['Niedowartościowanie'].median() == pytest.approx(1, rel=0.15)
+    assert dlugi['Niedowartościowanie'].median() == pytest.approx(1, rel=0.15)

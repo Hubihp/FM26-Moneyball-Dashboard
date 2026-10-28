@@ -1,7 +1,7 @@
 """
 Wykrywacz niedowartosciowanych zawodnikow: model ceny rynkowej w obrebie puli pozycji.
 
-    log(cena) ~ SCORE + wiek + wiek^2 + min(lata kontraktu, 5)
+    log(cena) ~ SCORE + wiek + wiek^2 + lata kontraktu (odcinkami: zalamanie po 1 i 2 latach, max 5)
 
 "Wycena wg wyniku" to cena typowa dla zawodnika z takim wynikiem, wiekiem i kontraktem.
 Model celowo nie zna ligi ani reputacji klubu: zawodnik z mniejszej ligi czy klubu, ktory
@@ -13,6 +13,9 @@ Bez ekstrapolacji: log(cena) jest liniowy w SCORE, wiec poza zakresem danych wyc
 w puli i wychodzil na mocno niedowartosciowanego). Przy przewidywaniu SCORE i wiek sa obcinane do
 zakresu zawodnikow, na ktorych model sie uczyl, a wycena nie przekracza najwyzszej ceny w puli.
 Takie wyceny sa oznaczone ('Wycena_ograniczona').
+
+Kontrakt odcinkami: w grze cena zawodnika z kontraktem krotszym niz rok jest bliska zeru niezaleznie od
+wyniku, a kazdy kolejny rok podnosi ja coraz mniej - jedna prosta w log(cena) tego nie oddaje.
 """
 from datetime import date
 
@@ -40,7 +43,9 @@ def _cechy(pula, data_gry=None):
     lata = _lata_kontraktu(pula, data_gry)
     lata = lata.clip(0, MAKS_LAT_KONTRAKTU).fillna(lata.median() if lata.notna().any() else 0.0)
     return pd.DataFrame({'stala': 1.0, 'SCORE': pula['SCORE'].astype(float), 'wiek': wiek,
-                         'wiek2': (wiek - 25.0) ** 2, 'lata': lata}, index=pula.index)
+                         'wiek2': (wiek - 25.0) ** 2, 'lata': lata,
+                         'lata_po1': (lata - 1.0).clip(lower=0), 'lata_po2': (lata - 2.0).clip(lower=0)},
+                        index=pula.index)
 
 
 def _dopasuj(X, y):
