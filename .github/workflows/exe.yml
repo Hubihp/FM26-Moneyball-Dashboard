@@ -21,6 +21,7 @@ concurrency:
 jobs:
   exe:
     runs-on: windows-latest
+    timeout-minutes: 30
     defaults:
       run:
         shell: pwsh
@@ -75,8 +76,11 @@ jobs:
           Get-Item dist\FM26Moneyball-Setup.exe | Format-List Name, Length
 
       - name: Test instalatora (cicha instalacja, start w oknie)
+        timeout-minutes: 8
         run: |
-          Start-Process -FilePath "dist\FM26Moneyball-Setup.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+          # bez -Wait: ono czeka tez na procesy potomne, a instalator na koncu uruchamia program
+          $instalator = Start-Process -FilePath "dist\FM26Moneyball-Setup.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -PassThru
+          if (-not $instalator.WaitForExit(300000)) { Write-Error "Instalator nie skończył w 5 minut"; exit 1 }
           $exe = "$env:LOCALAPPDATA\Programs\FM26 Moneyball\FM26Moneyball.exe"
           if (-not (Test-Path $exe)) { Write-Error "Brak zainstalowanego programu"; exit 1 }
           # instalator w trybie cichym sam uruchamia program (jak przy aktualizacji z programu)
