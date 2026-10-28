@@ -58,14 +58,17 @@ def komunikat(tekst, tytul="FM26 Moneyball"):
         print(tekst, file=sys.stderr)
 
 
-def _czekaj_na_serwer(adres, limit=60):
+def _czekaj_na_serwer(port, limit=60):
+    # 127.0.0.1, nie "localhost": w Windows localhost to najpierw IPv6 (::1), a serwer slucha tylko na IPv4 -
+    # kazda proba czekala wtedy ok. 2 s na nieudane polaczenie IPv6
+    adres = f"http://127.0.0.1:{port}/api/system"
     koniec = time.time() + limit
     while time.time() < koniec:
         try:
-            with urllib.request.urlopen(adres + "/api/system", timeout=2):
+            with urllib.request.urlopen(adres, timeout=2):
                 return True
         except Exception:
-            time.sleep(0.2)
+            time.sleep(0.05)
     return False
 
 
@@ -78,8 +81,24 @@ def uruchom(utworz_app, host, port, start):
     Okno programu od razu, a w tle: utworz_app() (ciezkie importy), serwer i przejscie do interfejsu.
     Wraca po zamknieciu okna.
     """
+    # biblioteki (pandas, FastAPI) laduja sie rownolegle z tworzeniem okna
+    zaladowane = threading.Event()
+    wynik = {}
+
+    def laduj():
+        try:
+            import uvicorn
+            wynik["app"], wynik["uvicorn"] = utworz_app(), uvicorn
+        except Exception as e:
+            log.exception("Start programu nie powiódł się")
+            wynik["blad"] = e
+        etap("biblioteki", start)
+        zaladowane.set()
+
+    threading.Thread(target=laduj, daemon=True, name="biblioteki").start()
     import webview
 
+    # okno pod tym samym adresem co w przegladarce (przenoszenie danych z przegladarki)
     adres = f"http://localhost:{port}"
     okno = webview.create_window(f"FM26 Moneyball {__version__}", html=EKRAN_LADOWANIA, width=1500, height=950,
                                  min_size=(1100, 700), text_select=True)
@@ -101,21 +120,21 @@ def uruchom(utworz_app, host, port, start):
     def po_starcie():
         nonlocal serwer
         etap("okno", start)
-        try:
-            pokaz("Ładowanie bibliotek...")
-            import uvicorn
-            app = utworz_app()
-            etap("biblioteki", start)
-            app.state.aktualizacje.zamknij_program = zamknij_program
-            pokaz("Uruchamianie serwera...")
-            serwer = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_config=None, log_level="warning"))
-            threading.Thread(target=serwer.run, daemon=True, name="serwer").start()
-        except Exception as e:
-            log.exception("Start programu nie powiódł się")
-            komunikat(f"Nie udało się uruchomić programu: {e}\n\nSzczegóły w pliku {KATALOG_LOGOW / 'aplikacja.log'}.")
+        pokaz("Ładowanie bibliotek...")
+        zaladowane.wait()
+        if "blad" in wynik:
+            komunikat(f"Nie udało się uruchomić programu: {wynik['blad']}\n\n"
+                      f"Szczegóły w pliku {KATALOG_LOGOW / 'aplikacja.log'}.")
             okno.destroy()
             return
-        if _czekaj_na_serwer(adres):
+        app, uvicorn = wynik["app"], wynik["uvicorn"]
+        app.state.aktualizacje.zamknij_program = zamknij_program
+        pokaz("Uruchamianie serwera...")
+        # bez WebSocketow i zdarzen lifespan (aplikacja ich nie uzywa) - mniej importow przy starcie
+        serwer = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_config=None, log_level="warning",
+                                               ws="none", lifespan="off"))
+        threading.Thread(target=serwer.run, daemon=True, name="serwer").start()
+        if _czekaj_na_serwer(port):
             etap("serwer", start)
             okno.load_url(adres)
         else:
