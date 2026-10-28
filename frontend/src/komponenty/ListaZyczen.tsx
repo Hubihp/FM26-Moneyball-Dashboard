@@ -24,6 +24,7 @@ export default function ListaZyczen({ lista, setLista, wersja, wagi, ustawienia,
   zaznaczeni, naZaznaczenie }: Props) {
   const zapytanie = {
     wpisy: lista.map((w) => ({ klucz: w.klucz, pozycja: w.pozycja, pilkarz: w.pilkarz })),
+    pozycja,
     wagi,
     ignoruj_mnoznik: ustawienia.ignoruj_mnoznik,
     k_baza: ustawienia.k_baza,
@@ -52,7 +53,8 @@ export default function ListaZyczen({ lista, setLista, wersja, wagi, ustawienia,
       <Group justify="space-between">
         <Text size="sm">
           Zawodników na liście: {lista.length}. Wynik liczony w pozycji, z której zawodnik został dodany, z bieżącymi
-          wagami. Gwiazdka usuwa z listy. Zaznacz do 4 zawodników do porównania (na tle pozycji {pozycja}).
+          wagami. Kolumny jak w Rankingu pozycji {pozycja} (wybranej na boisku). Gwiazdka usuwa z listy. Zaznacz do 4
+          zawodników do porównania.
         </Text>
         <Group gap="xs">
           {dane.isFetching && <Loader size="xs" />}

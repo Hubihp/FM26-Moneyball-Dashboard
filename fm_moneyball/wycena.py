@@ -7,6 +7,12 @@ Wykrywacz niedowartosciowanych zawodnikow: model ceny rynkowej w obrebie puli po
 Model celowo nie zna ligi ani reputacji klubu: zawodnik z mniejszej ligi czy klubu, ktory
 gra tak samo dobrze, a kosztuje mniej, to wlasnie okazja, ktorej szukamy (SCORE ma juz korekte
 sily ligi). "Niedowartosciowanie" = wycena / cena: 2,0 znaczy, ze gra jak zawodnik dwa razy drozszy.
+
+Bez ekstrapolacji: log(cena) jest liniowy w SCORE, wiec poza zakresem danych wycena rosla wykladniczo
+(najlepszy zawodnik pozycji, zwlaszcza bardzo mlody, dostawal wycene kilka razy wyzsza niz ktokolwiek
+w puli i wychodzil na mocno niedowartosciowanego). Przy przewidywaniu SCORE i wiek sa obcinane do
+zakresu zawodnikow, na ktorych model sie uczyl, a wycena nie przekracza najwyzszej ceny w puli.
+Takie wyceny sa oznaczone ('Wycena_ograniczona').
 """
 from datetime import date
 
@@ -74,8 +80,17 @@ def wycen(pula, odniesienie=None, data_gry=None):
     if uczace.sum() >= MIN_ZAWODNIKOW:
         X, y = cechy[uczace].to_numpy(), np.log(cena[uczace].to_numpy())
         beta, uzyte = _dopasuj(X, y)
-        przewidywane = cechy[kompletne].to_numpy() @ beta
-        pula.loc[kompletne, 'Wycena wg wyniku'] = np.exp(przewidywane)
+        # bez ekstrapolacji: SCORE i wiek obciete do zakresu danych uczacych, wycena <= najwyzsza cena
+        do_wyceny = cechy[kompletne].copy()
+        uczace_cechy = cechy[uczace]
+        for kol in ('SCORE', 'wiek'):
+            do_wyceny[kol] = do_wyceny[kol].clip(uczace_cechy[kol].min(), uczace_cechy[kol].max())
+        do_wyceny['wiek2'] = (do_wyceny['wiek'] - 25.0) ** 2
+        surowa = np.exp(cechy[kompletne].to_numpy() @ beta)
+        wycena = np.minimum(np.exp(do_wyceny.to_numpy() @ beta), float(cena[uczace].max()))
+        pula.loc[kompletne, 'Wycena wg wyniku'] = wycena
+        pula['Wycena_ograniczona'] = False
+        pula.loc[kompletne, 'Wycena_ograniczona'] = np.abs(wycena / surowa - 1) > 0.01
         z_cena = kompletne & (cena > 0)
         pula.loc[z_cena, 'Niedowartościowanie'] = pula.loc[z_cena, 'Wycena wg wyniku'] / cena[z_cena]
         reszty = y[uzyte] - X[uzyte] @ beta
@@ -86,5 +101,8 @@ def wycen(pula, odniesienie=None, data_gry=None):
         opis = {"r2": round(float(1 - reszty.var() / wariancja), 3) if wariancja > 0 else None,
                 "liczba": int(uczace.sum()),
                 "proc_za_10_score": round(float(np.expm1(10 * beta[1]) * 100), 1),
-                "proc_za_rok_mlodszy": round(float(np.expm1(-za_rok) * 100), 1)}
+                "proc_za_rok_mlodszy": round(float(np.expm1(-za_rok) * 100), 1),
+                "ograniczone": int(pula['Wycena_ograniczona'].sum()),
+                "zakres_score": [round(float(uczace_cechy['SCORE'].min()), 1),
+                                 round(float(uczace_cechy['SCORE'].max()), 1)]}
     return pula, opis

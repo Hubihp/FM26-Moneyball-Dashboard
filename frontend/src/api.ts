@@ -137,7 +137,14 @@ export type ModelWyceny = {
   proc_za_10_score: number | null;
   proc_za_rok_mlodszy: number | null;
 };
-export type Kolumna = { naglowek: string; pole: string; format: Format; statystyka: boolean; nizsze_lepsze: boolean };
+export type Kolumna = {
+  naglowek: string;
+  pole: string;
+  format: Format;
+  statystyka: boolean;
+  nizsze_lepsze: boolean;
+  sortuj?: boolean; // domyslne sortowanie tabeli (np. podobienstwo w "Nastepcy")
+};
 export type Wiersz = Record<string, string | number | boolean | null>;
 
 export type Ranking = {
@@ -243,6 +250,7 @@ export const api = {
     }),
   listaZyczen: (body: {
     wpisy: { klucz: string; pozycja: string; pilkarz: string }[];
+    pozycja?: string; // kolumny jak w Rankingu tej pozycji
     wagi: Record<string, Record<string, number>>;
     ignoruj_mnoznik: boolean;
     k_baza: number;
@@ -252,6 +260,8 @@ export const api = {
   przeladuj: () => post<Stan>('/api/przeladuj', {}),
   metaPozycji: (pozycja: string) => zadanie<MetaPozycji>(`/api/pozycja/${encodeURIComponent(pozycja)}`),
   ranking: (body: ZapytanieRankingu) => post<Ranking>('/api/ranking', body),
+  nastepca: (body: ZapytanieRankingu & { id: string; n?: number }) =>
+    post<{ kolumny: Kolumna[]; wiersze: Wiersz[]; liczba_po_filtrach: number }>('/api/nastepca', body),
   porownanieZMoim: (body: ZapytanieRankingu & { id: string }) => post<PorownanieZMoim>('/api/porownanie-z-moim', body),
   historia: (body: { pozycja: string; id: string; wagi: Record<string, number> | null; ignoruj_mnoznik: boolean;
     k_baza: number }) => post<Historia>('/api/historia', body),

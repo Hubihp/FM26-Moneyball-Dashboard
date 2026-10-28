@@ -38,6 +38,9 @@ const Wykresy = lazy(() => import('./komponenty/Wykresy'));
 const POZYCJE = ['Bramkarz', 'Środkowy Obrońca', 'Lewy Obrońca', 'Prawy Obrońca', 'Lewy Wahadłowy', 'Prawy Wahadłowy',
   'Defensywny Pomocnik', 'Środkowy Pomocnik', 'Lewy Pomocnik', 'Prawy Pomocnik', 'Ofensywny Pomocnik', 'Lewy Skrzydłowy',
   'Prawy Skrzydłowy', 'Napastnik'];
+// Skurczenie przy malej probie (mecze po 90 min): stala, ustawienia nie ma juz w panelu
+const K_BAZA = 5;
+
 // Pozycje sprzed podzialu na strone lewa/prawa -> nowe (zapamietana pozycja i wlasne wagi)
 const STARE_POZYCJE: Record<string, string[]> = {
   'Boczny Obrońca': ['Prawy Obrońca', 'Lewy Obrońca'],
@@ -96,8 +99,10 @@ export default function App() {
   const [okazjeWybrane, setOkazjeWybrane] = usePamiec<string[]>('fm-okazje-wybrane', []);
   const [okazjeBezMojego, setOkazjeBezMojego] = usePamiec('fm-okazje-bez-mojego', true);
   const ulubione = useMemo(() => new Set(lista.map((w) => w.klucz)), [lista]);
-  const [ustawienia, setUstawienia] = usePamiec<Ustawienia>('fm-ustawienia',
-    { k_baza: 5, ignoruj_mnoznik: false });
+  const [ustawieniaZapisane, setUstawienia] = usePamiec<Ustawienia>('fm-ustawienia',
+    { k_baza: K_BAZA, ignoruj_mnoznik: false });
+  // skurczenie przy malej probie: ukryte w panelu, zawsze wartosc domyslna (zapamietana inna jest pomijana)
+  const ustawienia = useMemo(() => ({ ...ustawieniaZapisane, k_baza: K_BAZA }), [ustawieniaZapisane]);
   const [wagiWlasne, setWagiWlasne] = usePamiec<Record<string, Record<string, number>>>('fm-wagi', {});
   // jednorazowa migracja wlasnych wag dawnych pozycji na nowe (np. Skrzydlowy -> LS, PS, LP, PP)
   useEffect(() => {
@@ -155,6 +160,12 @@ export default function App() {
     [pozycja, wagiWlasne, ustawienia, filtry],
   );
   const [zapytanieOpoznione] = useDebouncedValue(zapytanie, 250);
+  // zapytanie dla dowolnej pozycji z jej zapamietanymi filtrami (np. "Nastepca" w Mojej kadrze)
+  const zapytanieDla = (poz: string): ZapytanieRankingu => {
+    const f = { ...PUSTE_FILTRY, ...(filtryPozycji[poz] ?? {}) };
+    return { pozycja: poz, wagi: wagiWlasne[poz] ?? null, ignoruj_mnoznik: ustawienia.ignoruj_mnoznik,
+      k_baza: ustawienia.k_baza, filtry: { ...f, kandydaci: f.kandydaci_z.length > 0 } };
+  };
 
   const ranking = useQuery({
     queryKey: ['ranking', wersja, zapytanieOpoznione],
@@ -354,6 +365,7 @@ export default function App() {
             <Tabs.Panel value="kadra" style={{ overflow: 'auto' }}>
               {zakladka === 'kadra' && (
                 <MojaKadra wersja={wersja} wagi={wagiWlasne} ustawienia={ustawienia} szukajNastepcy={szukajNastepcy}
+                  zapytanieDla={zapytanieDla} mojKlubUid={mojKlubUid}
                   otworz={(poz, id, wiersz) => {
                     setPozycja(poz);
                     otworzKarte(id, wiersz);

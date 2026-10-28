@@ -246,7 +246,8 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         }
         if (k.format === 'score') {
           Object.assign(def, {
-            pinned: 'left', width: 108, sort: 'desc', wrapHeaderText: false, suppressHeaderFilterButton: true,
+            pinned: 'left', width: 108, sort: kolumny.some((x) => x.sortuj) ? null : 'desc', wrapHeaderText: false,
+            suppressHeaderFilterButton: true,
             cellClass: 'komorka-score',
             cellStyle: (p: { value: number | null }) => (p.value === null ? null : { backgroundColor: kolorWyniku(p.value) }),
             headerTooltip: 'Skala T: 50 = przeciętny zawodnik pozycji w próbie, +10 = jedno odchylenie wyżej (z korektą ligową).',
@@ -265,6 +266,9 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
             def.headerTooltip = 'Zmiana SCORE względem ostatniej migawki z poprzedniego sezonu (te same wagi); '
               + 'liczona przy co najmniej 1000 minutach w obu sezonach.';
           }
+        }
+                if (k.sortuj) {
+          Object.assign(def, { sort: 'desc', pinned: 'left', width: 130 });
         }
                 if (k.format === 'pasek') {
           Object.assign(def, { cellRenderer: Pasek, width: 110 });

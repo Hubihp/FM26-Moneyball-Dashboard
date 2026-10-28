@@ -85,13 +85,20 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
             <Pole etykieta="Minuty" wartosc={formatuj(w['Minuty'], 'int')} />
             <Pole etykieta="Noga" wartosc={String(w['Preferowana noga'] ?? '–')} />
             <Pole etykieta="Koszt (cena + 3 lata pensji)" wartosc={eur(w['Koszt'] as number | null)} />
-            <Pole etykieta="Wycena wg wyniku" wartosc={eur(w['Wycena wg wyniku'] as number | null)} />
+            <Pole etykieta={w['Wycena_ograniczona'] ? 'Wycena wg wyniku (ograniczona)' : 'Wycena wg wyniku'}
+              wartosc={eur(w['Wycena wg wyniku'] as number | null)} />
             <Pole etykieta={w['U21'] ? 'Niedowartościowanie (U21)' : 'Niedowartościowanie'}
               wartosc={formatuj(w['Niedowartościowanie'], 'mnoznik')} />
             {w['Kontuzje_2_lata'] !== undefined ? (
               <Pole etykieta="Kontuzje (2 lata)" wartosc={formatuj(w['Kontuzje_2_lata'], 'int')} />
             ) : null}
           </SimpleGrid>
+          {w['Wycena_ograniczona'] ? (
+            <Text size="xs" c="dimmed">
+              Wycena ograniczona do zakresu danych modelu: zawodnik ma wynik lub wiek poza zakresem zawodników tej
+              pozycji, na których model się uczy, więc wycena nie jest ekstrapolowana i nie przekracza najwyższej ceny w puli.
+            </Text>
+          ) : null}
           {w['U21'] ? (
             <Text size="xs" c="dimmed">
               U21: cena młodego zawodnika zawiera potencjał, którego model wyceny nie widzi (zna tylko wynik, wiek i

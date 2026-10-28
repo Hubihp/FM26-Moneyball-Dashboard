@@ -39,6 +39,7 @@ class WpisListyModel(BaseModel):
 
 class ListaZyczenModel(BaseModel):
     wpisy: list[WpisListyModel] = Field(default_factory=list)
+    pozycja: str | None = None   # pozycja wybrana na boisku - kolumny tabeli jak w jej Rankingu
     wagi: dict[str, dict[str, float]] = Field(default_factory=dict)   # pozycja -> wagi (brak = domyslne)
     ignoruj_mnoznik: bool = False
     k_baza: float = 5
@@ -80,6 +81,11 @@ class RankingModel(BaseModel):
     ignoruj_mnoznik: bool = False
     k_baza: float = 5
     filtry: FiltryModel = Field(default_factory=FiltryModel)
+
+
+class NastepcaModel(RankingModel):
+    id: str
+    n: int = 15
 
 
 class PorownanieZMoimModel(RankingModel):

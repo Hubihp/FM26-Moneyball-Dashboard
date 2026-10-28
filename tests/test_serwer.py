@@ -406,3 +406,32 @@ def test_porownanie_z_moim_api(klient):
     assert klient.post("/api/porownanie-z-moim", json={"pozycja": "Napastnik", "id": moj["ID"]}).json()["werdykt"] \
         == "twój zawodnik"
     assert klient.post("/api/porownanie-z-moim", json={"pozycja": "Napastnik", "id": "nie ma"}).status_code == 404
+
+
+def test_nastepca(klient):
+    uid = klient.get("/api/stan").json()["meta"]["moj_klub_uid"]
+    kadra = klient.post("/api/moja-kadra", json={}).json()
+    moj = next(z for p in kadra["pozycje"] if p["pozycja"] == "Napastnik" for z in p["zawodnicy"])
+    filtry = {"min_minut": 1000, "wiek": [18, 25]}
+    wynik = klient.post("/api/nastepca", json={"pozycja": "Napastnik", "id": moj["ID"], "filtry": filtry}).json()
+    w = wynik["wiersze"]
+    assert 0 < len(w) <= 15 and wynik["kolumny"][1]["pole"] == "Podobieństwo" and wynik["kolumny"][1]["sortuj"]
+    assert all(x["Klub_UID"] != uid and x["Minuty"] >= 1000 and 18 <= x["Wiek"] <= 25 for x in w)
+    podobienstwa = [x["Podobieństwo"] for x in w]
+    assert podobienstwa == sorted(podobienstwa, reverse=True) and all(0 <= p <= 100 for p in podobienstwa)
+    # tez zawodnicy z innych pozycji (kandydaci)
+    szersze = klient.post("/api/nastepca", json={"pozycja": "Napastnik", "id": moj["ID"], "n": 60}).json()["wiersze"]
+    assert any(x["Kandydat"] for x in szersze)
+    assert klient.post("/api/nastepca", json={"pozycja": "Napastnik", "id": "nie ma"}).status_code == 404
+
+
+def test_lista_zyczen_kolumny_jak_ranking(klient):
+    nap = klient.post("/api/ranking", json={"pozycja": "Napastnik"}).json()
+    bo = klient.post("/api/ranking", json={"pozycja": "Lewy Obrońca"}).json()["wiersze"][0]
+    lista = klient.post("/api/lista-zyczen", json={"pozycja": "Napastnik", "wpisy": [
+        {"klucz": nap["wiersze"][0]["ID"], "pozycja": "Napastnik"}, {"klucz": bo["ID"], "pozycja": "Lewy Obrońca"}]}).json()
+    pola = [k["pole"] for k in lista["kolumny"]]
+    oczekiwane = [k["pole"] for k in nap["kolumny"]]
+    oczekiwane.insert(oczekiwane.index("Piłkarz") + 1, "Pozycja na liście")
+    assert pola == oczekiwane
+    assert {w["Pozycja na liście"] for w in lista["wiersze"]} == {"Napastnik", "Lewy Obrońca"}

@@ -3,7 +3,7 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException
 
 from fm_moneyball import analiza, historia
-from fm_moneyball.serwer.modele import HistoriaModel, HistoriaWieluModel, PorownanieZMoimModel, KadraModel, ListaZyczenModel, PodobniModel, RadarModel, RankingModel
+from fm_moneyball.serwer.modele import HistoriaModel, HistoriaWieluModel, NastepcaModel, PorownanieZMoimModel, KadraModel, ListaZyczenModel, PodobniModel, RadarModel, RankingModel
 from fm_moneyball.serwer.obliczenia import kandydat
 from fm_moneyball.stale import POZYCJE
 
@@ -73,6 +73,30 @@ def utworz(stan, obl):
             h = obl.historia_zawodnika(z.pozycja, int(w['UID']), w['Piłkarz'], z.wagi, z.ignoruj_mnoznik, z.k_baza)
             wynik.append({"id": id_, "pilkarz": w['Piłkarz'], **h})
         return {"zawodnicy": wynik, "min_minut": historia.MIN_MINUT}
+
+    @router.post("/nastepca")
+    def nastepca(z: NastepcaModel):
+        """
+        Zawodnicy o najbardziej podobnym stylu gry (podobienstwo cosinusowe wektorow z-score statystyk
+        pozycji, wazonych minutami i skurczonych przy malej probie) - takze z innych pozycji, po filtrach
+        pozycji z panelu, zawsze bez mojego klubu.
+        """
+        policzona, _, _ = obl.policz(z.pozycja, z.wagi, z.ignoruj_mnoznik, z.k_baza, kandydaci=True)
+        if not (policzona['ID'] == z.id).any():
+            raise HTTPException(404, "Nie znaleziono zawodnika.")
+        filtry = analiza.Filtry(**{**z.filtry.model_dump(), "bez_mojego_klubu": True, "min_score_kandydata": 0.0})
+        moj_klub = stan.migawka()["meta"].get("moj_klub_uid")
+        widoczni = analiza.filtruj(policzona, filtry, obl.data_gry(), moj_klub)
+        wynik = analiza.podobni(z.pozycja, policzona, widoczni.index, z.id, z.k_baza, z.n)
+        wynik = wynik.assign(Podobieństwo=(wynik['Podobieństwo'].clip(lower=0) * 100).round(1))
+        kolumny = analiza.kolumny_tabeli(z.pozycja, policzona)
+        kolumny.insert(1, {'naglowek': 'Podobieństwo', 'pole': 'Podobieństwo', 'format': 'pasek',
+                           'statystyka': False, 'nizsze_lepsze': False, 'sortuj': True})
+        if 'Kandydat z pozycji' not in [k['pole'] for k in kolumny]:
+            kolumny.insert(3, analiza._opis_kolumny('Kandydat z pozycji'))
+        return {"kolumny": kolumny, "liczba_po_filtrach": int(len(widoczni)),
+                "wiersze": analiza.do_json(wynik, analiza.pola_wiersza(z.pozycja, policzona)
+                                           + ['Podobieństwo', 'Kandydat z pozycji'])}
 
     @router.post("/porownanie-z-moim")
     def porownanie_z_moim(z: PorownanieZMoimModel):
@@ -150,8 +174,17 @@ def utworz(stan, obl):
             else:
                 brak.append(w.klucz)
         ramka = pd.concat(znalezieni, ignore_index=True) if znalezieni else pd.DataFrame()
-        return {"kolumny": analiza.kolumny_listy(ramka),
-                "wiersze": analiza.do_json(ramka, analiza.POLA_WIERSZA + ['Pozycja na liście']),
+        # kolumny jak w Rankingu pozycji wybranej na boisku (te same, ta sama kolejnosc i format)
+        biezaca = pula_policzona(z.pozycja, False) if z.pozycja else None
+        if biezaca is not None and not ramka.empty:
+            kolumny = analiza.kolumny_tabeli(z.pozycja, biezaca)
+            kolumny.insert(next((i + 1 for i, k in enumerate(kolumny) if k['pole'] == 'Piłkarz'), 1),
+                           analiza._opis_kolumny('Pozycja na liście'))
+            pola = analiza.pola_wiersza(z.pozycja, biezaca)
+        else:
+            kolumny, pola = analiza.kolumny_listy(ramka), analiza.POLA_WIERSZA
+        return {"kolumny": kolumny,
+                "wiersze": analiza.do_json(ramka, pola + ['Pozycja na liście']),
                 "nieznalezieni": brak}
 
     return router

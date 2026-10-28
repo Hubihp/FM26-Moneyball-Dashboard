@@ -1,8 +1,10 @@
 import { Alert, Badge, Button, Card, Group, Loader, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 
-import { api, type Wiersz } from '../api';
+import { api, type Wiersz, type ZapytanieRankingu } from '../api';
 import { formatuj } from '../format';
+import Nastepca from './Nastepca';
+import { useState } from 'react';
 import type { Ustawienia } from './PanelBoczny';
 
 type Props = {
@@ -11,10 +13,13 @@ type Props = {
   ustawienia: Ustawienia;
   szukajNastepcy: (pozycja: string) => void;
   otworz: (pozycja: string, id: string, wiersz: Wiersz) => void;
+  zapytanieDla: (pozycja: string) => ZapytanieRankingu;
+  mojKlubUid: number | null | undefined;
 };
 
 // Analiza kadry: moi zawodnicy na kazdej pozycji, od bramkarza do napastnika
-export default function MojaKadra({ wersja, wagi, ustawienia, szukajNastepcy, otworz }: Props) {
+export default function MojaKadra({ wersja, wagi, ustawienia, szukajNastepcy, otworz, zapytanieDla, mojKlubUid }: Props) {
+  const [nastepcaDla, setNastepcaDla] = useState<{ pozycja: string; id: string; pilkarz: string } | null>(null);
   const kadra = useQuery({
     queryKey: ['kadra', wersja, wagi, ustawienia.k_baza, ustawienia.ignoruj_mnoznik],
     queryFn: () => api.mojaKadra({ wagi, ignoruj_mnoznik: ustawienia.ignoruj_mnoznik, k_baza: ustawienia.k_baza }),
@@ -51,7 +56,7 @@ export default function MojaKadra({ wersja, wagi, ustawienia, szukajNastepcy, ot
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Piłkarz</Table.Th><Table.Th>Wiek</Table.Th><Table.Th>SCORE</Table.Th>
-                    <Table.Th>Minuty</Table.Th><Table.Th>Kontrakt do</Table.Th>
+                    <Table.Th>Minuty</Table.Th><Table.Th>Kontrakt do</Table.Th><Table.Th />
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
@@ -67,6 +72,15 @@ export default function MojaKadra({ wersja, wagi, ustawienia, szukajNastepcy, ot
                       <Table.Td c={typeof z['Lata_kontraktu'] === 'number' && z['Lata_kontraktu'] <= 1 ? 'orange' : undefined}>
                         {formatuj(z['Wygasa_Data'], 'data')}
                       </Table.Td>
+                      <Table.Td>
+                        <Button size="compact-xs" variant="light" title="Zawodnicy o najbardziej podobnym stylu gry"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNastepcaDla({ pozycja: p.pozycja, id: String(z['ID']), pilkarz: String(z['Piłkarz']) });
+                          }}>
+                          Następca
+                        </Button>
+                      </Table.Td>
                     </Table.Tr>
                   ))}
                 </Table.Tbody>
@@ -80,6 +94,12 @@ export default function MojaKadra({ wersja, wagi, ustawienia, szukajNastepcy, ot
           </Card>
         ))}
       </SimpleGrid>
+      <Nastepca zawodnik={nastepcaDla} zapytanie={nastepcaDla ? zapytanieDla(nastepcaDla.pozycja) : null} wersja={wersja}
+        mojKlubUid={mojKlubUid} zamknij={() => setNastepcaDla(null)}
+        otworz={(poz, id, w) => {
+          setNastepcaDla(null);
+          otworz(poz, id, w);
+        }} />
     </Stack>
   );
 }

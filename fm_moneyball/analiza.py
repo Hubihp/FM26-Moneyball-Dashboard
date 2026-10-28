@@ -306,7 +306,7 @@ POLA_WIERSZA = ['ID', 'UID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Kraj', 'Wi
                 'Mnożnik_Ligi', 'Wypożyczony', 'Wypożyczenie_do', 'Wolny_agent', 'Lata_kontraktu', 'Koszt',
                 'Okazje', 'Pareto', 'Kandydat', 'Kandydat z pozycji', 'Ocena na pozycji',
                 'Wycena wg wyniku', 'Niedowartościowanie', 'Kontuzje_2_lata', 'Δ SCORE', 'Δ percentyl',
-                'Δ minut', 'Nowe pozycje', 'U21']
+                'Δ minut', 'Nowe pozycje', 'U21', 'Wycena_ograniczona']
 
 
 def pola_wiersza(pozycja, pula):

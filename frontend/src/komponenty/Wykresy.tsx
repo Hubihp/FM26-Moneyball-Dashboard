@@ -1,4 +1,4 @@
-import { Group, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Text, Title } from '@mantine/core';
+import { Group, NumberInput, SegmentedControl, Stack, Text, Title } from '@mantine/core';
 import { useMemo, useState } from 'react';
 
 import type { Kolumna, ModelWyceny, Wiersz } from '../api';
@@ -22,9 +22,7 @@ type Punkt = { value: number[]; id: string; name: string };
 export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naWybor }: Props) {
   const [ile, setIle] = useState(60);
   const [os, setOs] = useState<'Koszt' | 'Wartość_Numeryczna'>('Koszt');
-  const statystyki = kolumny.filter((k) => k.statystyka);
-  const [stat, setStat] = useState<string | null>(null);
-  const wybrana = statystyki.find((k) => k.pole === stat) ?? statystyki[0];
+  const maRozwoj = kolumny.some((k) => k.pole === 'Δ SCORE');
 
   const { punkty, moi, pareto } = useMemo(() => {
     const zX = wiersze.filter((w) => typeof w[os] === 'number' && (w[os] as number) > 0);
@@ -68,12 +66,37 @@ export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naW
     };
   }, [wiersze, mojKlubUid]);
 
-  const top10 = useMemo(() => {
-    if (!wybrana) return [];
-    const z = wiersze.filter((w) => typeof w[wybrana.pole] === 'number');
-    z.sort((a, b) => (wybrana.nizsze_lepsze ? 1 : -1) * ((a[wybrana.pole] as number) - (b[wybrana.pole] as number)));
-    return z.slice(0, 10).reverse();
-  }, [wiersze, wybrana]);
+  // Wiek vs SCORE: mlodzi z wysokim wynikiem (talenty do kupienia przed wzrostem ceny) i rozwoj (Δ SCORE)
+  const wiekowe = useMemo(() => {
+    const czyMoj = (w: Wiersz) => mojKlubUid !== null && mojKlubUid !== undefined && w['Klub_UID'] === mojKlubUid;
+    const punkt = (w: Wiersz, y: unknown) => ({
+      value: [w['Wiek'] as number, y as number, (w['Wartość_Numeryczna'] as number) ?? 0],
+      id: String(w['ID']), name: String(w['Piłkarz']),
+      ...(czyMoj(w) ? { itemStyle: { color: '#fab005', borderColor: '#fff', borderWidth: 1 } } : {}),
+    });
+    const zWiekiem = wiersze.filter((w) => typeof w['Wiek'] === 'number').slice(0, MAKS_PUNKTOW_WYCENY);
+    const ceny = zWiekiem.map((w) => w['Wartość_Numeryczna']).filter((x): x is number => typeof x === 'number' && x > 0);
+    return {
+      wynik: zWiekiem.filter((w) => typeof w['SCORE'] === 'number').map((w) => punkt(w, w['SCORE'])),
+      rozwoj: zWiekiem.filter((w) => typeof w['Δ SCORE'] === 'number').map((w) => punkt(w, w['Δ SCORE'])),
+      cenaMax: ceny.length ? Math.max(...ceny) : 1,
+    };
+  }, [wiersze, mojKlubUid]);
+
+  const tooltipWieku = (nazwaY: string) => ({
+    formatter: (p: unknown) => {
+      const d = (p as { data: { name?: string; value: number[] } }).data;
+      if (!d.name) return '';
+      return `<b>${d.name}</b><br/>wiek ${d.value[0]} · ${nazwaY} ${d.value[1] > 0 && nazwaY === 'Δ SCORE' ? '+' : ''}`
+        + `${d.value[1].toFixed(1).replace('.', ',')}<br/>cena ${eur(d.value[2])}`;
+    },
+  });
+  const klik = (d: unknown) => d && typeof d === 'object' && 'id' in d && naWybor(String((d as { id: unknown }).id));
+  const mapaCeny = {
+    dimension: 2, min: 0, max: wiekowe.cenaMax, calculable: true, right: 0, top: 'middle', seriesIndex: 0,
+    inRange: { color: ['#12b886', '#fab005', '#fa5252'] }, text: ['cena', ''],
+    formatter: (v: unknown) => eur(Number(v)),
+  };
 
   return (
     <Stack p="md" gap="lg">
@@ -171,36 +194,48 @@ export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naW
         </div>
       )}
 
-      <SimpleGrid cols={1}>
-        <Group align="end">
-          <Title order={5}>Top 10 w statystyce</Title>
-          <Select size="xs" w={320} value={wybrana?.pole ?? null} onChange={setStat}
-            data={statystyki.map((k) => ({ value: k.pole, label: k.naglowek + (k.nizsze_lepsze ? ' (mniej = lepiej)' : '') }))} />
-        </Group>
-        {wybrana && (
+      <div>
+        <Title order={5}>Wiek vs SCORE</Title>
+        <Text size="xs" c="dimmed">
+          Młodzi z wysokim wynikiem (lewy górny róg) to talenty, które warto kupić, zanim zdrożeją. Kolor = cena (zielony =
+          tani), bursztynowe obramowanie = twój klub. Kliknij punkt, aby otworzyć kartę.
+        </Text>
+        <Wykres
+          wysokosc={420}
+          naKlik={klik}
+          opcje={{
+            grid: { left: 60, right: 90, top: 20, bottom: 50 },
+            tooltip: tooltipWieku('SCORE'),
+            xAxis: { type: 'value', name: 'Wiek', nameLocation: 'middle', nameGap: 30, scale: true },
+            yAxis: { type: 'value', name: 'SCORE', scale: true },
+            visualMap: mapaCeny,
+            series: [{ type: 'scatter', symbolSize: 9, data: wiekowe.wynik }],
+          }}
+        />
+      </div>
+
+      {maRozwoj && wiekowe.rozwoj.length > 0 && (
+        <div>
+          <Title order={5}>Rozwój: Δ SCORE vs wiek</Title>
+          <Text size="xs" c="dimmed">
+            Zmiana SCORE względem poprzedniego sezonu (przy co najmniej 1000 minutach w obu). Wysoko i z lewej = młodzi,
+            którzy rozwijają się najszybciej; kolor = cena.
+          </Text>
           <Wykres
-            wysokosc={400}
-            naKlik={(d) => d && typeof d === 'object' && 'id' in d && naWybor(String((d as { id: unknown }).id))}
+            wysokosc={380}
+            naKlik={klik}
             opcje={{
-              grid: { left: 200, right: 40, top: 10, bottom: 30 },
-              tooltip: {},
-              xAxis: { type: 'value' },
-              yAxis: { type: 'category', data: top10.map((w) => `${w['Piłkarz']} (${w['Klub'] ?? '?'})`), axisLabel: { fontSize: 11 } },
-              series: [{
-                type: 'bar',
-                data: top10.map((w) => ({
-                  value: w[wybrana.pole] as number,
-                  id: String(w['ID']),
-                  itemStyle: mojKlubUid !== null && mojKlubUid !== undefined && w['Klub_UID'] === mojKlubUid
-                    ? { color: '#fab005' } : undefined,
-                })),
-                itemStyle: { color: '#12b886' },
-                label: { show: true, position: 'right', formatter: (p: { value: unknown }) => Number(p.value).toFixed(2) },
-              }],
+              grid: { left: 60, right: 90, top: 20, bottom: 50 },
+              tooltip: tooltipWieku('Δ SCORE'),
+              xAxis: { type: 'value', name: 'Wiek', nameLocation: 'middle', nameGap: 30, scale: true },
+              yAxis: { type: 'value', name: 'Δ SCORE' },
+              visualMap: mapaCeny,
+              series: [{ type: 'scatter', symbolSize: 9, data: wiekowe.rozwoj,
+                markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0 }], lineStyle: { color: '#868e96', type: 'dashed' } } }],
             }}
           />
-        )}
-      </SimpleGrid>
+        </div>
+      )}
     </Stack>
   );
 }

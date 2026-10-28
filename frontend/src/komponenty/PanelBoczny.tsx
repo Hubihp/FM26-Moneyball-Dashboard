@@ -175,13 +175,6 @@ export default function PanelBoczny(p: Props) {
             <Accordion.Control>Ustawienia wyniku</Accordion.Control>
             <Accordion.Panel>
               <Stack gap="sm">
-                <div>
-                  <Tooltip multiline w={280} label="Zawodnik z małą liczbą minut jest przyciągany do średniej pozycji. 0 = wyłączone.">
-                    <Text size="sm">Skurczenie przy małej próbie: {p.ustawienia.k_baza} mecz.</Text>
-                  </Tooltip>
-                  <Slider min={0} max={15} value={p.ustawienia.k_baza} label={null}
-                    onChange={(v) => p.setUstawienia({ ...p.ustawienia, k_baza: v })} />
-                </div>
                 <Switch label="Ignoruj mnożnik ligowy" checked={p.ustawienia.ignoruj_mnoznik}
                   onChange={(e) => p.setUstawienia({ ...p.ustawienia, ignoruj_mnoznik: e.currentTarget.checked })} />
               </Stack>

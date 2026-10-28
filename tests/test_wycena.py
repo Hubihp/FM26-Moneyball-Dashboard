@@ -70,3 +70,18 @@ def test_znacznik_okazji_i_brak_ca():
     assert "niedowartościowany" in wzbogacona.loc[6, 'Okazje']
     widoczni = analiza.filtruj(wzbogacona, analiza.Filtry(min_niedowartosciowanie=2), DZIS)
     assert 6 in widoczni.index and (widoczni['Niedowartościowanie'] >= 2).all()
+
+
+def test_bez_ekstrapolacji_poza_zakres_danych():
+    pula = _pula()
+    # kandydat spoza pozycji z SCORE daleko powyzej puli (bez ceny) i najmlodszy zawodnik
+    pula.loc[len(pula)] = {'ID': "K", 'SCORE': 140.0, 'Wiek': 16.0, 'Wartość_Numeryczna': np.nan,
+                           'Zarobki_Numeryczne': np.nan, 'Wygasa_Data': pd.Timestamp(DZIS) + pd.Timedelta(days=900)}
+    maska = pd.Series([True] * (len(pula) - 1) + [False])
+    wynik, opis = wycen(pula, maska, data_gry=DZIS)
+    k = wynik.iloc[-1]
+    # dawniej exp(0.08 * 90 ponad srednia) ~ x1300; teraz nie wiecej niz najdrozszy w puli
+    assert k['Wycena wg wyniku'] <= pula['Wartość_Numeryczna'].max() + 1 and k['Wycena_ograniczona']
+    # wewnatrz zakresu wycena bez zmian (oznaczonych tylko kilka skrajnych)
+    assert wynik['Wycena_ograniczona'].iloc[:-1].mean() < 0.05
+    assert opis["ograniczone"] >= 1 and opis["zakres_score"][1] < 140
