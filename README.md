@@ -57,15 +57,20 @@ Dośrodkowania, 100% sytuacje i sprinty pochodzą tylko z zapisu gry. Przy impor
 1. Pobierz kod jako ZIP (na GitHubie: przycisk *Code*, potem *Download ZIP*) i rozpakuj go.
 2. W PowerShellu przejdź do rozpakowanego folderu (`cd "ścieżka\do\folderu"`) i sprawdź wersję Pythona poleceniem `py --version`. Potrzebna jest wersja 3.12 lub nowsza. Jeśli jej brakuje, uruchom `winget install -e --id Python.Python.3.12` i otwórz PowerShell na nowo.
 3. Zainstaluj biblioteki: `py -m pip install -r requirements.txt`. Na każdym nowym komputerze trzeba to zrobić raz.
-4. Uruchom aplikację: `py -m fm_moneyball` (w folderze projektu). Przeglądarka otworzy się sama. Okno PowerShella musi pozostać otwarte, a `Ctrl+C` kończy pracę aplikacji.
+4. Uruchom aplikację: `py -m fm_moneyball` (w folderze projektu). Otworzy się okno programu (albo przeglądarka z `--przegladarka`). Okno PowerShella musi pozostać otwarte, a `Ctrl+C` kończy pracę aplikacji.
 
-### Wersja .exe (bez instalowania Pythona)
+### Program dla Windows (zalecane)
 
-Pobierz [FM26Moneyball.exe](https://github.com/Hubihp/FM26-Moneyball-Dashboard/releases/download/najnowsza/FM26Moneyball.exe) i uruchom go dwuklikiem. Otworzy się czarne okno z adresem aplikacji i przeglądarka; zamknięcie okna kończy działanie aplikacji. Ponowny dwuklik, gdy aplikacja już działa, tylko otwiera przeglądarkę.
+Pobierz [FM26Moneyball-Setup.exe](https://github.com/Hubihp/FM26-Moneyball-Dashboard/releases/latest/download/FM26Moneyball-Setup.exe) i uruchom. Instalator nie wymaga uprawnień administratora: instaluje program w `%LOCALAPPDATA%\Programs\FM26 Moneyball` i tworzy skrót w menu Start (opcjonalnie na pulpicie). Program otwiera się we własnym oknie, bez okna konsoli i bez przeglądarki; zamknięcie okna kończy jego działanie.
 
-- Plik nie jest podpisany certyfikatem, więc przy pierwszym uruchomieniu Windows SmartScreen może ostrzec o nieznanym wydawcy: kliknij „Więcej informacji”, a potem „Uruchom mimo to”.
-- Start trwa kilka sekund dłużej niż przy `py -m fm_moneyball`, bo program rozpakowuje się do folderu tymczasowego.
-- Aktualizacja: pobierz nowy plik z tego samego linku. Plik buduje się automatycznie po każdej zmianie w kodzie (GitHub Actions). Ustawienia, nazwy lig i krajów oraz cache są w `%USERPROFILE%\.fm_moneyball`, więc zostają.
+- **Aktualizacje:** przy każdym starcie program sprawdza na GitHubie, czy jest nowsza wersja. Jeśli jest, pokazuje pasek z opisem zmian i przyciskiem „Zainstaluj teraz”: pobiera instalator, sprawdza jego sumę kontrolną, instaluje go po cichu i uruchamia się ponownie. Wersja w nagłówku (np. „v1.0.0”) otwiera okno „O programie” z ręcznym sprawdzeniem aktualizacji.
+- **Twoje dane** są w `%USERPROFILE%\.fm_moneyball`, poza folderem programu, więc aktualizacja ani odinstalowanie ich nie zmieniają: lista życzeń, filtry, wagi i układ tabel (`pamiec.json`), ustawienia źródła, historia zawodników, nazwy lig i krajów, pamięć podręczna zapisów i dziennik (`logi`). Zapisy gry zostają w folderze gry.
+- **Przeniesienie danych z przeglądarki:** jeśli wcześniej używałeś aplikacji w przeglądarce, przy pierwszym uruchomieniu kliknij „Przenieś dane z przeglądarki” (także w oknie „O programie”). Twoja przeglądarka otworzy aplikację i prześle do programu listę życzeń, filtry i układ tabel; potem kliknij „Odśwież” w oknie programu.
+- **SmartScreen:** instalator nie jest podpisany certyfikatem, więc przy pierwszej instalacji Windows może ostrzec o nieznanym wydawcy: „Więcej informacji”, potem „Uruchom mimo to”. Aktualizacje pobierane przez sam program tego ostrzeżenia zwykle nie wywołują.
+- **Wymagania:** Windows 10 lub 11 z Microsoft Edge WebView2 (wbudowany w Windows 11 i aktualne Windows 10; jeśli go brakuje, program pokaże link do instalatora Microsoftu).
+- Tryb przeglądarki nadal działa: `FM26Moneyball.exe --przegladarka` albo `py -m fm_moneyball --przegladarka`.
+
+**Publikowanie nowej wersji** (dla dewelopera): podnieś `__version__` w `fm_moneyball/__init__.py`, dopisz sekcję `## <wersja>` w `ZMIANY.md` i wypchnij tag `v<wersja>` (np. `git tag v1.1.0 && git push origin v1.1.0`). GitHub Actions zbuduje program i instalator, przetestuje cichą instalację i opublikuje wydanie; programy użytkowników wykryją je przy następnym starcie.
 
 ### Aktualizacja
 

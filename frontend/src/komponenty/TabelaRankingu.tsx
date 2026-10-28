@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Kolumna, Wiersz } from '../api';
 import { formatuj, kolorNiedowartosciowania, kolorWyniku, kolorZmiany } from '../format';
 import { kluczZawodnika } from '../pamiec';
+import { czytaj, zapisz } from '../pamiecSerwera';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -78,7 +79,7 @@ const DOMYSLNA_KOLUMNA = { wrapHeaderText: true, autoHeaderHeight: false, width:
 function wczytajUklad(klucz: string | undefined): ColumnState[] | null {
   if (!klucz) return null;
   try {
-    const zapis = window.localStorage.getItem(PREFIKS_UKLADU + klucz);
+    const zapis = czytaj(PREFIKS_UKLADU + klucz);
     return zapis ? (JSON.parse(zapis) as ColumnState[]) : null;
   } catch {
     return null;
@@ -139,7 +140,7 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
   const siatka = useRef<AgGridReact<Wiersz>>(null);
   const [ukryte, setUkryte] = useState<string[]>([]);
 
-  // Uklad tabeli zapamietany w przegladarce: zapis po kazdej zmianie, odtworzenie po zbudowaniu kolumn
+  // Uklad tabeli zapamietany w pamieci interfejsu: zapis po kazdej zmianie, odtworzenie po zbudowaniu kolumn
   const odtwarzanie = useRef(false);
   const zapiszUklad = useCallback(() => {
     const api = siatka.current?.api;
@@ -148,11 +149,7 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
     const nowe = stan.filter((c) => c.hide).map((c) => c.colId);
     setUkryte((stare) => (stare.join('|') === nowe.join('|') ? stare : nowe));
     if (!kluczUkladu || odtwarzanie.current) return;
-    try {
-      window.localStorage.setItem(PREFIKS_UKLADU + kluczUkladu, JSON.stringify(stan));
-    } catch {
-      // brak dostepu do localStorage - uklad nie zostanie zapamietany
-    }
+    zapisz(PREFIKS_UKLADU + kluczUkladu, JSON.stringify(stan));
   }, [kluczUkladu]);
   const odtworzUklad = useCallback(() => {
     const api = siatka.current?.api;
@@ -164,11 +161,7 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
     setUkryte(uklad.filter((c) => c.hide).map((c) => c.colId));
   }, [kluczUkladu]);
   const przywrocUklad = () => {
-    try {
-      if (kluczUkladu) window.localStorage.removeItem(PREFIKS_UKLADU + kluczUkladu);
-    } catch {
-      // jw.
-    }
+    if (kluczUkladu) zapisz(PREFIKS_UKLADU + kluczUkladu, null);
     siatka.current?.api?.resetColumnState();
     setUkryte([]);
   };

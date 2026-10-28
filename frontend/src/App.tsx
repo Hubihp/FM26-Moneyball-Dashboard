@@ -20,6 +20,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api, type Filtry, type Stan, type Wiersz, type ZapytanieRankingu } from './api';
+import { PasekSystemu, WersjaProgramu } from './komponenty/Aktualizacja';
 import ListaZyczen from './komponenty/ListaZyczen';
 import { kluczZawodnika, usePamiec, type WpisListy } from './pamiec';
 
@@ -89,8 +90,8 @@ export default function App() {
   useZdarzeniaSerwera();
   const klient = useQueryClient();
   const [panelZrodla, setPanelZrodla] = useState(false);
-  // Pozycja w zwyklym stanie zapamietywanym w localStorage (bez synchronizacji miedzy kartami
-  // przegladarki) - zmienia sie tylko po kliknieciu uzytkownika
+  // Pozycja w stanie zapamietywanym w pamieci interfejsu (bez synchronizacji miedzy oknami)
+  // - zmienia sie tylko po kliknieciu uzytkownika
   const [pozycjaZapisana, setPozycja] = usePamiec('fm-pozycja', 'Napastnik');
   const pozycja = POZYCJE.includes(pozycjaZapisana) ? pozycjaZapisana
     : STARE_POZYCJE[pozycjaZapisana]?.[0] ?? 'Napastnik';
@@ -221,6 +222,7 @@ export default function App() {
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap">
             <Title order={3}>FM26 Moneyball</Title>
+            <WersjaProgramu />
             {s?.meta.nazwa_zapisu && <Badge variant="light" size="lg">{s.meta.nazwa_zapisu}</Badge>}
             {s?.meta.data_gry && <Badge variant="outline" color="gray">data w grze: {s.meta.data_gry}</Badge>}
             {mojeKluby.length > 1 ? (
@@ -272,6 +274,7 @@ export default function App() {
       </AppShell.Navbar>
 
       <AppShell.Main style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <PasekSystemu />
         {s?.status === 'blad' && <Alert color="red" m="md" title="Problem z danymi">{s.komunikat}</Alert>}
         {(s?.meta.ostrzezenia ?? []).map((o) => <Alert key={o} color="yellow" mx="md" mt="xs">{o}</Alert>)}
 

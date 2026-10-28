@@ -1,22 +1,29 @@
-# Buduje FM26Moneyball.exe (Windows) i publikuje go w wydaniu "najnowsza":
-# https://github.com/Hubihp/FM26-Moneyball-Dashboard/releases/download/najnowsza/FM26Moneyball.exe
+# Buduje program FM26 Moneyball dla Windows (okno bez konsoli) i instalator FM26Moneyball-Setup.exe.
+# - push na galaz robocza: budowanie + testy, instalator jako artefakt (bez wydania)
+# - tag v1.2.3: to samo + wydanie na GitHubie (opis z ZMIANY.md). Program sprawdza przy starcie
+#   najnowsze wydanie i proponuje aktualizacje. Staly link do instalatora:
+#   https://github.com/Hubihp/FM26-Moneyball-Dashboard/releases/latest/download/FM26Moneyball-Setup.exe
 name: Plik exe dla Windows
 
 on:
   push:
     branches: [claude/optimistic-lamport-we8t1j]
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: exe
+  group: exe-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   exe:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - uses: actions/checkout@v4
 
@@ -27,41 +34,92 @@ jobs:
       - name: Biblioteki
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pandas numpy "fmsave[pandas]==0.5.11" fastapi uvicorn python-multipart pyinstaller
+          python -m pip install -r requirements.txt pyinstaller
 
-      - name: Budowanie exe
+      - name: Wersja
+        id: wersja
+        run: |
+          $wersja = (Select-String -Path fm_moneyball\__init__.py -Pattern '__version__ = "([^"]+)"').Matches[0].Groups[1].Value
+          if ("${{ github.ref_type }}" -eq "tag" -and "${{ github.ref_name }}" -ne "v$wersja") {
+            Write-Error "Tag ${{ github.ref_name }} nie zgadza się z wersją w kodzie ($wersja)"; exit 1
+          }
+          "wersja=$wersja" >> $env:GITHUB_OUTPUT
+          Write-Host "Wersja $wersja"
+
+      - name: Budowanie programu
         run: pyinstaller --noconfirm fm26_moneyball.spec
 
-      - name: Test dymny (start, interfejs, API)
-        shell: pwsh
+      - name: Test dymny programu (serwer bez okna)
         run: |
-          $proces = Start-Process -FilePath "dist\FM26Moneyball.exe" -ArgumentList "--bez-przegladarki" -PassThru
+          $proces = Start-Process -FilePath "dist\FM26Moneyball\FM26Moneyball.exe" -ArgumentList "--bez-przegladarki" -PassThru
           $ok = $false
           for ($i = 0; $i -lt 60; $i++) {
             Start-Sleep -Seconds 2
             try {
-              $stan = Invoke-WebRequest -Uri "http://127.0.0.1:8765/api/stan" -UseBasicParsing
+              $system = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/system"
               $strona = Invoke-WebRequest -Uri "http://127.0.0.1:8765/" -UseBasicParsing
-              if ($stan.StatusCode -eq 200 -and $strona.Content -match 'id="root"') { $ok = $true; break }
+              if ($system.wersja_programu -eq "${{ steps.wersja.outputs.wersja }}" -and $strona.Content -match 'id="root"') { $ok = $true; break }
             } catch { }
           }
           Stop-Process -Id $proces.Id -Force
-          if (-not $ok) { Write-Error "Aplikacja nie odpowiada"; exit 1 }
-          Write-Host "Aplikacja odpowiada poprawnie"
+          if (-not $ok) { Write-Error "Program nie odpowiada"; exit 1 }
+          Write-Host "Program odpowiada poprawnie"
 
-      - name: Przesuniecie tagu najnowsza
+      - name: Instalator (Inno Setup)
         run: |
-          git tag -f najnowsza
-          git push -f origin najnowsza
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DWersja=${{ steps.wersja.outputs.wersja }}" instalator\fm26_moneyball.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $skrot = (Get-FileHash dist\FM26Moneyball-Setup.exe -Algorithm SHA256).Hash.ToLower()
+          [IO.File]::WriteAllText("dist\FM26Moneyball-Setup.exe.sha256", "$skrot  FM26Moneyball-Setup.exe`n")
+          Get-Item dist\FM26Moneyball-Setup.exe | Format-List Name, Length
+
+      - name: Test instalatora (cicha instalacja, start w oknie)
+        run: |
+          Start-Process -FilePath "dist\FM26Moneyball-Setup.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+          $exe = "$env:LOCALAPPDATA\Programs\FM26 Moneyball\FM26Moneyball.exe"
+          if (-not (Test-Path $exe)) { Write-Error "Brak zainstalowanego programu"; exit 1 }
+          # instalator w trybie cichym sam uruchamia program (jak przy aktualizacji z programu)
+          $ok = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            Start-Sleep -Seconds 2
+            try {
+              $system = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/system"
+              if ($system.okno -and $system.wersja_programu -eq "${{ steps.wersja.outputs.wersja }}") { $ok = $true; break }
+            } catch { }
+          }
+          Start-Sleep -Seconds 5
+          $log = "$env:USERPROFILE\.fm_moneyball\logi\aplikacja.log"
+          if (Test-Path $log) { Get-Content $log }
+          $bledy = (Test-Path $log) -and (Select-String -Path $log -Pattern " ERROR " -Quiet)
+          Get-Process FM26Moneyball -ErrorAction SilentlyContinue | Stop-Process -Force
+          if (-not $ok) { Write-Error "Zainstalowany program nie wystartował w oknie"; exit 1 }
+          if ($bledy) { Write-Error "Błędy w dzienniku programu"; exit 1 }
+          Write-Host "Instalator i program w oknie działają"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FM26Moneyball-Setup-${{ steps.wersja.outputs.wersja }}
+          path: |
+            dist/FM26Moneyball-Setup.exe
+            dist/FM26Moneyball-Setup.exe.sha256
+
+      - name: Opis wydania z ZMIANY.md
+        if: github.ref_type == 'tag'
+        run: |
+          $wersja = "${{ steps.wersja.outputs.wersja }}"
+          $tekst = Get-Content ZMIANY.md -Raw -Encoding utf8
+          $m = [regex]::Match($tekst, "(?ms)^## $([regex]::Escape($wersja))\b[^\n]*\n(.*?)(?=^## |\z)")
+          $opis = if ($m.Success) { $m.Groups[1].Value.Trim() } else { "Wersja $wersja" }
+          [IO.File]::WriteAllText("opis_wydania.md", $opis)
 
       - name: Wydanie
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: najnowsza
-          name: FM26 Moneyball - najnowsza wersja
-          body: |
-            Pobierz FM26Moneyball.exe i uruchom dwuklikiem - nie trzeba instalowac Pythona.
-            Aplikacja otworzy sie w przegladarce; zamkniecie czarnego okna konczy jej dzialanie.
-            Wersja z commita ${{ github.sha }}.
-          files: dist/FM26Moneyball.exe
+          name: FM26 Moneyball ${{ steps.wersja.outputs.wersja }}
+          body_path: opis_wydania.md
+          files: |
+            dist/FM26Moneyball-Setup.exe
+            dist/FM26Moneyball-Setup.exe.sha256
           make_latest: true

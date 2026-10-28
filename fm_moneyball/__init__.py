@@ -9,3 +9,5 @@ Rdzen FM26 Moneyball Dashboard - logika niezalezna od interfejsu.
   zrodla/zapis_fm.py  - plik zapisu kariery .fm (biblioteka fmsave)
   zrodla/folder.py    - folder zapisow gry: wyszukiwanie najnowszego zapisu, bezpieczna kopia
 """
+
+__version__ = "1.0.0"

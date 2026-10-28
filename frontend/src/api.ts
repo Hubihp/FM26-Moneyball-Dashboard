@@ -201,6 +201,19 @@ export type Kraj = {
   przyklady: string[];
 };
 
+export type SystemInfo = {
+  wersja_programu: string;
+  sprawdzono: boolean;
+  dostepna: boolean;
+  wersja: string | null;
+  notatki: string | null;
+  strona: string;
+  rozmiar: number | null;
+  mozna_instalowac: boolean;
+  okno: boolean;
+  postep: { etap: 'pobieranie' | 'instalacja' | 'blad'; proc?: number; komunikat?: string } | null;
+};
+
 export type ListaZyczen = { kolumny: Kolumna[]; wiersze: Wiersz[]; nieznalezieni: string[] };
 
 async function zadanie<T>(url: string, init?: RequestInit): Promise<T> {
@@ -222,6 +235,10 @@ const post = <T,>(url: string, body: unknown) =>
   zadanie<T>(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 export const api = {
+  system: () => zadanie<SystemInfo>('/api/system'),
+  sprawdzAktualizacje: () => post<SystemInfo>('/api/aktualizacja/sprawdz', {}),
+  instalujAktualizacje: () => post<SystemInfo>('/api/aktualizacja/instaluj', {}),
+  przeniesZPrzegladarki: () => post<{ ok: boolean }>('/api/przenies-z-przegladarki', {}),
   stan: () => zadanie<Stan>('/api/stan'),
   zapisy: (folder?: string | null) =>
     zadanie<Zapisy>('/api/zapisy' + (folder ? `?folder=${encodeURIComponent(folder)}` : '')),

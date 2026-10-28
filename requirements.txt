@@ -8,3 +8,5 @@ fmsave[pandas]==0.5.11
 fastapi>=0.115
 uvicorn>=0.30
 python-multipart>=0.0.9
+# Wlasne okno programu (WebView2, wbudowany w Windows 10/11); bez niego aplikacja otwiera sie w przegladarce
+pywebview>=5.3; sys_platform == "win32"
