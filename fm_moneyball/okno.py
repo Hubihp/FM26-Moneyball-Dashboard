@@ -133,9 +133,15 @@ def uruchom(utworz_app, host, port, start):
         # bez WebSocketow i zdarzen lifespan (aplikacja ich nie uzywa) - mniej importow przy starcie
         serwer = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_config=None, log_level="warning",
                                                ws="none", lifespan="off"))
-        threading.Thread(target=serwer.run, daemon=True, name="serwer").start()
-        if _czekaj_na_serwer(port):
-            etap("serwer", start)
+        watek = threading.Thread(target=serwer.run, daemon=True, name="serwer")
+        watek.start()
+        # gotowosc z flagi uvicorna (bez zapytan HTTP); czasy etapow do dziennika
+        koniec = time.time() + 60
+        while not serwer.started and watek.is_alive() and time.time() < koniec:
+            time.sleep(0.01)
+        etap("serwer", start)
+        if serwer.started and _czekaj_na_serwer(port, limit=10):
+            etap("odpowiedz", start)
             okno.load_url(adres)
         else:
             komunikat("Serwer aplikacji nie wystartował. Szczegóły w pliku "

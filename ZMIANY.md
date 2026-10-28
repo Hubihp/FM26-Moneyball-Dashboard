@@ -3,6 +3,10 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 1.1.2
+
+- Gotowość serwera z sygnału serwera zamiast odpytywania; dokładniejsze czasy etapów startu w dzienniku.
+
 ## 1.1.1
 
 - Szybszy start: biblioteki ładują się równolegle z otwieraniem okna, a sprawdzanie gotowości serwera nie czeka
