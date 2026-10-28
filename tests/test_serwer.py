@@ -468,3 +468,14 @@ def test_profil_druzyny_demo(klient):
             assert 1 <= m["miejsce"] <= m["n"] == p["kluby"]
     assert p["atletyzm"] is None                      # demo nie ma dystansu i sprintow
     assert p["zmiany"]["historia"] is False
+
+
+def test_sklad_i_tylko_pierwsza(klient):
+    s = klient.post("/api/sklad", json={}).json()
+    assert s["zawodnicy"] and set(s["pozycje"]) >= {"Bramkarz", "Napastnik"}
+    for z in s["zawodnicy"]:
+        assert z["score"] and set(z["score"]) <= set(s["pozycje"]) and set(z["id_w_pulach"]) >= set(z["score"])
+    k1 = klient.post("/api/moja-kadra", json={}).json()
+    k2 = klient.post("/api/moja-kadra", json={"tylko_pierwsza": False}).json()
+    assert [p["liczba"] for p in k1["pozycje"]] == [p["liczba"] for p in k2["pozycje"]]   # demo: bez rezerw
+    assert all(p["ukryci"] == 0 for p in k1["pozycje"])

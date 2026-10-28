@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Card, Group, Loader, SegmentedControl, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { Alert, Badge, Button, Card, Group, Loader, SegmentedControl, SimpleGrid, Stack, Switch, Table, Text, Title } from '@mantine/core';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { lazy, Suspense, useState } from 'react';
 
@@ -10,13 +10,14 @@ import type { Ustawienia } from './PanelBoczny';
 
 const SprzedajDrogo = lazy(() => import('./SprzedajDrogo'));
 const Optymalizator = lazy(() => import('./Optymalizator'));
+const Taktyka = lazy(() => import('./Taktyka'));
 
 type Props = {
   wersja: number;
   wagi: Record<string, Record<string, number>>;
   ustawienia: Ustawienia;
   szukajNastepcy: (pozycja: string) => void;
-  otworz: (pozycja: string, id: string, wiersz: Wiersz) => void;
+  otworz: (pozycja: string, id: string, wiersz?: Wiersz) => void;
   zapytanieDla: (pozycja: string) => ZapytanieRankingu;
   mojKlubUid: number | null | undefined;
   filtry: Filtry;                 // wspolne filtry panelu (zastepcy, kandydaci optymalizatora)
@@ -28,21 +29,35 @@ type Props = {
 export default function MojaKadra(p: Props) {
   const { wersja, wagi, ustawienia, otworz } = p;
   const [widok, setWidok] = usePamiec('fm-kadra-widok', 'pozycje');
+  // domyslnie tylko seniorska pierwsza druzyna (bez rezerw, druzyn B i juniorow)
+  const [tylkoPierwsza, setTylkoPierwsza] = usePamiec('fm-tylko-pierwsza', true);
   const kadra = useQuery({
-    queryKey: ['kadra', wersja, wagi, ustawienia.k_baza, ustawienia.ignoruj_mnoznik],
-    queryFn: () => api.mojaKadra({ wagi, ignoruj_mnoznik: ustawienia.ignoruj_mnoznik, k_baza: ustawienia.k_baza }),
+    queryKey: ['kadra', wersja, wagi, ustawienia.k_baza, ustawienia.ignoruj_mnoznik, tylkoPierwsza],
+    queryFn: () => api.mojaKadra({ wagi, ignoruj_mnoznik: ustawienia.ignoruj_mnoznik, k_baza: ustawienia.k_baza,
+      tylko_pierwsza: tylkoPierwsza }),
   });
-  const zapytanie = { wagi, ignoruj_mnoznik: ustawienia.ignoruj_mnoznik, k_baza: ustawienia.k_baza, filtry: p.filtry };
+  const zapytanie = { wagi, ignoruj_mnoznik: ustawienia.ignoruj_mnoznik, k_baza: ustawienia.k_baza, filtry: p.filtry,
+    tylko_pierwsza: tylkoPierwsza };
+  const ukryci = Math.max(0, ...(kadra.data?.pozycje ?? []).map((x) => x.ukryci ?? 0));
 
   return (
     <Stack p="md" gap="sm">
-      <SegmentedControl w="fit-content" value={widok} onChange={setWidok} data={[
-        { value: 'pozycje', label: 'Pozycje' },
-        { value: 'sprzedaj', label: 'Sprzedaj drogo' },
-        { value: 'optymalizator', label: 'Optymalizator budżetu' },
-      ]} />
+      <Group justify="space-between">
+        <SegmentedControl w="fit-content" value={widok} onChange={setWidok} data={[
+          { value: 'pozycje', label: 'Pozycje' },
+          { value: 'taktyka', label: 'Taktyka' },
+          { value: 'sprzedaj', label: 'Sprzedaj drogo' },
+          { value: 'optymalizator', label: 'Optymalizator budżetu' },
+        ]} />
+        <Switch label="Tylko pierwsza drużyna" checked={tylkoPierwsza}
+          description={tylkoPierwsza && ukryci ? 'ukryto zawodników rezerw i juniorów' : undefined}
+          onChange={(e) => setTylkoPierwsza(e.currentTarget.checked)} />
+      </Group>
       <Suspense fallback={<Loader size="sm" />}>
-        {widok === 'sprzedaj' ? (
+        {widok === 'taktyka' ? (
+          <Taktyka wersja={wersja} wagi={wagi} ustawienia={ustawienia} tylkoPierwsza={tylkoPierwsza}
+            otworz={(poz, id) => otworz(poz, id)} />
+        ) : widok === 'sprzedaj' ? (
           <SprzedajDrogo zapytanie={zapytanie} wersja={wersja} otworz={otworz} ulubione={p.ulubione}
             przelaczUlubione={p.przelaczUlubione} />
         ) : widok === 'optymalizator' ? (
@@ -102,7 +117,12 @@ function WidokPozycji({ wersja, szukajNastepcy, otworz, zapytanieDla, mojKlubUid
                   {p.zawodnicy.map((z) => (
                     <Table.Tr key={String(z['ID'])} style={{ cursor: 'pointer' }} onClick={() => otworz(p.pozycja, String(z['ID']), z)}>
                       <Table.Td>
-                        <Text size="sm" fw={600}>{String(z['Piłkarz'])}</Text>
+                        <Text size="sm" fw={600}>
+                          {String(z['Piłkarz'])}{' '}
+                          {z['Drużyna'] && z['Drużyna'] !== 'Pierwsza drużyna' ? (
+                            <Badge size="xs" color="gray" variant="light">{String(z['Drużyna'])}</Badge>
+                          ) : null}
+                        </Text>
                         {z['Pozycja'] ? <Text size="xs" c="dimmed">pozycje: {String(z['Pozycja'])}</Text> : null}
                       </Table.Td>
                       <Table.Td>{formatuj(z['Wiek'], 'int')}</Table.Td>

@@ -187,12 +187,27 @@ export type Ligi = { ligi: Liga[]; znane_nazwy: string[]; mnozniki: Record<strin
 export type PozycjaKadry = {
   pozycja: string;
   liczba: number;
+  ukryci?: number;
   najlepszy: number | null;
   sredni_wiek: number | null;
   konczace_kontrakty: number;
   zawodnicy: Wiersz[];
 };
 export type Kadra = { klub: string | null; pozycje: PozycjaKadry[] };
+
+export type ZawodnikSkladu = {
+  klucz: string;
+  ID: string;
+  Piłkarz: string;
+  Wiek: number | null;
+  Minuty: number | null;
+  Pozycja: string | null;
+  Pula_główna: string | null;
+  Drużyna: string | null;
+  oceny: Record<string, number>;
+  score: Record<string, number>;
+  id_w_pulach: Record<string, string>;
+};
 
 export type MetrykaProfilu = {
   nazwa: string;
@@ -245,6 +260,7 @@ export type ProfilDruzyny = {
 };
 
 export type ZapytanieKadry = {
+  tylko_pierwsza?: boolean;
   wagi: Record<string, Record<string, number>>;
   ignoruj_mnoznik: boolean;
   k_baza: number;
@@ -367,9 +383,13 @@ export const api = {
     ignoruj_mnoznik: boolean;
     k_baza: number;
   }) => post<ListaZyczen>('/api/lista-zyczen', body),
-  mojaKadra: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number }) =>
+  mojaKadra: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number;
+    tylko_pierwsza?: boolean }) =>
     post<Kadra>('/api/moja-kadra', body),
-  profilDruzyny: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number }) =>
+  sklad: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number;
+    tylko_pierwsza: boolean }) => post<{ zawodnicy: ZawodnikSkladu[]; pozycje: string[] }>('/api/sklad', body),
+  profilDruzyny: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number;
+    tylko_pierwsza?: boolean }) =>
     post<ProfilDruzyny>('/api/profil-druzyny', body),
   sprzedajDrogo: (body: ZapytanieKadry) => post<SprzedajDrogo>('/api/sprzedaj-drogo', body),
   optymalizator: (body: ZapytanieKadry & { budzet: number; budzet_plac: number; pozycje: string[] }) =>

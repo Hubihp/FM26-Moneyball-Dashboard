@@ -3,6 +3,16 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 1.3.0
+
+- **Tablica taktyczna** (Moja kadra → Taktyka): pionowe boisko, 9 formacji, przeciąganie zawodników na pozycje,
+  zamiana i przesuwanie pozycji, zmiana pozycji miejsca, „Ułóż najlepszą XI” (optymalny przydział według SCORE
+  na pozycjach), zapisane ustawienia.
+- Moja kadra domyślnie pokazuje tylko seniorską pierwszą drużynę (bez rezerw, drużyn B i juniorów - z zapisu gry);
+  przełącznik „Tylko pierwsza drużyna”. Dotyczy też „Sprzedaj drogo”, optymalizatora, profilu i porównania z moim zawodnikiem.
+- Profil drużyny: miejsca w lidze w płynnym gradiencie (1. złote, od zielonego do czerwonego), czytelny tekst.
+- Taktyki z gry nie da się odczytać z zapisu (biblioteka fmsave nie obsługuje tej sekcji).
+
 ## 1.2.0
 
 - **Profil drużyny** (nowa zakładka): twoja drużyna na tle całej ligi - wyniki, gra z piłką, bez piłki

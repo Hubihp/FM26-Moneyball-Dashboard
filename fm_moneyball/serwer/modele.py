@@ -53,6 +53,7 @@ class KadraModel(BaseModel):
     wagi: dict[str, dict[str, float]] = Field(default_factory=dict)   # pozycja -> wagi (brak = domyslne)
     ignoruj_mnoznik: bool = False
     k_baza: float = 5
+    tylko_pierwsza: bool = True      # tylko seniorska pierwsza druzyna (bez rezerw i juniorow)
 
 
 class FiltryModel(BaseModel):

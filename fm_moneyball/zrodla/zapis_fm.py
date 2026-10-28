@@ -247,6 +247,45 @@ def sumuj_druzyny(wiersze, rodzaj):
     return wynik
 
 
+PIERWSZA_DRUZYNA = "Pierwsza drużyna"
+INNA_DRUZYNA = "Rezerwy / juniorzy"
+
+
+def etykiety_druzyn(mecze, rozgrywki, kluby, nazwy=None):
+    """
+    {club_uid: {slot: nazwa rozgrywek}} dla druzyn (slot > 0) podanych klubow - najczestsze rozgrywki
+    w terminarzu danej druzyny klubu (np. liga mlodziezowa). Druzyna bez meczow nie ma wpisu.
+    """
+    nazwy = nazwy or {}
+    baza = {r.id: r.database_id for r in rozgrywki}
+    nazwa_rozgrywek = {r.id: r.name for r in rozgrywki}
+    licznik = defaultdict(Counter)
+    for m in mecze:
+        for uid, slot in ((m.home_club_uid, m.home_team_slot), (m.away_club_uid, m.away_team_slot)):
+            if uid in kluby and slot:
+                licznik[(uid, slot)][m.competition_id] += 1
+    wynik = defaultdict(dict)
+    for (uid, slot), c in licznik.items():
+        comp = c.most_common(1)[0][0]
+        wynik[uid][slot] = nazwy.get(baza.get(comp)) or nazwa_rozgrywek.get(comp)
+    return dict(wynik)
+
+
+def dopisz_druzyny(dane, etykiety):
+    """Kolumna 'Drużyna': pierwsza druzyna (slot 0) albo rezerwy/juniorzy (z nazwa rozgrywek, gdy znana)."""
+    for df in dane.values():
+        if df.empty or 'Drużyna_slot' not in df.columns:
+            continue
+        def etykieta(wiersz):
+            slot = wiersz['Drużyna_slot']
+            if pd.isna(slot) or int(slot) == 0:
+                return PIERWSZA_DRUZYNA
+            nazwa = etykiety.get(wiersz['Klub_UID'], {}).get(int(slot))
+            return f"{INNA_DRUZYNA} ({nazwa})" if nazwa else INNA_DRUZYNA
+        df['Drużyna'] = df[['Drużyna_slot', 'Klub_UID']].apply(etykieta, axis=1)
+    return dane
+
+
 def tabela_ligi(tabele, competition_id, club_uid):
     """
     Tabela ligi klubu -> slownik do profilu druzyny albo None. Rozgrywki moga miec w zapisie kilka tabel
@@ -333,6 +372,8 @@ def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0):
         "Wygasa": f"{koniec.day}.{koniec.month}.{koniec.year}" if koniec else None,
         "Wygasa_Data": pd.Timestamp(koniec) if koniec else pd.NaT,
         "Wypożyczony": bool(getattr(zawodnik, "on_loan", False)),
+        # druzyna w klubie: 0 = pierwsza, inne = rezerwy, druzyny B i mlodziezowe
+        "Drużyna_slot": getattr(zawodnik, "team_slot", None),
         "UID": zawodnik.uid,
         "Klub_UID": zawodnik.club_uid,
     }
@@ -760,6 +801,12 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
             druzyny = sumuj_druzyny(wiersze_sezonu, opcje.rodzaj_statystyk)
             del wiersze_sezonu
             try:
+                etykiety = etykiety_druzyn(zapis.fixtures(), list(zapis.competitions()),
+                                           {m.club_uid for m in zarzadzane}, nazwy)
+            except Exception as e:   # nazwy druzyn rezerw to dodatek
+                ostrzezenia.append(f"Nie udało się ustalić nazw drużyn rezerw ({e}).")
+                etykiety = {}
+            try:
                 wszystkie_tabele = list(zapis.league_tables())
                 tabele = {m.club_uid: tabela_ligi(wszystkie_tabele, liga_klubu[m.club_uid].competition_id, m.club_uid)
                           for m in zarzadzane if m.club_uid in liga_klubu}
@@ -779,6 +826,7 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
     etap(5)
     moje = [{"uid": m.club_uid, "nazwa": m.club_name} for m in zarzadzane]
     dane = zbuduj_ramki(zawodnicy, liczniki, liga_klubu, opcje, [m["uid"] for m in moje], kontuzje)
+    dane = dopisz_druzyny(dane, etykiety)
     etap(None)
     return WynikZapisu(
         dane=dane,

@@ -137,7 +137,7 @@ def utworz(stan, obl):
             if df is None or df.empty:
                 continue
             policzona, _, _ = obl.policz(pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
-            wynik.append(analiza.moja_kadra(pozycja, policzona, uid, obl.data_gry()))
+            wynik.append(analiza.moja_kadra(pozycja, policzona, uid, obl.data_gry(), z.tylko_pierwsza))
         # w kolejnosci POZYCJE: od bramkarza do napastnika (sortowanie po luce robi interfejs)
         return {"klub": meta.get("moj_klub"), "pozycje": wynik}
 
@@ -161,7 +161,7 @@ def utworz(stan, obl):
             if df is None or df.empty:
                 continue
             policzona, widoczni = _pula_z_filtrami(pozycja, z, uid)
-            wynik += analiza.sprzedaj_drogo(pozycja, policzona, widoczni, uid, z.k_baza)
+            wynik += analiza.sprzedaj_drogo(pozycja, policzona, widoczni, uid, z.k_baza, z.tylko_pierwsza)
         return {"wymiany": sorted(wynik, key=lambda w: -w["zysk"]), "prog": analiza.PROG_PRZEPLACENIA,
                 "tolerancja": analiza.PROG_WZMOCNIENIA}
 
@@ -174,7 +174,7 @@ def utworz(stan, obl):
             if pozycja not in POZYCJE or stan.pula(pozycja) is None:
                 continue
             policzona, widoczni = _pula_z_filtrami(pozycja, z, uid)
-            baza, zastepczy, lista = analiza.kandydaci_optymalizatora(policzona, widoczni, uid)
+            baza, zastepczy, lista = analiza.kandydaci_optymalizatora(policzona, widoczni, uid, z.tylko_pierwsza)
             kandydaci[pozycja], pule[pozycja], bazy[pozycja] = lista, policzona, (baza, zastepczy)
         wybor, zysk, pewne = optymalizator.optymalizuj(kandydaci, z.budzet, z.budzet_plac)
         gwiazda = optymalizator.jedna_gwiazda(kandydaci, z.budzet, z.budzet_plac)
@@ -199,6 +199,35 @@ def utworz(stan, obl):
             "bazy": {p: {"score": b[0], "poziom_zastepczy": b[1]} for p, b in bazy.items()},
         }
 
+    @router.post("/sklad")
+    def sklad(z: KadraModel):
+        """
+        Moi zawodnicy do tablicy taktycznej: SCORE na kazdej pozycji, na ktorej sa w puli, i ocena
+        pozycji z gry (1-20) na wszystkich 14 pozycjach.
+        """
+        uid = _moj_klub()
+        zawodnicy = {}
+        for pozycja in POZYCJE:
+            if stan.pula(pozycja) is None:
+                continue
+            policzona, _, _ = obl.policz(pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
+            for _, r in analiza.moi_zawodnicy(policzona, uid, z.tylko_pierwsza).iterrows():
+                klucz = r['UID'] if 'UID' in r.index and pd.notna(r['UID']) else r['ID']
+                z_ = zawodnicy.setdefault(klucz, {
+                    "klucz": str(klucz), "ID": r['ID'], "Piłkarz": r['Piłkarz'],
+                    "Wiek": None if pd.isna(r.get('Wiek')) else int(r['Wiek']),
+                    "Minuty": None if pd.isna(r.get('Minuty')) else float(r['Minuty']),
+                    "Pozycja": r.get('Pozycja'), "Pula_główna": r.get('Pula_główna', pozycja),
+                    "Drużyna": r.get('Drużyna') if isinstance(r.get('Drużyna'), str) else None,
+                    "oceny": {p: int(r[f"Ocena|{p}"]) for p in POZYCJE
+                              if f"Ocena|{p}" in r.index and pd.notna(r[f"Ocena|{p}"])},
+                    "score": {}, "id_w_pulach": {}})
+                if pd.notna(r['SCORE']):
+                    z_["score"][pozycja] = float(r['SCORE'])
+                z_["id_w_pulach"][pozycja] = r['ID']
+        lista = sorted(zawodnicy.values(), key=lambda x: -max(x["score"].values(), default=0))
+        return {"zawodnicy": lista, "pozycje": POZYCJE}
+
     @router.post("/profil-druzyny")
     def profil_druzyny(z: KadraModel):
         """Moja druzyna na tle ligi: statystyki zespolowe, atletyzm skladu, zmiany wzgledem poprzedniego sezonu."""
@@ -207,7 +236,7 @@ def utworz(stan, obl):
         if wszyscy is None or 'Klub_UID' not in wszyscy.columns:
             raise HTTPException(409, "Brak danych zawodników.")
         tabela = stan.tabele.get(uid)
-        moi = wszyscy[wszyscy['Klub_UID'] == uid]
+        moi = analiza.moi_zawodnicy(wszyscy, uid, z.tylko_pierwsza)
         liga = moi['Liga'].mode().iloc[0] if not moi.empty and moi['Liga'].notna().any() else None
         if tabela:
             kluby = [w["club_uid"] for w in tabela["wiersze"]]
@@ -232,7 +261,10 @@ def utworz(stan, obl):
             if 'Δ SCORE' not in policzona.columns:
                 continue
             glowna = policzona['Pula_główna'] == pozycja if 'Pula_główna' in policzona.columns else True
-            for _, r in policzona[(policzona['Klub_UID'] == uid) & glowna].iterrows():
+            moi_w_puli = analiza.moi_zawodnicy(policzona, uid, z.tylko_pierwsza)
+            if not isinstance(glowna, bool):
+                moi_w_puli = moi_w_puli[glowna[moi_w_puli.index]]
+            for _, r in moi_w_puli.iterrows():
                 rozwoj.append({"Piłkarz": r['Piłkarz'], "ID": r['ID'], "pozycja": pozycja, "SCORE": float(r['SCORE']),
                                "Δ SCORE": None if pd.isna(r['Δ SCORE']) else float(r['Δ SCORE'])})
         porownanie = historia.migawka_porownania(historia.migawki(stan.katalog_kariery()), obl.data_gry())

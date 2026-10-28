@@ -104,3 +104,21 @@ def test_sumy_druzyn_z_wierszy_zapisu():
     t = tabela_ligi([tab(5, [99]), tab(5, [10, 20, 30]), tab(6, [10])], 5, 10)
     assert t["competition_id"] == 5 and [r["club_uid"] for r in t["wiersze"]] == [10, 20, 30]
     assert tabela_ligi([tab(5, [99])], 5, 10) is None
+
+
+def test_druzyny_w_klubie_i_pierwsza_druzyna():
+    from fm_moneyball import analiza
+    from fm_moneyball.zrodla.zapis_fm import INNA_DRUZYNA, PIERWSZA_DRUZYNA, dopisz_druzyny, etykiety_druzyn
+    mecze = [NS(home_club_uid=1, home_team_slot=1, away_club_uid=2, away_team_slot=1, competition_id=50),
+             NS(home_club_uid=3, home_team_slot=0, away_club_uid=1, away_team_slot=1, competition_id=50),
+             NS(home_club_uid=1, home_team_slot=0, away_club_uid=2, away_team_slot=0, competition_id=7)]
+    rozgrywki = [NS(id=50, database_id=500, name="Liga juniorow"), NS(id=7, database_id=70, name="Liga")]
+    et = etykiety_druzyn(mecze, rozgrywki, {1})
+    assert et == {1: {1: "Liga juniorow"}}
+    assert etykiety_druzyn(mecze, rozgrywki, {1}, {500: "U19 Elite"}) == {1: {1: "U19 Elite"}}
+    df = pd.DataFrame({'Klub_UID': [1, 1, 1, 2], 'Drużyna_slot': [0, 1, 3, 1], 'SCORE': [60.0, 70.0, 50.0, 40.0]})
+    dane = dopisz_druzyny({"N": df}, et)
+    assert list(dane["N"]['Drużyna']) == [PIERWSZA_DRUZYNA, f"{INNA_DRUZYNA} (Liga juniorow)", INNA_DRUZYNA, INNA_DRUZYNA]
+    assert list(analiza.moi_zawodnicy(df, 1).index) == [0]
+    assert list(analiza.moi_zawodnicy(df, 1, tylko_pierwsza=False).index) == [0, 1, 2]
+    assert len(analiza.moi_zawodnicy(df.drop(columns='Drużyna_slot'), 1)) == 3      # CSV/demo: wszyscy

@@ -379,7 +379,8 @@ def porownaj_z_moim(pozycja, pula, kandydat, moj_klub_uid):
     if kandydat.get('Klub_UID') == moj_klub_uid:
         wynik["werdykt"] = "twój zawodnik"
         return wynik
-    moi = pula[(pula['Klub_UID'] == moj_klub_uid) & pula['SCORE'].notna()].sort_values('SCORE', ascending=False)
+    moi = moi_zawodnicy(pula, moj_klub_uid)
+    moi = moi[moi['SCORE'].notna()].sort_values('SCORE', ascending=False)
     if moi.empty:
         wynik["werdykt"] = "brak zawodnika"
         return wynik
@@ -404,6 +405,23 @@ def porownaj_z_moim(pozycja, pula, kandydat, moj_klub_uid):
     return wynik
 
 
+def pierwsza_druzyna(pula):
+    """Maska zawodnikow seniorskiej pierwszej druzyny klubu (slot 0); bez tej informacji (CSV, demo) - wszyscy."""
+    if 'Drużyna_slot' not in pula.columns:
+        return pd.Series(True, index=pula.index)
+    return pd.to_numeric(pula['Drużyna_slot'], errors='coerce').fillna(0) == 0
+
+
+def moi_zawodnicy(pula, moj_klub_uid, tylko_pierwsza=True):
+    """Zawodnicy mojego klubu w puli; domyslnie tylko pierwsza druzyna (bez rezerw, druzyn B i juniorow)."""
+    if moj_klub_uid is None or 'Klub_UID' not in pula.columns:
+        return pula.iloc[0:0]
+    maska = pula['Klub_UID'] == moj_klub_uid
+    if tylko_pierwsza:
+        maska &= pierwsza_druzyna(pula)
+    return pula[maska]
+
+
 def znajdz_zawodnika(pula, klucz, pilkarz=""):
     """
     Wiersz zawodnika z listy zyczen: po UID z zapisu (z kontrola nazwiska - uid moze sie roznic
@@ -421,17 +439,18 @@ def znajdz_zawodnika(pula, klucz, pilkarz=""):
 # --- moja kadra -----------------------------------------------------------------------------------
 POLA_KADRY = ['ID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Wiek', 'Pozycja', 'Preferowana noga', 'Minuty', 'SCORE',
               'Percentyl', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Wygasa_Data', 'Lata_kontraktu',
-              'Wypożyczony', 'Koszt', 'Okazje']
+              'Wypożyczony', 'Koszt', 'Okazje', 'Drużyna', 'Drużyna_slot']
 
 
-def moja_kadra(pozycja, pula_policzona, moj_klub_uid, data_gry=None):
+def moja_kadra(pozycja, pula_policzona, moj_klub_uid, data_gry=None, tylko_pierwsza=True):
     """Moi zawodnicy na pozycji na tle puli: najlepszy SCORE, sredni wiek, konczace sie kontrakty."""
     pula = wzbogac(pula_policzona, data_gry)
-    moi = pula[pula['Klub_UID'] == moj_klub_uid].sort_values('SCORE', ascending=False) \
-        if 'Klub_UID' in pula.columns else pula.iloc[0:0]
+    moi = moi_zawodnicy(pula, moj_klub_uid, tylko_pierwsza).sort_values('SCORE', ascending=False)
+    wszyscy_moi = moi_zawodnicy(pula, moj_klub_uid, False)
     return {
         "pozycja": pozycja,
         "liczba": int(len(moi)),
+        "ukryci": int(len(wszyscy_moi) - len(moi)),
         "najlepszy": float(moi['SCORE'].max()) if not moi.empty else None,
         "sredni_wiek": float(moi['Wiek'].mean()) if not moi.empty else None,
         "konczace_kontrakty": int((moi['Lata_kontraktu'] <= 1).sum()) if not moi.empty else 0,
@@ -452,7 +471,7 @@ def _cena_transferu(pula):
     return cena
 
 
-def sprzedaj_drogo(pozycja, pula, widoczni_idx, moj_klub_uid, k_baza=5):
+def sprzedaj_drogo(pozycja, pula, widoczni_idx, moj_klub_uid, k_baza=5, tylko_pierwsza=True):
     """
     Moi zawodnicy z ta pozycja jako glowna, za ktorych rynek placi wyraznie wiecej, niz wynika z ich gry
     (cena / wycena wg wyniku >= PROG_PRZEPLACENIA), i najtanszy zastepca: spoza mojego klubu, sposrod
@@ -462,7 +481,8 @@ def sprzedaj_drogo(pozycja, pula, widoczni_idx, moj_klub_uid, k_baza=5):
     if moj_klub_uid is None or 'Klub_UID' not in pula.columns or 'Wycena wg wyniku' not in pula.columns:
         return []
     glowna = pula['Pula_główna'] == pozycja if 'Pula_główna' in pula.columns else True
-    moi = pula[(pula['Klub_UID'] == moj_klub_uid) & glowna & pula['SCORE'].notna()]
+    moi = moi_zawodnicy(pula, moj_klub_uid, tylko_pierwsza)
+    moi = moi[(glowna[moi.index] if not isinstance(glowna, bool) else True) & moi['SCORE'].notna()]
     przeplacenie = moi['Wartość_Numeryczna'] / moi['Wycena wg wyniku']
     moi = moi[przeplacenie >= PROG_PRZEPLACENIA]
     if moi.empty:
@@ -499,14 +519,14 @@ def sprzedaj_drogo(pozycja, pula, widoczni_idx, moj_klub_uid, k_baza=5):
     return sorted(wynik, key=lambda w: -w["zysk"])
 
 
-def kandydaci_optymalizatora(pula, widoczni_idx, moj_klub_uid):
+def kandydaci_optymalizatora(pula, widoczni_idx, moj_klub_uid, tylko_pierwsza=True):
     """
     -> (SCORE mojego najlepszego, czy to poziom zastepczy, [Kandydat]) dla jednej pozycji.
     Bez mojego zawodnika na pozycji punktem odniesienia jest 'poziom zastepczy' - 25. percentyl puli.
     """
     from fm_moneyball.optymalizator import Kandydat
-    moi = pula[(pula['Klub_UID'] == moj_klub_uid) & pula['SCORE'].notna()] if 'Klub_UID' in pula.columns \
-        else pula.iloc[0:0]
+    moi = moi_zawodnicy(pula, moj_klub_uid, tylko_pierwsza)
+    moi = moi[moi['SCORE'].notna()]
     zastepczy = moi.empty
     baza = float(pula['SCORE'].quantile(0.25)) if zastepczy else float(moi['SCORE'].max())
     cena = _cena_transferu(pula)

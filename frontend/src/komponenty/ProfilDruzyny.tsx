@@ -13,10 +13,29 @@ type Props = {
   otworz: (pozycja: string, id: string) => void;
 };
 
-// Kolor miejsca w lidze (jak w analizach Gradient): czolowka niebieska, srodek zolty, koncowka czerwona
-function kolorMiejsca(miejsce: number, n: number) {
-  const t = n > 1 ? (miejsce - 1) / (n - 1) : 0;
-  return t <= 0.12 ? 'blue' : t <= 0.3 ? 'teal' : t <= 0.5 ? 'green' : t <= 0.7 ? 'yellow' : t <= 0.87 ? 'orange' : 'red';
+// Kolor miejsca w lidze: 1. zlote, od 2. (zielone) plynnie przez zolte do czerwonego (ostatnie).
+// Kolor tekstu z luminancji tla (kontrast WCAG): bialy albo prawie czarny.
+function hslNaRgb(h: number, s: number, l: number): [number, number, number] {
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return [f(0), f(8), f(4)];
+}
+
+function luminancja([r, g, b]: [number, number, number]) {
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+function stylMiejsca(miejsce: number, n: number): React.CSSProperties {
+  if (miejsce === 1) return { background: '#E8B923', color: '#1a1300', border: '1px solid #fff3bf' };
+  const t = n > 2 ? (miejsce - 2) / (n - 2) : 1;
+  const rgb = hslNaRgb(120 * (1 - t), 0.62, 0.42);
+  const lum = luminancja(rgb);
+  // wiekszy kontrast: bialy tekst, gdy (1.05)/(L+0.05) > (L+0.05)/(0.05)
+  const bialy = 1.05 / (lum + 0.05) >= (lum + 0.05) / 0.05;
+  const [r, g, b] = rgb.map((c) => Math.round(c * 255));
+  return { background: `rgb(${r}, ${g}, ${b})`, color: bialy ? '#ffffff' : '#111111', border: '1px solid rgba(255,255,255,0.15)' };
 }
 
 function liczba(x: number, format: string) {
@@ -27,7 +46,7 @@ function liczba(x: number, format: string) {
 }
 
 const Miejsce = ({ m, n }: { m: number; n: number }) => (
-  <Badge color={kolorMiejsca(m, n)} variant="filled" w={52}>{m}.</Badge>
+  <Badge variant="filled" w={52} style={stylMiejsca(m, n)} title={`${m}. miejsce z ${n}`}>{m}.</Badge>
 );
 
 function Sekcja({ nazwa, metryki }: { nazwa: string; metryki: MetrykaProfilu[] }) {
@@ -183,7 +202,10 @@ function Atletyzm({ a, otworz }: { a: NonNullable<Profil['atletyzm']>; otworz: P
                 {kolumna.map((k) => (
                   <Group key={k.miejsce} justify="space-between" px={6} py={2} wrap="nowrap"
                     style={k.moj ? { background: 'rgba(253,126,20,0.18)', borderRadius: 4 } : undefined}>
-                    <Text size="sm" truncate>{k.miejsce}. {k.klub}</Text>
+                    <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+                      <Badge size="sm" variant="filled" w={34} style={stylMiejsca(k.miejsce, a.kluby.length)}>{k.miejsce}</Badge>
+                      <Text size="sm" truncate>{k.klub}</Text>
+                    </Group>
                     <Text size="sm" fw={700}>{formatuj(k.wynik, 'dec1')}</Text>
                   </Group>
                 ))}
@@ -220,7 +242,7 @@ export default function ProfilDruzyny({ wersja, wagi, ustawienia, otworz }: Prop
         </div>
         {t && (
           <Group gap="xs">
-            <Badge size="lg" variant="filled" color={kolorMiejsca(t.pozycja, p.kluby)}>{t.pozycja}. miejsce</Badge>
+            <Badge size="lg" variant="filled" style={stylMiejsca(t.pozycja, p.kluby)}>{t.pozycja}. miejsce</Badge>
             <Badge size="lg" variant="light">{t.punkty} pkt</Badge>
             <Badge size="lg" variant="light" color="gray">{t.wygrane}-{t.remisy}-{t.porazki}</Badge>
             <Badge size="lg" variant="light" color="gray">bramki {t.gole}:{t.stracone}</Badge>
