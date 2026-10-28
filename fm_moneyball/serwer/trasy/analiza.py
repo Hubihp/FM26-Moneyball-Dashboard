@@ -2,8 +2,10 @@
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 
-from fm_moneyball import analiza, historia
-from fm_moneyball.serwer.modele import HistoriaModel, HistoriaWieluModel, NastepcaModel, PorownanieZMoimModel, KadraModel, ListaZyczenModel, PodobniModel, RadarModel, RankingModel
+import time
+
+from fm_moneyball import analiza, historia, optymalizator
+from fm_moneyball.serwer.modele import HistoriaModel, HistoriaWieluModel, NastepcaModel, PorownanieZMoimModel, KadraModel, ListaZyczenModel, OptymalizatorModel, PodobniModel, RadarModel, RankingModel, SprzedajDrogoModel
 from fm_moneyball.serwer.obliczenia import kandydat
 from fm_moneyball.stale import POZYCJE
 
@@ -138,6 +140,64 @@ def utworz(stan, obl):
             wynik.append(analiza.moja_kadra(pozycja, policzona, uid, obl.data_gry()))
         # w kolejnosci POZYCJE: od bramkarza do napastnika (sortowanie po luce robi interfejs)
         return {"klub": meta.get("moj_klub"), "pozycje": wynik}
+
+    def _moj_klub():
+        uid = stan.migawka()["meta"].get("moj_klub_uid")
+        if uid is None:
+            raise HTTPException(409, "Nie wiem, którym klubem grasz - wczytaj zapis kariery.")
+        return uid
+
+    def _pula_z_filtrami(pozycja, z, uid):
+        policzona, _, _ = obl.policz(pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
+        filtry = analiza.Filtry(**{**z.filtry.model_dump(), "bez_mojego_klubu": True, "kandydaci": False})
+        return policzona, analiza.filtruj(policzona, filtry, obl.data_gry(), uid).index
+
+    @router.post("/sprzedaj-drogo")
+    def sprzedaj_drogo(z: SprzedajDrogoModel):
+        uid = _moj_klub()
+        wynik = []
+        for pozycja in POZYCJE:
+            df = stan.pula(pozycja)
+            if df is None or df.empty:
+                continue
+            policzona, widoczni = _pula_z_filtrami(pozycja, z, uid)
+            wynik += analiza.sprzedaj_drogo(pozycja, policzona, widoczni, uid, z.k_baza)
+        return {"wymiany": sorted(wynik, key=lambda w: -w["zysk"]), "prog": analiza.PROG_PRZEPLACENIA,
+                "tolerancja": analiza.PROG_WZMOCNIENIA}
+
+    @router.post("/optymalizator")
+    def optymalizuj(z: OptymalizatorModel):
+        uid = _moj_klub()
+        start = time.perf_counter()
+        kandydaci, pule, bazy = {}, {}, {}
+        for pozycja in z.pozycje:
+            if pozycja not in POZYCJE or stan.pula(pozycja) is None:
+                continue
+            policzona, widoczni = _pula_z_filtrami(pozycja, z, uid)
+            baza, zastepczy, lista = analiza.kandydaci_optymalizatora(policzona, widoczni, uid)
+            kandydaci[pozycja], pule[pozycja], bazy[pozycja] = lista, policzona, (baza, zastepczy)
+        wybor, zysk, pewne = optymalizator.optymalizuj(kandydaci, z.budzet, z.budzet_plac)
+        gwiazda = optymalizator.jedna_gwiazda(kandydaci, z.budzet, z.budzet_plac)
+        pola = ['ID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Wiek', 'SCORE', 'Minuty', 'Wartość_Numeryczna',
+                'Zarobki_Numeryczne', 'Wygasa_Data', 'Lata_kontraktu', 'Wolny_agent', 'U21', 'UID', 'Pozycja']
+
+        def opis(pozycja, k):
+            pula = pule[pozycja]
+            wiersz = analiza.do_json(pula.loc[[k.dane["idx"]]], [p for p in pola if p in pula.columns])[0]
+            return {"pozycja": pozycja, "zawodnik": wiersz, "zysk": k.zysk, "cena": k.cena, "pensja": k.pensja,
+                    "moj_score": bazy[pozycja][0], "poziom_zastepczy": bazy[pozycja][1]}
+
+        zestaw = [opis(p, wybor[p]) for p in z.pozycje if p in wybor]
+        wydane, pensje = sum(k.cena for k in wybor.values()), sum(k.pensja for k in wybor.values())
+        return {
+            "zestaw": zestaw, "zysk": zysk, "wydane": wydane, "pensje": pensje,
+            "zostalo": z.budzet - wydane, "zostalo_plac": z.budzet_plac - pensje,
+            "pozycje_bez_wzmocnienia": [p for p in z.pozycje if p in kandydaci and p not in wybor],
+            "jedna_gwiazda": opis(*gwiazda) if gwiazda else None,
+            "liczba_kandydatow": sum(len(v) for v in kandydaci.values()),
+            "optimum_pewne": pewne, "czas_ms": round((time.perf_counter() - start) * 1000),
+            "bazy": {p: {"score": b[0], "poziom_zastepczy": b[1]} for p, b in bazy.items()},
+        }
 
     @router.post("/lista-zyczen")
     def lista_zyczen(z: ListaZyczenModel):

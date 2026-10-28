@@ -128,6 +128,9 @@ export default function App() {
     return { ...PUSTE_FILTRY, ...filtryWspolne, kandydaci_z: kandydaciZ,
       kandydaci: kandydaciZ.length > 0 && poz !== 'Bramkarz' };
   };
+  // wspolne filtry bez kandydatow - dla "Sprzedaj drogo" i optymalizatora budzetu
+  const filtryKadry = useMemo(() => ({ ...PUSTE_FILTRY, ...filtryWspolne, kandydaci_z: [], kandydaci: false }),
+    [filtryWspolne]);
   const ustawFiltry = (f: Filtry) => {
     const { kandydaci_z: kandydaciZ, ...reszta } = f;
     setFiltryWspolne({ ...reszta, kandydaci_z: [], kandydaci: false });
@@ -382,7 +385,8 @@ export default function App() {
             <Tabs.Panel value="kadra" style={{ overflow: 'auto' }}>
               {zakladka === 'kadra' && (
                 <MojaKadra wersja={wersja} wagi={wagiWlasne} ustawienia={ustawienia} szukajNastepcy={szukajNastepcy}
-                  zapytanieDla={zapytanieDla} mojKlubUid={mojKlubUid}
+                  zapytanieDla={zapytanieDla} mojKlubUid={mojKlubUid} filtry={filtryKadry}
+                  ulubione={ulubione} przelaczUlubione={przelaczUlubione}
                   otworz={(poz, id, wiersz) => {
                     setPozycja(poz);
                     otworzKarte(id, wiersz);

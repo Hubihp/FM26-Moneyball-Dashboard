@@ -437,3 +437,87 @@ def moja_kadra(pozycja, pula_policzona, moj_klub_uid, data_gry=None):
         "konczace_kontrakty": int((moi['Lata_kontraktu'] <= 1).sum()) if not moi.empty else 0,
         "zawodnicy": do_json(moi, POLA_KADRY),
     }
+
+
+# --- Moneyball: sprzedaj drogo, optymalizator budzetu -----------------------------------------------
+PROG_PRZEPLACENIA = 1.3     # cena co najmniej o 30% wyzsza niz wycena wg wyniku
+MIN_PODOBIENSTWA_ZASTEPCY = 0.5
+
+
+def _cena_transferu(pula):
+    """Cena transferu: wolny agent kosztuje 0 (placi sie tylko pensje)."""
+    cena = pula['Wartość_Numeryczna'].astype(float)
+    if 'Wolny_agent' in pula.columns:
+        cena = cena.where(~pula['Wolny_agent'].fillna(False).astype(bool), 0.0)
+    return cena
+
+
+def sprzedaj_drogo(pozycja, pula, widoczni_idx, moj_klub_uid, k_baza=5):
+    """
+    Moi zawodnicy z ta pozycja jako glowna, za ktorych rynek placi wyraznie wiecej, niz wynika z ich gry
+    (cena / wycena wg wyniku >= PROG_PRZEPLACENIA), i najtanszy zastepca: spoza mojego klubu, sposrod
+    widocznych (filtry panelu), z SCORE nizszym najwyzej o PROG_WZMOCNIENIA i podobnym stylem gry.
+    Zwraca liste slownikow (tylko wymiany z zyskiem), malejaco po zysku.
+    """
+    if moj_klub_uid is None or 'Klub_UID' not in pula.columns or 'Wycena wg wyniku' not in pula.columns:
+        return []
+    glowna = pula['Pula_główna'] == pozycja if 'Pula_główna' in pula.columns else True
+    moi = pula[(pula['Klub_UID'] == moj_klub_uid) & glowna & pula['SCORE'].notna()]
+    przeplacenie = moi['Wartość_Numeryczna'] / moi['Wycena wg wyniku']
+    moi = moi[przeplacenie >= PROG_PRZEPLACENIA]
+    if moi.empty:
+        return []
+    macierz = macierz_stylu(pula, kolumny_statystyk(pozycja, pula), k_baza).values
+    normy = np.linalg.norm(macierz, axis=1)
+    cena = _cena_transferu(pula)
+    obcy = pula.index.isin(widoczni_idx) & (pula['Klub_UID'] != moj_klub_uid).to_numpy() & cena.notna().to_numpy()
+    pola = ['ID', 'Piłkarz', 'Klub', 'Klub_UID', 'Wiek', 'SCORE', 'Minuty', 'Wartość_Numeryczna', 'Zarobki_Numeryczne',
+            'Wycena wg wyniku', 'U21', 'UID', 'Pozycja', 'Liga', 'Wygasa_Data', 'Lata_kontraktu', 'Wolny_agent']
+    wynik = []
+    for idx, moj in moi.iterrows():
+        i = pula.index.get_loc(idx)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            podobienstwo = np.where(normy * normy[i] > 0, macierz @ macierz[i] / (normy * normy[i]), 0.0)
+        maska = (obcy & (pula['SCORE'] >= moj['SCORE'] - PROG_WZMOCNIENIA).to_numpy()
+                 & (podobienstwo >= MIN_PODOBIENSTWA_ZASTEPCY))
+        if not maska.any():
+            continue
+        zastepcy = pula[maska].assign(Podobieństwo=podobienstwo[maska], Cena_transferu=cena[maska])
+        zastepca = zastepcy.sort_values(['Cena_transferu', 'SCORE'], ascending=[True, False]).iloc[0]
+        zysk = float(moj['Wartość_Numeryczna'] - zastepca['Cena_transferu'])
+        if zysk <= 0:
+            continue
+        wynik.append({
+            "pozycja": pozycja,
+            "moj": do_json(moi.loc[[idx]], [p for p in pola if p in moi.columns])[0],
+            "przeplacenie": float(moj['Wartość_Numeryczna'] / moj['Wycena wg wyniku']),
+            "zastepca": do_json(zastepcy.loc[[zastepca.name]], [p for p in pola if p in zastepcy.columns]
+                                + ['Podobieństwo'])[0],
+            "cena_zastepcy": float(zastepca['Cena_transferu']),
+            "zysk": zysk,
+        })
+    return sorted(wynik, key=lambda w: -w["zysk"])
+
+
+def kandydaci_optymalizatora(pula, widoczni_idx, moj_klub_uid):
+    """
+    -> (SCORE mojego najlepszego, czy to poziom zastepczy, [Kandydat]) dla jednej pozycji.
+    Bez mojego zawodnika na pozycji punktem odniesienia jest 'poziom zastepczy' - 25. percentyl puli.
+    """
+    from fm_moneyball.optymalizator import Kandydat
+    moi = pula[(pula['Klub_UID'] == moj_klub_uid) & pula['SCORE'].notna()] if 'Klub_UID' in pula.columns \
+        else pula.iloc[0:0]
+    zastepczy = moi.empty
+    baza = float(pula['SCORE'].quantile(0.25)) if zastepczy else float(moi['SCORE'].max())
+    cena = _cena_transferu(pula)
+    pensja = pula['Zarobki_Numeryczne'] / TYGODNI_W_ROKU if 'Zarobki_Numeryczne' in pula.columns \
+        else pd.Series(np.nan, index=pula.index)
+    ok = (pula.index.isin(widoczni_idx) & cena.notna().to_numpy() & pensja.notna().to_numpy()
+          & (pula['SCORE'] > baza).to_numpy())
+    if 'Klub_UID' in pula.columns:
+        ok &= (pula['Klub_UID'] != moj_klub_uid).to_numpy()
+    klucz = pula['UID'].astype(str) if 'UID' in pula.columns else pula['ID'].astype(str)
+    kandydaci = [Kandydat(klucz=klucz[i], zysk=float(pula.at[i, 'SCORE'] - baza), cena=float(cena[i]),
+                          pensja=float(pensja[i]), dane={"idx": i})
+                 for i in pula.index[ok]]
+    return baza, zastepczy, kandydaci

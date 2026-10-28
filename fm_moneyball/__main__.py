@@ -5,13 +5,17 @@ Domyslnie program otwiera sie we wlasnym oknie (pywebview); gdy pywebview nie je
 albo podano --przegladarka - w przegladarce. Aplikacja dziala tylko na tym komputerze
 (nasluchuje na 127.0.0.1), wiec moze czytac zapisy gry z dysku.
 """
-import argparse
-import importlib.util
-import logging
-import socket
-import sys
-import threading
-import webbrowser
+import time
+
+START = time.time()     # poczatek procesu - do pomiaru czasu startu (dziennik "Czas startu")
+
+import argparse  # noqa: E402
+import importlib.util  # noqa: E402
+import logging  # noqa: E402
+import socket  # noqa: E402
+import sys  # noqa: E402
+import threading  # noqa: E402
+import webbrowser  # noqa: E402
 
 # W pliku .exe (PyInstaller) bez konsoli komunikaty pokazuje okienko, nie print/input
 ZAMROZONY = getattr(sys, "frozen", False)
@@ -44,9 +48,7 @@ def _jest_pywebview():
 def main():
     if sys.version_info < (3, 12):
         _zakoncz(f"Potrzebny jest Python 3.12 lub nowszy (masz {sys.version.split()[0]}).")
-    try:
-        import uvicorn
-    except ImportError:
+    if importlib.util.find_spec("uvicorn") is None:
         _zakoncz("Brakuje bibliotek. Zainstaluj je poleceniem:\n    py -m pip install -r requirements.txt")
 
     parser = argparse.ArgumentParser(description="FM26 Moneyball - lokalny serwer aplikacji")
@@ -73,17 +75,25 @@ def main():
             webbrowser.open(adres)
         return
 
-    from fm_moneyball.aktualizacje import Aktualizacje
-    from fm_moneyball.serwer.api import utworz_aplikacje
-    from fm_moneyball.serwer.stan import Stan
+    def utworz_app():
+        # ciezkie importy (pandas, FastAPI) - w trybie okna dopiero po pokazaniu okna
+        from fm_moneyball.aktualizacje import Aktualizacje
+        from fm_moneyball.serwer.api import utworz_aplikacje
+        from fm_moneyball.serwer.stan import Stan
 
-    aktualizacje = Aktualizacje()
-    app = utworz_aplikacje(Stan(), aktualizacje=aktualizacje, okno={"okno": w_oknie, "port": args.port})
-    aktualizacje.sprawdz_w_tle()
+        aktualizacje = Aktualizacje()
+        app = utworz_aplikacje(Stan(), aktualizacje=aktualizacje,
+                               okno={"okno": w_oknie, "port": args.port, "start": START})
+        aktualizacje.sprawdz_w_tle()
+        return app
+
     if w_oknie:
         from fm_moneyball.okno import uruchom
-        uruchom(app, args.host, args.port)
+        uruchom(utworz_app, args.host, args.port, START)
         return
+
+    import uvicorn
+    app = utworz_app()
 
     print(f"FM26 Moneyball działa pod adresem {adres}  "
           f"({'zamknięcie tego okna' if ZAMROZONY else 'Ctrl+C'} kończy aplikację)")

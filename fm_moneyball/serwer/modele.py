@@ -118,3 +118,13 @@ class RadarModel(BaseModel):
 class PodobniModel(RankingModel):
     id: str
     n: int = 10
+
+
+class SprzedajDrogoModel(KadraModel):
+    filtry: FiltryModel = Field(default_factory=FiltryModel)      # wspolne filtry panelu (zastepcy)
+
+
+class OptymalizatorModel(SprzedajDrogoModel):
+    budzet: float = Field(ge=0)                  # EUR na transfery
+    budzet_plac: float = Field(ge=0)             # EUR na tydzien (pensje nowych zawodnikow)
+    pozycje: list[str] = Field(default_factory=list)

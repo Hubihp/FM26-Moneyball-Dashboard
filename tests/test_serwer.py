@@ -441,3 +441,18 @@ def test_lista_zyczen_kolumny_jak_ranking(klient):
     oczekiwane.insert(oczekiwane.index("Piłkarz") + 1, "Pozycja na liście")
     assert pola == oczekiwane
     assert {w["Pozycja na liście"] for w in lista["wiersze"]} == {"Napastnik", "Lewy Obrońca"}
+
+
+def test_optymalizator_i_sprzedaj_drogo(klient):
+    w = klient.post("/api/optymalizator", json={"budzet": 3e7, "budzet_plac": 1e5,
+                                                "pozycje": ["Napastnik", "Prawy Skrzydłowy", "Środkowy Obrońca"],
+                                                "filtry": {"min_minut": 0}}).json()
+    assert w["wydane"] <= 3e7 and w["pensje"] <= 1e5 and w["optimum_pewne"]
+    assert w["zysk"] == pytest.approx(sum(z["zysk"] for z in w["zestaw"]))
+    for z in w["zestaw"]:
+        assert z["zawodnik"]["SCORE"] == pytest.approx(z["moj_score"] + z["zysk"])
+        assert z["zawodnik"]["Klub_UID"] != klient.get("/api/stan").json()["meta"]["moj_klub_uid"]
+    if w["jedna_gwiazda"]:
+        assert w["zysk"] >= w["jedna_gwiazda"]["zysk"]
+    s = klient.post("/api/sprzedaj-drogo", json={"filtry": {"min_minut": 0}}).json()
+    assert "wymiany" in s and all(x["zysk"] > 0 for x in s["wymiany"])

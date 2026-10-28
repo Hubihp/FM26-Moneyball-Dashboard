@@ -44,7 +44,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     # biblioteki wykresow i narzedzia deweloperskie nie sa potrzebne w programie
     excludes=["streamlit", "altair", "plotly", "matplotlib", "tkinter", "pytest", "IPython", "PyQt5", "PyQt6",
-              "PySide2", "PySide6", "gi"],
+              "PySide2", "PySide6", "gi", "pyarrow"],
 )
 pyz = PYZ(a.pure)
 exe = EXE(

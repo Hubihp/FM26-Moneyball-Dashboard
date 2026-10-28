@@ -194,6 +194,49 @@ export type PozycjaKadry = {
 };
 export type Kadra = { klub: string | null; pozycje: PozycjaKadry[] };
 
+export type ZapytanieKadry = {
+  wagi: Record<string, Record<string, number>>;
+  ignoruj_mnoznik: boolean;
+  k_baza: number;
+  filtry: Filtry;
+};
+
+export type Wymiana = {
+  pozycja: string;
+  moj: Wiersz;
+  przeplacenie: number;
+  zastepca: Wiersz;
+  cena_zastepcy: number;
+  zysk: number;
+};
+
+export type SprzedajDrogo = { wymiany: Wymiana[]; prog: number; tolerancja: number };
+
+export type WyborOptymalizatora = {
+  pozycja: string;
+  zawodnik: Wiersz;
+  zysk: number;
+  cena: number;
+  pensja: number;
+  moj_score: number;
+  poziom_zastepczy: boolean;
+};
+
+export type WynikOptymalizatora = {
+  zestaw: WyborOptymalizatora[];
+  zysk: number;
+  wydane: number;
+  pensje: number;
+  zostalo: number;
+  zostalo_plac: number;
+  pozycje_bez_wzmocnienia: string[];
+  jedna_gwiazda: WyborOptymalizatora | null;
+  liczba_kandydatow: number;
+  optimum_pewne: boolean;
+  czas_ms: number;
+  bazy: Record<string, { score: number; poziom_zastepczy: boolean }>;
+};
+
 export type Kraj = {
   id: number | null;
   nazwa: string | null;
@@ -276,6 +319,9 @@ export const api = {
   }) => post<ListaZyczen>('/api/lista-zyczen', body),
   mojaKadra: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number }) =>
     post<Kadra>('/api/moja-kadra', body),
+  sprzedajDrogo: (body: ZapytanieKadry) => post<SprzedajDrogo>('/api/sprzedaj-drogo', body),
+  optymalizator: (body: ZapytanieKadry & { budzet: number; budzet_plac: number; pozycje: string[] }) =>
+    post<WynikOptymalizatora>('/api/optymalizator', body),
   przeladuj: () => post<Stan>('/api/przeladuj', {}),
   metaPozycji: (pozycja: string) => zadanie<MetaPozycji>(`/api/pozycja/${encodeURIComponent(pozycja)}`),
   ranking: (body: ZapytanieRankingu) => post<Ranking>('/api/ranking', body),

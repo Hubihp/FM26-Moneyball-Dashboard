@@ -9,6 +9,7 @@ import type { Kolumna, Wiersz } from '../api';
 import { formatuj, kolorNiedowartosciowania, kolorWyniku, kolorZmiany } from '../format';
 import { kluczZawodnika } from '../pamiec';
 import { czytaj, zapisz } from '../pamiecSerwera';
+import { PrzyciskGwiazdki } from './Gwiazdka';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -91,20 +92,7 @@ type Kontekst = { ulubione?: Set<string>; przelaczUlubione?: (wiersz: Wiersz) =>
 function Gwiazdka({ data, context }: { data?: Wiersz; context: Kontekst }) {
   if (!data || !context.przelaczUlubione) return null;
   const aktywna = context.ulubione?.has(kluczZawodnika(data)) ?? false;
-  return (
-    <button type="button" className={`gwiazdka${aktywna ? ' aktywna' : ''}`}
-      title={aktywna ? 'Usuń z listy życzeń' : 'Dodaj do listy życzeń'}
-      aria-label={aktywna ? 'Usuń z listy życzeń' : 'Dodaj do listy życzeń'} aria-pressed={aktywna}
-      onClick={(e) => {
-        e.stopPropagation();
-        context.przelaczUlubione?.(data);
-      }}>
-      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"
-          fill={aktywna ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      </svg>
-    </button>
-  );
+  return <PrzyciskGwiazdki aktywna={aktywna} przelacz={() => context.przelaczUlubione?.(data)} />;
 }
 
 // Niedowartosciowanie z oznaczeniem U21: cena mlodego zawodnika zawiera potencjal, ktorego model nie widzi

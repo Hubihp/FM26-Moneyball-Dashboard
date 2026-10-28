@@ -3,6 +3,15 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 1.1.0
+
+- **Optymalizator budżetu** (Moja kadra): podajesz budżet transferowy i płacowy oraz pozycje do wzmocnienia,
+  a aplikacja dobiera zestaw zawodników z największym przyrostem SCORE nad twoją kadrą - i porównuje go
+  z „jedną gwiazdą” za te same pieniądze.
+- **Sprzedaj drogo** (Moja kadra): twoi zawodnicy, za których rynek płaci wyraźnie więcej, niż wynika z ich gry,
+  z najtańszym podobnym zastępcą i zyskiem z wymiany.
+- Szybszy start: okno programu pojawia się od razu, biblioteki ładują się w tle (czas startu w dzienniku).
+
 ## 1.0.1
 
 - Filtr pensji (tygodniowej) w panelu, pod ceną.

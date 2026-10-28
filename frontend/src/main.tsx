@@ -16,12 +16,16 @@ const klient = new QueryClient({
 const motyw = createTheme({ primaryColor: 'teal', defaultRadius: 'md', fontFamily: 'Inter, system-ui, sans-serif' });
 
 // pamiec interfejsu (lista zyczen, filtry, uklad tabel) musi byc wczytana przed pierwszym renderem
-void wczytajPamiec().finally(() => createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <MantineProvider theme={motyw} defaultColorScheme="dark">
-      <QueryClientProvider client={klient}>
-        <App />
-      </QueryClientProvider>
-    </MantineProvider>
-  </StrictMode>,
-));
+void wczytajPamiec().finally(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <MantineProvider theme={motyw} defaultColorScheme="dark">
+        <QueryClientProvider client={klient}>
+          <App />
+        </QueryClientProvider>
+      </MantineProvider>
+    </StrictMode>,
+  );
+  // pomiar czasu startu programu (dziennik ~/.fm_moneyball/logi): interfejs gotowy
+  void fetch('/api/system/gotowe', { method: 'POST' }).catch(() => undefined);
+});

@@ -1,10 +1,13 @@
 """Trasy: wersja programu, aktualizacje i pamiec interfejsu (lista zyczen, filtry, uklad tabel)."""
+import logging
+import time
 import webbrowser
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 ADRES_PRZENIESIENIA = "http://localhost:{port}/?przenies=1"
+log = logging.getLogger("fm_moneyball")
 
 
 class ZmianyPamieci(BaseModel):
@@ -38,6 +41,16 @@ def utworz(pamiec, aktualizacje, okno=None):
     @router.put("/pamiec")
     def zapisz_pamiec(z: ZmianyPamieci):
         return {"liczba": pamiec.ustaw(z.zmiany)}
+
+    @router.post("/system/gotowe")
+    def gotowe():
+        """Interfejs wczytany - zapis czasu startu do dziennika (raz na uruchomienie)."""
+        if "start" in okno and not okno.get("zmierzono"):
+            okno["zmierzono"] = True
+            from fm_moneyball.okno import ETAPY
+            etapy = ", ".join(f"{k} {v:.1f} s" for k, v in ETAPY.items())
+            log.info("Czas startu: %.1f s do gotowego interfejsu (%s)", time.time() - okno["start"], etapy or "bez okna")
+        return {"ok": True}
 
     @router.post("/przenies-z-przegladarki")
     def przenies():

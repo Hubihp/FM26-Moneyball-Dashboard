@@ -1,11 +1,15 @@
-import { Alert, Badge, Button, Card, Group, Loader, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
+import { Alert, Badge, Button, Card, Group, Loader, SegmentedControl, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { lazy, Suspense, useState } from 'react';
 
-import { api, type Wiersz, type ZapytanieRankingu } from '../api';
+import { api, type Filtry, type Kadra, type Wiersz, type ZapytanieRankingu } from '../api';
 import { formatuj } from '../format';
+import { usePamiec } from '../pamiec';
 import Nastepca from './Nastepca';
-import { useState } from 'react';
 import type { Ustawienia } from './PanelBoczny';
+
+const SprzedajDrogo = lazy(() => import('./SprzedajDrogo'));
+const Optymalizator = lazy(() => import('./Optymalizator'));
 
 type Props = {
   wersja: number;
@@ -15,23 +19,58 @@ type Props = {
   otworz: (pozycja: string, id: string, wiersz: Wiersz) => void;
   zapytanieDla: (pozycja: string) => ZapytanieRankingu;
   mojKlubUid: number | null | undefined;
+  filtry: Filtry;                 // wspolne filtry panelu (zastepcy, kandydaci optymalizatora)
+  ulubione: Set<string>;
+  przelaczUlubione: (wiersz: Wiersz, pozycja: string) => void;
 };
 
 // Analiza kadry: moi zawodnicy na kazdej pozycji, od bramkarza do napastnika
-export default function MojaKadra({ wersja, wagi, ustawienia, szukajNastepcy, otworz, zapytanieDla, mojKlubUid }: Props) {
-  const [nastepcaDla, setNastepcaDla] = useState<{ pozycja: string; id: string; pilkarz: string } | null>(null);
+export default function MojaKadra(p: Props) {
+  const { wersja, wagi, ustawienia, otworz } = p;
+  const [widok, setWidok] = usePamiec('fm-kadra-widok', 'pozycje');
   const kadra = useQuery({
     queryKey: ['kadra', wersja, wagi, ustawienia.k_baza, ustawienia.ignoruj_mnoznik],
     queryFn: () => api.mojaKadra({ wagi, ignoruj_mnoznik: ustawienia.ignoruj_mnoznik, k_baza: ustawienia.k_baza }),
   });
+  const zapytanie = { wagi, ignoruj_mnoznik: ustawienia.ignoruj_mnoznik, k_baza: ustawienia.k_baza, filtry: p.filtry };
 
+  return (
+    <Stack p="md" gap="sm">
+      <SegmentedControl w="fit-content" value={widok} onChange={setWidok} data={[
+        { value: 'pozycje', label: 'Pozycje' },
+        { value: 'sprzedaj', label: 'Sprzedaj drogo' },
+        { value: 'optymalizator', label: 'Optymalizator budżetu' },
+      ]} />
+      <Suspense fallback={<Loader size="sm" />}>
+        {widok === 'sprzedaj' ? (
+          <SprzedajDrogo zapytanie={zapytanie} wersja={wersja} otworz={otworz} ulubione={p.ulubione}
+            przelaczUlubione={p.przelaczUlubione} />
+        ) : widok === 'optymalizator' ? (
+          kadra.data ? (
+            <Optymalizator zapytanie={zapytanie} wersja={wersja} kadra={kadra.data.pozycje}
+              pozycje={kadra.data.pozycje.map((x) => x.pozycja)} otworz={otworz} ulubione={p.ulubione}
+              przelaczUlubione={p.przelaczUlubione} />
+          ) : kadra.error ? <Alert color="red">{(kadra.error as Error).message}</Alert> : <Loader size="sm" />
+        ) : (
+          <WidokPozycji {...p} kadra={kadra} />
+        )}
+      </Suspense>
+    </Stack>
+  );
+}
+
+type PropsPozycji = Props & { kadra: UseQueryResult<Kadra> };
+
+// Kazda pozycja mojego klubu na tle puli, od bramkarza do napastnika
+function WidokPozycji({ wersja, szukajNastepcy, otworz, zapytanieDla, mojKlubUid, kadra }: PropsPozycji) {
+  const [nastepcaDla, setNastepcaDla] = useState<{ pozycja: string; id: string; pilkarz: string } | null>(null);
   if (kadra.isLoading) return <Loader m="md" />;
   if (kadra.error) return <Alert m="md" color="red">{(kadra.error as Error).message}</Alert>;
   if (!kadra.data) return null;
   const pozycje = kadra.data.pozycje;
 
   return (
-    <Stack p="md">
+    <Stack>
       <Text size="sm" c="dimmed">
         Pozycje od bramkarza do napastnika. Twoi zawodnicy są liczeni nawet poniżej progu minut, więc przy małej liczbie
         minut ich wynik jest mniej pewny.
