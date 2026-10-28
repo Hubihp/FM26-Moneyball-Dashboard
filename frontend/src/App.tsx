@@ -117,7 +117,24 @@ export default function App() {
     setWagiWlasne(nowe);
   }, [wagiWlasne, setWagiWlasne]);
   // filtry panelu osobno dla kazdej pozycji, zapamietane w przegladarce
-  const [filtryPozycji, setFiltryPozycji] = usePamiec<Record<string, Filtry>>('fm-filtry', {});
+  // Filtry panelu sa wspolne dla wszystkich pozycji (zmiana pozycji ich nie zmienia); osobno dla pozycji
+  // zostaja tylko "Kandydaci z innych pozycji" (lista zalezy od pozycji) - w dawnej mapie 'fm-filtry'
+  const [filtryPozycji, setFiltryPozycji] = usePamiec<Record<string, Partial<Filtry>>>('fm-filtry', {});
+  // jednorazowa migracja: wspolne filtry startuja od dawnych filtrow ostatnio wybranej pozycji
+  const [filtryWspolne, setFiltryWspolne] = usePamiec<Filtry>('fm-filtry-wspolne',
+    { ...PUSTE_FILTRY, ...(filtryPozycji[pozycja] ?? {}), kandydaci_z: [], kandydaci: false });
+  const filtryDla = (poz: string): Filtry => {
+    const kandydaciZ = filtryPozycji[poz]?.kandydaci_z ?? [];
+    return { ...PUSTE_FILTRY, ...filtryWspolne, kandydaci_z: kandydaciZ,
+      kandydaci: kandydaciZ.length > 0 && poz !== 'Bramkarz' };
+  };
+  const ustawFiltry = (f: Filtry) => {
+    const { kandydaci_z: kandydaciZ, ...reszta } = f;
+    setFiltryWspolne({ ...reszta, kandydaci_z: [], kandydaci: false });
+    if ((filtryPozycji[pozycja]?.kandydaci_z ?? []).join('|') !== kandydaciZ.join('|')) {
+      setFiltryPozycji({ ...filtryPozycji, [pozycja]: { ...filtryPozycji[pozycja], kandydaci_z: kandydaciZ } });
+    }
+  };
   const [wybrani, setWybrani] = useState<Record<string, string[]>>({});
   const [karta, setKarta] = useState<string | null>(null);
   const [kartaWiersz, setKartaWiersz] = useState<Wiersz | undefined>(undefined);
@@ -145,10 +162,8 @@ export default function App() {
   // scalenie z domyslnymi (nowe pola filtrow); kandydaci wlaczeni tylko, gdy wybrano pozycje.
   // useMemo: nowy obiekt przy kazdym renderze zmienialby zapytanie, a opoznione zapytanie wywolywalo
   // kolejny render - aplikacja przerysowywala sie w petli (m.in. znikaly podpowiedzi wykresow)
-  const filtry: Filtry = useMemo(() => {
-    const zapisane = { ...PUSTE_FILTRY, ...(filtryPozycji[pozycja] ?? {}) };
-    return { ...zapisane, kandydaci: zapisane.kandydaci_z.length > 0 && pozycja !== 'Bramkarz' };
-  }, [filtryPozycji, pozycja]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const filtry: Filtry = useMemo(() => filtryDla(pozycja), [filtryWspolne, filtryPozycji, pozycja]);
   const wagi = wagiWlasne[pozycja] ?? meta.data?.wagi_domyslne ?? {};
   const zapytanie: ZapytanieRankingu = useMemo(
     () => ({
@@ -163,9 +178,8 @@ export default function App() {
   const [zapytanieOpoznione] = useDebouncedValue(zapytanie, 250);
   // zapytanie dla dowolnej pozycji z jej zapamietanymi filtrami (np. "Nastepca" w Mojej kadrze)
   const zapytanieDla = (poz: string): ZapytanieRankingu => {
-    const f = { ...PUSTE_FILTRY, ...(filtryPozycji[poz] ?? {}) };
     return { pozycja: poz, wagi: wagiWlasne[poz] ?? null, ignoruj_mnoznik: ustawienia.ignoruj_mnoznik,
-      k_baza: ustawienia.k_baza, filtry: { ...f, kandydaci: f.kandydaci_z.length > 0 } };
+      k_baza: ustawienia.k_baza, filtry: filtryDla(poz) };
   };
 
   const ranking = useQuery({
@@ -197,7 +211,7 @@ export default function App() {
 
   const szukajNastepcy = (poz: string) => {
     setPozycja(poz);
-    setFiltryPozycji({ ...filtryPozycji, [poz]: { ...PUSTE_FILTRY, ...(filtryPozycji[poz] ?? {}), bez_mojego_klubu: true } });
+    setFiltryWspolne({ ...filtryWspolne, bez_mojego_klubu: true });
     setZakladka('ranking');
   };
   // Gwiazdka: dodaje zawodnika z pozycja, w ktorej jest teraz ogladany, albo usuwa go z listy
@@ -258,7 +272,7 @@ export default function App() {
           setPozycja={setPozycja}
           meta={meta.data}
           filtry={filtry}
-          setFiltry={(f) => setFiltryPozycji({ ...filtryPozycji, [pozycja]: f })}
+          setFiltry={ustawFiltry}
           wagi={wagi}
           setWagi={(w) => {
             const kopia = { ...wagiWlasne };

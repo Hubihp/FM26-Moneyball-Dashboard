@@ -22,6 +22,7 @@ class Filtry:
     wiek: tuple | None = None            # (min, max)
     cena: tuple | None = None            # (min, max) w EUR; None = bez ograniczen
     bez_ceny: bool = True                # czy pokazywac zawodnikow bez ceny ("Nie na sprzedaz")
+    pensja: tuple | None = None          # (min, max) w EUR na tydzien; zawodnicy bez pensji przechodza
     szukaj: str = ""
     kontrakt_mies: int | None = None     # kontrakt wygasa w ciagu N miesiecy od daty w grze
     min_minut: int = 0
@@ -44,6 +45,8 @@ MAKS_WIEK_ROZWOJU = 23           # ...u mlodego zawodnika
 # Do tego wieku cena zawiera potencjal, ktorego model wyceny nie widzi (zna tylko wynik, wiek i kontrakt):
 # "Niedowartosciowanie" jest u nich zanizone - interfejs oznacza je jako U21
 MAKS_WIEK_U21 = 21
+# Zarobki_Numeryczne sa roczne; w grze (i w filtrze) pensja jest tygodniowa
+TYGODNI_W_ROKU = 52
 # Werdykt porownania z moim zawodnikiem: roznica SCORE, od ktorej kandydat jest wzmocnieniem
 PROG_WZMOCNIENIA = 3.0
 
@@ -174,6 +177,11 @@ def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
         wynik = wynik[w_zakresie | (cena.isna() & filtry.bez_ceny)]
     elif not filtry.bez_ceny:
         wynik = wynik[wynik['Wartość_Numeryczna'].notna()]
+    if filtry.pensja is not None and 'Zarobki_Numeryczne' in wynik.columns:
+        tygodniowo = wynik['Zarobki_Numeryczne'] / TYGODNI_W_ROKU
+        lo, hi = filtry.pensja
+        w_zakresie = tygodniowo.between(lo if lo is not None else -np.inf, hi if hi is not None else np.inf)
+        wynik = wynik[w_zakresie | tygodniowo.isna()]
     if filtry.ligi and 'Liga' in wynik.columns:
         wynik = wynik[wynik['Liga'].isin(filtry.ligi)]
     if 'Kandydat' in wynik.columns:

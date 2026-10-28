@@ -36,6 +36,12 @@ def test_meta_pozycji(klient):
     assert "Premier League (ANG 1)" in {w["Liga"] for w in wiersze}
     assert meta["wagi_domyslne"]["Liczba goli na 90 min"] == 20
     assert klient.get("/api/pozycja/Nieznana").status_code == 404
+    # filtr pensji (tygodniowej) przez API: wszyscy widoczni maja pensje w zakresie albo brak pensji
+    assert meta["pensja_max"] > 0
+    prog = meta["pensja_max"] / 4
+    nap = klient.post("/api/ranking", json={"pozycja": "Napastnik", "filtry": {"pensja": [prog, None], "min_minut": 0}}).json()
+    wszyscy = klient.post("/api/ranking", json={"pozycja": "Napastnik", "filtry": {"min_minut": 0}}).json()
+    assert 0 < len(nap["wiersze"]) < len(wszyscy["wiersze"])
 
 
 def test_ranking_filtry_i_kolumny(klient):

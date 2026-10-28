@@ -47,6 +47,7 @@ export type MetaPozycji = {
   nogi: string[];
   wiek: [number, number] | null;
   cena_max: number | null;
+  pensja_max: number | null;
   minuty_max: number | null;
   wagi_domyslne: Record<string, number>;
   ma_kontrakty: boolean;
@@ -106,6 +107,7 @@ export type Filtry = {
   kraje: string[];
   wiek: [number, number] | null;
   cena: [number | null, number | null] | null;
+  pensja: [number | null, number | null] | null;
   bez_ceny: boolean;
   szukaj: string;
   kontrakt_mies: number | null;

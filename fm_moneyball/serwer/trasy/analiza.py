@@ -21,6 +21,8 @@ def utworz(stan, obl):
             "nogi": sorted(df['Preferowana noga'].dropna().unique().tolist()) if 'Preferowana noga' in df.columns else [],
             "wiek": [int(df['Wiek'].min()), int(df['Wiek'].max())] if 'Wiek' in df.columns else None,
             "cena_max": float(ceny.max()) if not ceny.empty else None,
+            "pensja_max": (float(df['Zarobki_Numeryczne'].max() / analiza.TYGODNI_W_ROKU)
+                           if 'Zarobki_Numeryczne' in df.columns and df['Zarobki_Numeryczne'].notna().any() else None),
             "minuty_max": int(df['Minuty'].max()) if 'Minuty' in df.columns and df['Minuty'].notna().any() else None,
             "wagi_domyslne": analiza.wagi_domyslne(pozycja, df),
             "ma_kontrakty": bool(df['Wygasa_Data'].notna().any()),

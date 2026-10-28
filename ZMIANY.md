@@ -3,6 +3,12 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 1.0.1
+
+- Filtr pensji (tygodniowej) w panelu, pod ceną.
+- Filtry panelu (minuty, wiek, cena, pensja, kontrakt...) są wspólne dla wszystkich pozycji i nie zmieniają się
+  po przełączeniu pozycji. Wagi statystyk zostają osobne dla każdej pozycji.
+
 ## 1.0.0
 
 - Program dla Windows we własnym oknie, bez okna konsoli; instalator bez uprawnień administratora.

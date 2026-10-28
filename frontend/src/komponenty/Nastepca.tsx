@@ -20,6 +20,7 @@ function opisFiltrow(z: ZapytanieRankingu) {
   const czesci = [`min. ${f.min_minut} minut`];
   if (f.wiek) czesci.push(`wiek ${f.wiek[0]}–${f.wiek[1]}`);
   if (f.cena) czesci.push(`cena ${eur(f.cena[0] ?? 0)} – ${f.cena[1] === null ? 'bez limitu' : eur(f.cena[1])}`);
+  if (f.pensja) czesci.push(`pensja ${eur(f.pensja[0] ?? 0)} – ${f.pensja[1] === null ? 'bez limitu' : eur(f.pensja[1])} tyg.`);
   if (f.kontrakt_mies) czesci.push(`kontrakt ≤ ${f.kontrakt_mies} mies.`);
   if (f.nogi.length) czesci.push(`noga: ${f.nogi.join(', ')}`);
   return czesci.join(' · ');
@@ -41,8 +42,8 @@ export default function Nastepca({ zawodnik, zapytanie, wersja, mojKlubUid, zamk
             Zawodnicy o najbardziej podobnym stylu gry, także z innych pozycji (fioletowy pasek). Podobieństwo =
             cosinus kąta między wektorami statystyk /90 pozycji {zawodnik.pozycja}, przeliczonych na odchylenia od średniej
             pozycji (z-score) ważone minutami i skurczone przy małej liczbie minut; 100% = identyczne proporcje
-            statystyk. Liczy się styl, nie poziom - poziom pokazuje SCORE. Bez twojego klubu, z filtrami panelu dla
-            tej pozycji: {opisFiltrow(zapytanie)}.
+            statystyk. Liczy się styl, nie poziom - poziom pokazuje SCORE. Bez twojego klubu, z filtrami
+            panelu: {opisFiltrow(zapytanie)}.
           </Text>
           {wynik.isLoading && <Loader size="sm" />}
           {wynik.error && <Alert color="red">{(wynik.error as Error).message}</Alert>}

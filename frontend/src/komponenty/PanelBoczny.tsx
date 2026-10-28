@@ -39,7 +39,7 @@ type Props = {
 };
 
 export const PUSTE_FILTRY: Filtry = {
-  ligi: [], nogi: [], kraje: [], wiek: null, cena: null, bez_ceny: true, szukaj: '', kontrakt_mies: null,
+  ligi: [], nogi: [], kraje: [], wiek: null, cena: null, pensja: null, bez_ceny: true, szukaj: '', kontrakt_mies: null,
   // domyslnie co najmniej 1000 minut (wiarygodniejsze statystyki /90); mozna zmienic w panelu
   min_minut: 1000,
   bez_mojego_klubu: false, okazje: [], min_rozwoj: null, kandydaci: false,
@@ -48,7 +48,7 @@ export const PUSTE_FILTRY: Filtry = {
 
 // Suwak ceny w skali pierwiastkowej: wiecej precyzji przy niskich kwotach
 const doSuwaka = (x: number, max: number) => Math.sqrt(x / max) * 100;
-const zSuwaka = (s: number, max: number) => Math.round(((s / 100) ** 2 * max) / 10_000) * 10_000;
+const zSuwaka = (s: number, max: number, krok = 10_000) => Math.round(((s / 100) ** 2 * max) / krok) * krok;
 
 export default function PanelBoczny(p: Props) {
   const { meta, filtry, setFiltry } = p;
@@ -56,6 +56,12 @@ export default function PanelBoczny(p: Props) {
   const sumaWag = Object.values(p.wagi).reduce((a, b) => a + b, 0);
   const cenaMax = meta?.cena_max ?? 0;
   const cena = filtry.cena ?? [0, cenaMax];
+  const pensjaMax = meta?.pensja_max ?? 0;
+  const pensja = filtry.pensja ?? [0, pensjaMax];
+  // zakres wieku jest wspolny dla pozycji - na suwaku przyciety do zakresu tej pozycji
+  const wiek = filtry.wiek && meta?.wiek
+    ? [Math.max(filtry.wiek[0], meta.wiek[0]), Math.min(filtry.wiek[1], meta.wiek[1])] as [number, number]
+    : meta?.wiek;
 
   return (
     <ScrollArea h="100%" type="auto" offsetScrollbars>
@@ -85,8 +91,8 @@ export default function PanelBoczny(p: Props) {
 
         {meta?.wiek && (
           <div>
-            <Text size="sm" fw={500}>Wiek: {(filtry.wiek ?? meta.wiek).join(' – ')}</Text>
-            <RangeSlider min={meta.wiek[0]} max={meta.wiek[1]} minRange={0} value={filtry.wiek ?? meta.wiek}
+            <Text size="sm" fw={500}>Wiek: {(wiek ?? meta.wiek).join(' – ')}</Text>
+            <RangeSlider min={meta.wiek[0]} max={meta.wiek[1]} minRange={0} value={wiek ?? meta.wiek}
               onChange={(v) => zmien('wiek', v)} label={null} />
           </div>
         )}
@@ -99,6 +105,16 @@ export default function PanelBoczny(p: Props) {
               onChange={([a, b]) => zmien('cena', a <= 0 && b >= 100 ? null : [zSuwaka(a, cenaMax), b >= 100 ? null : zSuwaka(b, cenaMax)])} />
             <Switch mt={6} size="xs" label="Uwzględnij zawodników bez ceny" checked={filtry.bez_ceny}
               onChange={(e) => zmien('bez_ceny', e.currentTarget.checked)} />
+          </div>
+        )}
+
+        {pensjaMax > 0 && (
+          <div>
+            <Text size="sm" fw={500}>Pensja (tyg.): {eur(pensja[0] ?? 0)} – {eur(pensja[1] ?? pensjaMax)}</Text>
+            <RangeSlider min={0} max={100} step={0.5} label={null}
+              value={[doSuwaka(pensja[0] ?? 0, pensjaMax), doSuwaka(pensja[1] ?? pensjaMax, pensjaMax)]}
+              onChange={([a, b]) => zmien('pensja', a <= 0 && b >= 100 ? null
+                : [zSuwaka(a, pensjaMax, 1000), b >= 100 ? null : zSuwaka(b, pensjaMax, 1000)])} />
           </div>
         )}
 

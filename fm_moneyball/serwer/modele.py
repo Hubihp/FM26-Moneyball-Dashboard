@@ -62,6 +62,7 @@ class FiltryModel(BaseModel):
     wiek: tuple[int, int] | None = None
     cena: tuple[float | None, float | None] | None = None
     bez_ceny: bool = True
+    pensja: tuple[float | None, float | None] | None = None
     szukaj: str = ""
     kontrakt_mies: int | None = None
     min_minut: int = 0

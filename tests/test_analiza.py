@@ -124,3 +124,12 @@ def test_oznaczenie_u21_i_brak_wiarygodnosci():
     p = analiza.wzbogac(_pula(), DZIS)
     assert list(p['U21']) == [False, False, False, False, True]
     assert 'Wiarygodność' not in analiza.POLA_WIERSZA
+
+
+def test_filtr_pensji_tygodniowej():
+    pula = pd.DataFrame({'SCORE': [60.0, 55.0, 50.0], 'Wartość_Numeryczna': [1e6, 2e6, 3e6],
+                         'Zarobki_Numeryczne': [52_000.0, 520_000.0, np.nan]})
+    widoczni = analiza.filtruj(pula, analiza.Filtry(pensja=(5_000, None), min_minut=0))
+    assert list(widoczni.index) == [1, 2]          # 1000 €/tydz. odpada, brak pensji przechodzi
+    widoczni = analiza.filtruj(pula, analiza.Filtry(pensja=(None, 2_000), min_minut=0))
+    assert list(widoczni.index) == [0, 2]
