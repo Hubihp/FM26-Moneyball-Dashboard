@@ -70,7 +70,7 @@ Pobierz [FM26Moneyball-Setup.exe](https://github.com/Hubihp/FM26-Moneyball-Dashb
 - **Wymagania:** Windows 10 lub 11 z Microsoft Edge WebView2 (wbudowany w Windows 11 i aktualne Windows 10; jeśli go brakuje, program pokaże link do instalatora Microsoftu).
 - Tryb przeglądarki nadal działa: `FM26Moneyball.exe --przegladarka` albo `py -m fm_moneyball --przegladarka`.
 
-**Publikowanie nowej wersji** (dla dewelopera): podnieś `__version__` w `fm_moneyball/__init__.py`, dopisz sekcję `## <wersja>` w `ZMIANY.md` i wypchnij tag `v<wersja>` (np. `git tag v1.1.0 && git push origin v1.1.0`). GitHub Actions zbuduje program i instalator, przetestuje cichą instalację i opublikuje wydanie; programy użytkowników wykryją je przy następnym starcie.
+**Publikowanie nowej wersji** (dla dewelopera): podnieś `__version__` w `fm_moneyball/__init__.py`, dopisz sekcję `## <wersja>` w `ZMIANY.md` i wypchnij zmiany na gałąź roboczą (albo tag `v<wersja>`). Gdy tej wersji nie ma jeszcze na GitHubie, GitHub Actions zbuduje program i instalator, przetestuje cichą instalację i opublikuje wydanie; programy użytkowników wykryją je przy następnym starcie.
 
 ### Aktualizacja
 

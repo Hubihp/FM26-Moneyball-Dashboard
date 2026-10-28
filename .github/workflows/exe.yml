@@ -1,6 +1,7 @@
 # Buduje program FM26 Moneyball dla Windows (okno bez konsoli) i instalator FM26Moneyball-Setup.exe.
-# - push na galaz robocza: budowanie + testy, instalator jako artefakt (bez wydania)
-# - tag v1.2.3: to samo + wydanie na GitHubie (opis z ZMIANY.md). Program sprawdza przy starcie
+# - push na galaz robocza: budowanie + testy, instalator jako artefakt; gdy wersja w
+#   fm_moneyball/__init__.py nie ma jeszcze wydania - wydanie v<wersja> na GitHubie (opis z ZMIANY.md)
+# - tag v1.2.3: to samo (wydanie tej wersji). Program sprawdza przy starcie
 #   najnowsze wydanie i proponuje aktualizacje. Staly link do instalatora:
 #   https://github.com/Hubihp/FM26-Moneyball-Dashboard/releases/latest/download/FM26Moneyball-Setup.exe
 name: Plik exe dla Windows
@@ -45,7 +46,16 @@ jobs:
             Write-Error "Tag ${{ github.ref_name }} nie zgadza się z wersją w kodzie ($wersja)"; exit 1
           }
           "wersja=$wersja" >> $env:GITHUB_OUTPUT
-          Write-Host "Wersja $wersja"
+          # nowe wydanie, gdy tej wersji jeszcze nie opublikowano (albo push tagu)
+          $wydac = "${{ github.ref_type }}" -eq "tag"
+          if (-not $wydac) {
+            try {
+              Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/releases/tags/v$wersja" `
+                -Headers @{ Authorization = "Bearer ${{ github.token }}" } | Out-Null
+            } catch { $wydac = $_.Exception.Response.StatusCode.value__ -eq 404 }
+          }
+          "wydac=$($wydac.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          Write-Host "Wersja $wersja, nowe wydanie: $wydac"
 
       - name: Budowanie programu
         run: pyinstaller --noconfirm fm26_moneyball.spec
@@ -109,7 +119,7 @@ jobs:
             dist/FM26Moneyball-Setup.exe.sha256
 
       - name: Opis wydania z ZMIANY.md
-        if: github.ref_type == 'tag'
+        if: steps.wersja.outputs.wydac == 'true'
         run: |
           $wersja = "${{ steps.wersja.outputs.wersja }}"
           $tekst = Get-Content ZMIANY.md -Raw -Encoding utf8
@@ -118,9 +128,11 @@ jobs:
           [IO.File]::WriteAllText("opis_wydania.md", $opis)
 
       - name: Wydanie
-        if: github.ref_type == 'tag'
+        if: steps.wersja.outputs.wydac == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.wersja.outputs.wersja }}
+          target_commitish: ${{ github.sha }}
           name: FM26 Moneyball ${{ steps.wersja.outputs.wersja }}
           body_path: opis_wydania.md
           files: |
