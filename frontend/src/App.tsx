@@ -35,6 +35,7 @@ import TabelaRankingu from './komponenty/TabelaRankingu';
 const KartaZawodnika = lazy(() => import('./komponenty/KartaZawodnika'));
 const Porownanie = lazy(() => import('./komponenty/Porownanie'));
 const Wykresy = lazy(() => import('./komponenty/Wykresy'));
+const ProfilDruzyny = lazy(() => import('./komponenty/ProfilDruzyny'));
 
 const POZYCJE = ['Bramkarz', 'Środkowy Obrońca', 'Lewy Obrońca', 'Prawy Obrońca', 'Lewy Wahadłowy', 'Prawy Wahadłowy',
   'Defensywny Pomocnik', 'Środkowy Pomocnik', 'Lewy Pomocnik', 'Prawy Pomocnik', 'Ofensywny Pomocnik', 'Lewy Skrzydłowy',
@@ -323,6 +324,7 @@ export default function App() {
               <Tabs.Tab value="okazje">Okazje</Tabs.Tab>
               <Tabs.Tab value="lista">Lista życzeń {lista.length ? `(${lista.length})` : ''}</Tabs.Tab>
               {mojKlubUid !== null && mojKlubUid !== undefined && <Tabs.Tab value="kadra">Moja kadra</Tabs.Tab>}
+              {mojKlubUid !== null && mojKlubUid !== undefined && <Tabs.Tab value="profil">Profil drużyny</Tabs.Tab>}
               <Tabs.Tab value="porownanie">Porównanie {wybraniPozycji.length ? `(${wybraniPozycji.length})` : ''}</Tabs.Tab>
               <Tabs.Tab value="wykresy">Wykresy</Tabs.Tab>
               <Tabs.Tab value="ligi">Ligi i kraje</Tabs.Tab>
@@ -391,6 +393,17 @@ export default function App() {
                     setPozycja(poz);
                     otworzKarte(id, wiersz);
                   }} />
+              )}
+            </Tabs.Panel>
+            <Tabs.Panel value="profil" style={{ overflow: 'auto' }}>
+              {zakladka === 'profil' && (
+                <Suspense fallback={<Loader m="md" />}>
+                  <ProfilDruzyny wersja={wersja} wagi={wagiWlasne} ustawienia={ustawienia}
+                    otworz={(poz, id) => {
+                      setPozycja(poz);
+                      otworzKarte(id);
+                    }} />
+                </Suspense>
               )}
             </Tabs.Panel>
             <Tabs.Panel value="ligi" style={{ overflow: 'auto' }}>

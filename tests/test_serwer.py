@@ -456,3 +456,15 @@ def test_optymalizator_i_sprzedaj_drogo(klient):
         assert w["zysk"] >= w["jedna_gwiazda"]["zysk"]
     s = klient.post("/api/sprzedaj-drogo", json={"filtry": {"min_minut": 0}}).json()
     assert "wymiany" in s and all(x["zysk"] > 0 for x in s["wymiany"])
+
+
+def test_profil_druzyny_demo(klient):
+    p = klient.post("/api/profil-druzyny", json={}).json()
+    assert p["klub"] and not p["z_zapisu"] and p["kluby"] >= 2
+    nazwy = [s["nazwa"] for s in p["sekcje"]]
+    assert "Z piłką" in nazwy and "Bez piłki" in nazwy
+    for s in p["sekcje"]:
+        for m in s["metryki"]:
+            assert 1 <= m["miejsce"] <= m["n"] == p["kluby"]
+    assert p["atletyzm"] is None                      # demo nie ma dystansu i sprintow
+    assert p["zmiany"]["historia"] is False

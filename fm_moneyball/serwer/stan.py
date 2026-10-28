@@ -40,7 +40,7 @@ log = logging.getLogger("fm_moneyball")
 CO_ILE_SPRAWDZAC = 15        # sekundy miedzy sprawdzeniami folderu zapisow
 # 2: domyslnie zawodnik we wszystkich pulach, w ktorych jest naturalny (wczesniej tylko glowna)
 WERSJA_USTAWIEN = 2
-WERSJA_CACHE = 9             # zmiana formatu wyniku = nowy klucz cache
+WERSJA_CACHE = 12            # zmiana formatu wyniku = nowy klucz cache (12: sumy i sklady druzyn, tabela ligi)
 ILE_W_CACHE = 3
 DEMO_DATA_GRY = date(2027, 1, 15)
 
@@ -98,6 +98,8 @@ class Stan:
         self.dane = {}
         self.meta = {}
         self.ligi = []                 # podsumowanie lig z zapisu
+        self.druzyny = {}              # club_uid -> sumy statystyk sezonu (tylko zapis gry)
+        self.tabele = {}               # club_uid prowadzonego klubu -> tabela jego ligi (tylko zapis gry)
         self.status = "pusto"          # pusto | wczytywanie | gotowe | blad
         self.komunikat = "Wybierz źródło danych."
         self.etap = None               # {"nr", "z", "nazwa", "start"} podczas wczytywania
@@ -302,7 +304,7 @@ class Stan:
             if self._klucz == ("demo",):
                 return True
             dane, meta = _demo()
-            return self._zakoncz(pokolenie, ("demo",), dane, meta, [], None, {})
+            return self._zakoncz(pokolenie, ("demo",), dane, meta, [], None, {}, {}, {})
 
         oryginal, opis = self._znajdz_zapis()
         if oryginal is None:
@@ -345,13 +347,15 @@ class Stan:
             "z_cache": z_cache,
             "wczytano": datetime.now().isoformat(timespec="seconds"),
         }
-        return self._zakoncz(pokolenie, klucz, wynik.dane, meta, wynik.ligi, sciezka_odczytu, wynik.kraje_auto)
+        return self._zakoncz(pokolenie, klucz, wynik.dane, meta, wynik.ligi, sciezka_odczytu, wynik.kraje_auto,
+                             getattr(wynik, "druzyny", {}), getattr(wynik, "tabele", {}))
 
-    def _zakoncz(self, pokolenie, klucz, dane, meta, ligi, sciezka_odczytu, kraje_auto):
+    def _zakoncz(self, pokolenie, klucz, dane, meta, ligi, sciezka_odczytu, kraje_auto, druzyny=None, tabele=None):
         with self._blokada:
             if pokolenie != self.pokolenie:
                 return False
             self.surowe, self.meta, self.ligi, self._klucz = dane, meta, ligi, klucz
+            self.druzyny, self.tabele = druzyny or {}, tabele or {}
             self.kraje_auto = kraje_auto or {}
             self._sciezka_odczytu = sciezka_odczytu
             self._uzupelnij_moj_klub()

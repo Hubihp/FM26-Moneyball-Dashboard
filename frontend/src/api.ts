@@ -194,6 +194,56 @@ export type PozycjaKadry = {
 };
 export type Kadra = { klub: string | null; pozycje: PozycjaKadry[] };
 
+export type MetrykaProfilu = {
+  nazwa: string;
+  wartosc: number;
+  srednia: number;
+  miejsce: number;
+  n: number;
+  wyzej_lepiej: boolean;
+  format: string;
+  opis: string;
+  rozklad: { klub: string; wartosc: number; moj: boolean }[];
+};
+
+export type ZawodnikAtletyzmu = {
+  Piłkarz: string;
+  ID: string | null;
+  Pozycja: string | null;
+  Pula: string | null;
+  Minuty: number;
+  Atletyzm: number;
+  'Dystans (km)/90'?: number;
+  'Sprinty/90'?: number;
+};
+
+export type ZmianaScore = { Piłkarz: string; ID: string; pozycja: string; SCORE: number; 'Δ SCORE': number; 'SCORE wtedy': number };
+export type ZmianaOceny = { Piłkarz: string | null; teraz: number; wtedy: number; zmiana: number };
+
+export type ProfilDruzyny = {
+  klub: string | null;
+  liga: string | null;
+  kluby: number;
+  mecze: number | null;
+  tabela: { pozycja: number; mecze: number; wygrane: number; remisy: number; porazki: number; gole: number;
+    stracone: number; punkty: number } | null;
+  z_zapisu: boolean;
+  sekcje: { nazwa: string; metryki: MetrykaProfilu[] }[];
+  podsumowanie: { mocne: { nazwa: string; miejsce: number; n: number }[]; slabe: { nazwa: string; miejsce: number; n: number }[];
+    mala_proba: boolean };
+  atletyzm: {
+    prog_minut: number;
+    metryki: string[];
+    zawodnicy: ZawodnikAtletyzmu[];
+    kluby: { klub: string; wynik: number; zawodnicy: number; moj: boolean; miejsce: number }[];
+    moj: { klub: string; wynik: number; zawodnicy: number; miejsce: number } | null;
+  } | null;
+  zmiany: {
+    spadki: ZmianaScore[]; wzrosty: ZmianaScore[]; oceny_spadki: ZmianaOceny[]; oceny_wzrosty: ZmianaOceny[];
+    historia: boolean; data_porownania: string | null; min_minut: number;
+  };
+};
+
 export type ZapytanieKadry = {
   wagi: Record<string, Record<string, number>>;
   ignoruj_mnoznik: boolean;
@@ -319,6 +369,8 @@ export const api = {
   }) => post<ListaZyczen>('/api/lista-zyczen', body),
   mojaKadra: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number }) =>
     post<Kadra>('/api/moja-kadra', body),
+  profilDruzyny: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number }) =>
+    post<ProfilDruzyny>('/api/profil-druzyny', body),
   sprzedajDrogo: (body: ZapytanieKadry) => post<SprzedajDrogo>('/api/sprzedaj-drogo', body),
   optymalizator: (body: ZapytanieKadry & { budzet: number; budzet_plac: number; pozycje: string[] }) =>
     post<WynikOptymalizatora>('/api/optymalizator', body),

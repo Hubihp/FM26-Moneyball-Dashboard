@@ -3,6 +3,14 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 1.2.0
+
+- **Profil drużyny** (nowa zakładka): twoja drużyna na tle całej ligi - wyniki, gra z piłką, bez piłki
+  i fizycznie (wartość, średnia ligi, miejsce), mocne i słabe strony, atletyzm składu (dystans i sprinty na 90 minut
+  względem pozycji, ranking klubów) oraz największe spadki i wzrosty względem poprzedniego sezonu.
+- Z zapisu czytane są też: dystans, średnia ocena, sumy statystyk drużyn i tabela ligi. Pierwsze wczytanie zapisu
+  po aktualizacji trwa dłużej (nowy format pamięci podręcznej).
+
 ## 1.1.2
 
 - Gotowość serwera z sygnału serwera zamiast odpytywania; dokładniejsze czasy etapów startu w dzienniku.

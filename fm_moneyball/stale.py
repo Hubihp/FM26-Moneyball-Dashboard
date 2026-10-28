@@ -57,6 +57,7 @@ KOLUMNY_TYLKO_Z_ZAPISU = [
     "Udane dośrodkowania/90",
     "Stworzone 100% sytuacje/90",
     "Sprinty/90",
+    "Dystans (km)/90",
 ]
 
 # Kolumny liczbowe, ktore konwertujemy raz, przy wczytywaniu

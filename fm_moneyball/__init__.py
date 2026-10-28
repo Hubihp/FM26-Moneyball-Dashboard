@@ -10,4 +10,4 @@ Rdzen FM26 Moneyball Dashboard - logika niezalezna od interfejsu.
   zrodla/folder.py    - folder zapisow gry: wyszukiwanie najnowszego zapisu, bezpieczna kopia
 """
 
-__version__ = "1.1.2"
+__version__ = "1.2.0"

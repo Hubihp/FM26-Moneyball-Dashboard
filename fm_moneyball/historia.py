@@ -26,7 +26,7 @@ KATALOG_HISTORII = KATALOG_DOMOWY / "historia"
 MIN_MINUT = 1000             # prog minut w obu okresach, od ktorego liczymy rozwoj
 KARIERA_BEZ_MENEDZERA = "kariera"   # katalog, gdy zapis nie podaje menedzera
 POLA_MIGAWKI = ['ID', 'UID', 'Piłkarz', 'Wiek', 'Klub', 'Klub_UID', 'Liga', 'Mnożnik_Ligi', 'Pozycja', 'Pule',
-                'Minuty', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Wygasa_Data']
+                'Minuty', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Wygasa_Data', 'Średnia ocena']
 KOLUMNY_ROZWOJU = ['Δ SCORE', 'Δ percentyl', 'Δ minut', 'Nowe pozycje']
 
 _pamiec = {}                 # sciezka -> (mtime, ramka)

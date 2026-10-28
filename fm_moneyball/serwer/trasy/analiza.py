@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 import time
 
-from fm_moneyball import analiza, historia, optymalizator
+from fm_moneyball import analiza, historia, optymalizator, profil
 from fm_moneyball.serwer.modele import HistoriaModel, HistoriaWieluModel, NastepcaModel, PorownanieZMoimModel, KadraModel, ListaZyczenModel, OptymalizatorModel, PodobniModel, RadarModel, RankingModel, SprzedajDrogoModel
 from fm_moneyball.serwer.obliczenia import kandydat
 from fm_moneyball.stale import POZYCJE
@@ -197,6 +197,68 @@ def utworz(stan, obl):
             "liczba_kandydatow": sum(len(v) for v in kandydaci.values()),
             "optimum_pewne": pewne, "czas_ms": round((time.perf_counter() - start) * 1000),
             "bazy": {p: {"score": b[0], "poziom_zastepczy": b[1]} for p, b in bazy.items()},
+        }
+
+    @router.post("/profil-druzyny")
+    def profil_druzyny(z: KadraModel):
+        """Moja druzyna na tle ligi: statystyki zespolowe, atletyzm skladu, zmiany wzgledem poprzedniego sezonu."""
+        uid = _moj_klub()
+        wszyscy = stan.wszyscy_zawodnicy()
+        if wszyscy is None or 'Klub_UID' not in wszyscy.columns:
+            raise HTTPException(409, "Brak danych zawodników.")
+        tabela = stan.tabele.get(uid)
+        moi = wszyscy[wszyscy['Klub_UID'] == uid]
+        liga = moi['Liga'].mode().iloc[0] if not moi.empty and moi['Liga'].notna().any() else None
+        if tabela:
+            kluby = [w["club_uid"] for w in tabela["wiersze"]]
+        else:
+            kluby = wszyscy.loc[wszyscy['Liga'] == liga, 'Klub_UID'].dropna().unique().tolist()
+        z_zapisu = bool(stan.druzyny)
+        druzyny = stan.druzyny if z_zapisu else profil.druzyny_z_zawodnikow(wszyscy[wszyscy['Klub_UID'].isin(kluby)])
+        tabela_profilu = profil.tabela_profilu(druzyny, kluby, tabela)
+        sekcje = profil.porownanie(tabela_profilu, uid)
+        mecze = int(tabela_profilu.at[uid, 'Mecze']) if uid in tabela_profilu.index else None
+        nazwy = {w["club_uid"]: w["klub"] for w in tabela["wiersze"]} if tabela else None
+        mecze_ligi = int(tabela_profilu['Mecze'].max()) if not tabela_profilu.empty else None
+        sklady = {k: d.get("sklad") for k, d in druzyny.items() if d.get("sklad")} if z_zapisu else None
+        atletyzm = profil.atletyzm(wszyscy, kluby, uid, nazwy, mecze_ligi, sklady)
+
+        # zmiany wzgledem poprzedniego sezonu: Δ SCORE z historii (w pulach) i Δ sredniej oceny z migawki
+        rozwoj = []
+        for pozycja in POZYCJE:
+            if stan.pula(pozycja) is None:
+                continue
+            policzona, _, _ = obl.policz(pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
+            if 'Δ SCORE' not in policzona.columns:
+                continue
+            glowna = policzona['Pula_główna'] == pozycja if 'Pula_główna' in policzona.columns else True
+            for _, r in policzona[(policzona['Klub_UID'] == uid) & glowna].iterrows():
+                rozwoj.append({"Piłkarz": r['Piłkarz'], "ID": r['ID'], "pozycja": pozycja, "SCORE": float(r['SCORE']),
+                               "Δ SCORE": None if pd.isna(r['Δ SCORE']) else float(r['Δ SCORE'])})
+        porownanie = historia.migawka_porownania(historia.migawki(stan.katalog_kariery()), obl.data_gry())
+        oceny_teraz, oceny_wtedy = {}, {}
+        if porownanie is not None and 'UID' in moi.columns and 'Średnia ocena' in moi.columns:
+            oceny_teraz = {r['UID']: (r['Średnia ocena'], r['Minuty']) for _, r in moi.iterrows()}
+            wtedy = historia.wczytaj(porownanie[0])
+            if 'Średnia ocena' in wtedy.columns:
+                oceny_wtedy = {r['UID']: (r['Średnia ocena'], r['Minuty'])
+                               for _, r in wtedy[wtedy['UID'].isin(list(oceny_teraz))].iterrows()}
+        zmiany = profil.zmiany_zawodnikow(rozwoj, oceny_teraz, oceny_wtedy, historia.MIN_MINUT)
+        imiona = dict(zip(moi['UID'], moi['Piłkarz'])) if 'UID' in moi.columns else {}
+        for m in zmiany["oceny_spadki"] + zmiany["oceny_wzrosty"]:
+            m["Piłkarz"] = imiona.get(m.pop("uid"))
+
+        wiersz_tabeli = next((w for w in tabela["wiersze"] if w["club_uid"] == uid), None) if tabela else None
+        return {
+            "klub": stan.migawka()["meta"].get("moj_klub"), "liga": liga, "kluby": len(tabela_profilu),
+            "mecze": mecze, "tabela": wiersz_tabeli, "z_zapisu": z_zapisu,
+            "sekcje": [{"nazwa": n, "metryki": sekcje[n]} for n in ("Wyniki", "Z piłką", "Bez piłki", "Fizycznie")
+                       if n in sekcje],
+            "podsumowanie": profil.podsumowanie(sekcje, mecze),
+            "atletyzm": atletyzm,
+            "zmiany": {**zmiany, "historia": porownanie is not None,
+                       "data_porownania": porownanie[1].isoformat() if porownanie is not None else None,
+                       "min_minut": historia.MIN_MINUT},
         }
 
     @router.post("/lista-zyczen")

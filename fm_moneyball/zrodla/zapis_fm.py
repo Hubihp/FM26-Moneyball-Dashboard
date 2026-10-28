@@ -58,6 +58,16 @@ POLA_LICZNIKOW = (
     "possession_lost", "passes_attempted", "progressive_passes", "aerial_challenges_attempted",
     "headers_won", "dribbles", "expected_goals_prevented", "saves_held", "saves_parried", "saves_tipped",
     "shots_on_target_faced", "crosses_completed", "clear_cut_chances_created", "high_intensity_sprints",
+    "distance_km",
+)
+# Liczniki sum druzyn (profil druzyny na tle ligi) - sumy po wierszach sezonu zawodnikow danego klubu
+POLA_DRUZYNY = (
+    "minutes", "goals", "expected_goals", "shots", "shots_on_target", "passes_attempted", "passes_completed",
+    "progressive_passes", "key_passes", "clear_cut_chances_created", "crosses_attempted", "crosses_completed",
+    "dribbles", "tackles_attempted", "tackles_completed", "aerial_challenges_attempted", "headers_won",
+    "interceptions", "possession_won", "possession_lost", "pressures_attempted", "pressures_completed", "blocks",
+    "clearances", "fouls_made", "yellow_cards", "red_cards", "mistakes_leading_to_goal", "distance_km",
+    "high_intensity_sprints",
 )
 
 # Kolumna w aplikacji -> licznik per 90
@@ -77,6 +87,7 @@ PER_90 = {
     "Udane dośrodkowania/90": "crosses_completed",
     "Stworzone 100% sytuacje/90": "clear_cut_chances_created",
     "Sprinty/90": "high_intensity_sprints",
+    "Dystans (km)/90": "distance_km",
 }
 
 
@@ -117,6 +128,8 @@ class WynikZapisu:
     liczniki: dict = field(default_factory=dict)
     moje_kluby: list = field(default_factory=list)     # [{"uid", "nazwa"}] - wszystkie prowadzone druzyny
     ligi: list = field(default_factory=list)           # podsumowanie lig: klucz, domyslna, liczba, kluby, kraj
+    druzyny: dict = field(default_factory=dict)        # club_uid -> sumy licznikow sezonu (profil druzyny)
+    tabele: dict = field(default_factory=dict)         # club_uid prowadzonego klubu -> tabela jego ligi
     kraje_auto: dict = field(default_factory=dict)     # nation_id -> nazwa kraju z klubow-kotwic
     menedzer: str | None = None                        # czlowiek prowadzacy kariere (klucz historii)
 
@@ -180,6 +193,7 @@ def sumuj_statystyki(wiersze, rodzaj):
     (zawodnik ma osobny wiersz dla kazdej druzyny, w ktorej gral w tym sezonie)."""
     sumy = defaultdict(lambda: defaultdict(float))
     obecne = defaultdict(set)
+    oceny = defaultdict(lambda: [0.0, 0.0])      # srednia ocena wazona liczba ocenionych meczow
     for w in wiersze:
         if str(getattr(w, "kind", "")) != rodzaj:
             continue
@@ -189,8 +203,63 @@ def sumuj_statystyki(wiersze, rodzaj):
             if wartosc is not None:
                 sumy[uid][pole] += float(wartosc)
                 obecne[uid].add(pole)
+        ocena, mecze = getattr(w, "average_rating", None), getattr(w, "rated_appearances", None)
+        if ocena is not None and mecze:
+            oceny[uid][0] += float(ocena) * mecze
+            oceny[uid][1] += mecze
     # Pola, ktorych zawodnik nie ma wcale (np. obrony u zawodnika z pola), zostaja None
-    return {uid: {p: (s[p] if p in obecne[uid] else None) for p in POLA_LICZNIKOW} for uid, s in sumy.items()}
+    wynik = {uid: {p: (s[p] if p in obecne[uid] else None) for p in POLA_LICZNIKOW} for uid, s in sumy.items()}
+    for uid, (suma, mecze) in oceny.items():
+        if uid in wynik and mecze:
+            wynik[uid]["srednia_ocena"] = suma / mecze
+    return wynik
+
+
+def sumuj_druzyny(wiersze, rodzaj):
+    """Wiersze PlayerSeasonStats -> {club_uid: {licznik: suma, "nazwa", "ocena", "sklad": {player_uid: minuty}}}
+    - statystyki pierwszych druzyn (wiersz zawodnika liczy sie dla klubu, w ktorym gral, takze po transferze
+    w trakcie sezonu; rezerwy i druzyny mlodziezowe klubu sa pomijane)."""
+    sumy = defaultdict(lambda: defaultdict(float))
+    sklady = defaultdict(lambda: defaultdict(float))
+    nazwy = {}
+    for w in wiersze:
+        if str(getattr(w, "kind", "")) != rodzaj or w.club_uid is None or (getattr(w, "team_slot", 0) or 0) != 0:
+            continue
+        s = sumy[w.club_uid]
+        if w.minutes:
+            sklady[w.club_uid][w.player_uid] += float(w.minutes)
+        nazwy[w.club_uid] = w.club_name
+        for pole in POLA_DRUZYNY:
+            wartosc = getattr(w, pole, None)
+            if wartosc is not None:
+                s[pole] += float(wartosc)
+        ocena, mecze = getattr(w, "average_rating", None), getattr(w, "rated_appearances", None)
+        if ocena is not None and mecze:
+            s["_ocena_suma"] += float(ocena) * mecze
+            s["_ocena_mecze"] += mecze
+    wynik = {}
+    for uid, s in sumy.items():
+        d = {p: s.get(p, 0.0) for p in POLA_DRUZYNY}
+        d["nazwa"] = nazwy.get(uid)
+        d["ocena"] = s["_ocena_suma"] / s["_ocena_mecze"] if s.get("_ocena_mecze") else None
+        d["sklad"] = dict(sklady[uid])
+        wynik[uid] = d
+    return wynik
+
+
+def tabela_ligi(tabele, competition_id, club_uid):
+    """
+    Tabela ligi klubu -> slownik do profilu druzyny albo None. Rozgrywki moga miec w zapisie kilka tabel
+    (np. inne etapy) - wybierana jest najwieksza tabela tych rozgrywek, w ktorej jest klub.
+    """
+    pasujace = [t for t in tabele if t.competition_id == competition_id
+                and any(r.club_uid == club_uid for r in t.rows)]
+    for t in sorted(pasujace, key=lambda t: -len(t.rows))[:1]:
+        return {"competition_id": t.competition_id, "wiersze": [
+                {"club_uid": r.club_uid, "klub": r.club_name, "pozycja": r.position, "mecze": r.played,
+                 "wygrane": r.won, "remisy": r.drawn, "porazki": r.lost, "gole": r.goals_for,
+                 "stracone": r.goals_against, "punkty": r.points} for r in t.rows]}
+    return None
 
 
 def _iloraz(licznik, mianownik, mnoznik=1.0):
@@ -208,6 +277,7 @@ def statystyki_kanoniczne(liczniki):
         wynik[kolumna] = _iloraz(liczniki.get(pole), minuty, 90.0)
     strzaly = liczniki.get("shots")
     wynik["Oczekiwane gole na strzał"] = _iloraz(liczniki.get("expected_goals"), strzaly)
+    wynik["Średnia ocena"] = liczniki.get("srednia_ocena", np.nan)
     # "Skut (%)" w FM to skutecznosc (gole / strzaly) - potwierdzone na zapisie; celnosc osobno
     wynik["Skuteczność strzałów (%)"] = _iloraz(liczniki.get("goals"), strzaly, 100.0)
     wynik["Celność strzałów (%)"] = _iloraz(liczniki.get("shots_on_target"), strzaly, 100.0)
@@ -685,7 +755,17 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
             zawodnicy = list(zapis.players())
             etap(3)
             rodzaj = fmsave.SeasonStatsKind(opcje.rodzaj_statystyk)
-            liczniki = sumuj_statystyki(zapis.player_season_stats().where(kind=rodzaj), opcje.rodzaj_statystyk)
+            wiersze_sezonu = list(zapis.player_season_stats().where(kind=rodzaj))
+            liczniki = sumuj_statystyki(wiersze_sezonu, opcje.rodzaj_statystyk)
+            druzyny = sumuj_druzyny(wiersze_sezonu, opcje.rodzaj_statystyk)
+            del wiersze_sezonu
+            try:
+                wszystkie_tabele = list(zapis.league_tables())
+                tabele = {m.club_uid: tabela_ligi(wszystkie_tabele, liga_klubu[m.club_uid].competition_id, m.club_uid)
+                          for m in zarzadzane if m.club_uid in liga_klubu}
+            except Exception as e:   # tabela to dodatek (profil druzyny) - jej brak nie blokuje reszty
+                ostrzezenia.append(f"Nie udało się odczytać tabel lig ({e}).")
+                tabele = {}
             etap(4)
             try:
                 kontuzje = policz_kontuzje(zapis.injuries(), info.game_date)
@@ -716,6 +796,8 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
                        if getattr(m, "manager_name", None) or getattr(m, "manager_staff_uid", None)), None),
         ligi=podsumuj_ligi(liga_klubu, kluby, narodowosci=narodowosci_lig(zawodnicy, liga_klubu)),
         kraje_auto=kraje_z_kotwic(kluby, zawodnicy),
+        druzyny=druzyny,
+        tabele={uid: t for uid, t in tabele.items() if t is not None},
     )
 
 
