@@ -4,6 +4,9 @@ import pandas as pd
 
 from fm_moneyball.stale import CECHY
 
+UDZIAL_DANYCH_SKALI = 0.9       # skale wyniku wyznaczaja zawodnicy z danymi dla >= 90% wag
+MIN_ZAWODNIKOW_SKALI = 30
+
 
 def parametry_cechy(nazwa):
     """(kierunek, skurczenie) cechy; nieznane cechy per 90 sa skurczane standardowo."""
@@ -85,9 +88,15 @@ def oblicz_score(df, wagi, ignoruj_mnoznik, k_baza, odniesienie=None):
         return pd.Series(np.nan, index=df.index), pominiete
 
     kompozyt = sum(z[n] * (wagi[n] / suma) for n in uzyte)
-    odch = kompozyt[ref].std(ddof=0)
+    # Skala T z zawodnikow z (prawie) pelnymi danymi: braki sa uzupelniane srednia (z = 0), wiec liczni
+    # zawodnicy z niepelnymi statystykami (np. rezerwy) zawezaliby rozrzut i rozciagali wynik pozostalych
+    obecne = sum(df[n].notna().astype(float) * (wagi[n] / suma) for n in uzyte)
+    skala = ref & (obecne >= UDZIAL_DANYCH_SKALI)
+    if skala.sum() < MIN_ZAWODNIKOW_SKALI:
+        skala = ref
+    odch = kompozyt[skala].std(ddof=0)
     if np.isfinite(odch) and odch > 0:
-        score = 50.0 + 10.0 * (kompozyt - kompozyt[ref].mean()) / odch
+        score = 50.0 + 10.0 * (kompozyt - kompozyt[skala].mean()) / odch
     else:
         score = pd.Series(50.0, index=df.index)
 

@@ -19,6 +19,21 @@ from fm_moneyball.wycena import wycen
 ILE_POLICZONYCH = 24        # tyle policzonych pul (pozycja x ustawienia) trzymamy w pamieci
 
 
+def wynik_na_wspolnych_cechach(df, wagi, wtedy, ignoruj_mnoznik, k_baza, odniesienie=None):
+    """
+    SCORE i percentyl biezacej puli liczone tylko na cechach, ktore ma tez migawka `wtedy` (starsza migawka
+    nie ma statystyk dodanych w nowszej wersji programu) - wtedy Δ SCORE pokazuje rozwoj zawodnika, a nie
+    zmiane modelu. None, gdy migawka ma wszystkie cechy (porownanie wprost).
+    """
+    if wtedy is None or wtedy.empty:
+        return None
+    wspolne = {k: v for k, v in wagi.items() if k in wtedy.columns}
+    if len(wspolne) == len(wagi) or not wspolne:
+        return None
+    wynik, _ = analiza.policz_wynik(df, wspolne, ignoruj_mnoznik, k_baza, odniesienie)
+    return wynik[['SCORE', 'Percentyl']]
+
+
 class Obliczenia:
     def __init__(self, stan):
         self.stan = stan
@@ -58,7 +73,8 @@ class Obliczenia:
         porownanie = historia.migawka_porownania(historia.migawki(self.stan.katalog_kariery()), self.data_gry())
         if porownanie is not None:
             wtedy = self.pula_migawki(porownanie[0], pozycja, wagi, ignoruj_mnoznik, k_baza)
-            policzona = historia.dolicz_rozwoj(policzona, wtedy)
+            porownywalna = wynik_na_wspolnych_cechach(df, wagi, wtedy, ignoruj_mnoznik, k_baza, odniesienie)
+            policzona = historia.dolicz_rozwoj(policzona, wtedy, teraz_porownywalna=porownywalna)
         wynik = (analiza.wzbogac(policzona, self.data_gry()), pominiete, model_wyceny)
         with self._blokada:
             self._policzone[klucz] = wynik

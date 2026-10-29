@@ -58,8 +58,33 @@ POLA_LICZNIKOW = (
     "possession_lost", "passes_attempted", "progressive_passes", "aerial_challenges_attempted",
     "headers_won", "dribbles", "expected_goals_prevented", "saves_held", "saves_parried", "saves_tipped",
     "shots_on_target_faced", "crosses_completed", "clear_cut_chances_created", "high_intensity_sprints",
-    "distance_km",
+    "distance_km", "assists", "passes_completed", "tackles_completed", "yellow_cards", "red_cards",
+    "mistakes_leading_to_goal",
 )
+# Poziom szczegolowosci wiersza statystyk zalezy od rozgrywek (np. druzyny rezerw graja w ligach bez
+# szczegolowych statystyk). Pola, ktorych rozgrywki nie licza, zapis podaje jako 0 (a nie brak danych),
+# wiec trzeba je rozpoznac po wierszu:
+#  - pelny: wszystkie statystyki; rozpoznawany po przebiegnietym dystansie (zawodnik z pola ~10 km/90,
+#    bramkarz ~5 km/90). Wiersz z dystansem, ale duzo mniejszym, obejmuje tylko czesc meczow ze
+#    szczegolowymi statystykami - liczony jak podstawowy, bo jego "zera" zanizalyby wynik,
+#  - posredni: bez dystansu, z podaniami i odbiorami, ktore wygladaja na generowane przez gre (mediana
+#    rowno 20 podan/90, odbiorow dwa razy wiecej niz w pelnych) - wiarygodne sa tylko gole, xG, xA, strzaly,
+#  - podstawowy: jak posredni, plus odzyskane/stracone pilki, kartki i 100% sytuacje.
+# Kluczowe podania i dosrodkowania w niepelnych wierszach sa mocno zanizone - tylko z pelnych.
+PELNY, POSREDNI, PODSTAWOWY = "pełny", "pośredni", "podstawowy"
+MIN_KM_PELNEGO = 7.0            # km na 90 min (zawodnik z pola); bramkarz - polowa
+MIN_PODAN_POSREDNICH = 10       # podan na 90 min: mniej to pojedyncze podania z niepelnego wiersza
+POZIOMY_POLA = {
+    **{p: {PELNY} for p in ("progressive_passes", "dribbles", "distance_km", "high_intensity_sprints",
+                            "aerial_challenges_attempted", "headers_won", "interceptions", "pressures_completed",
+                            "saves_held", "saves_parried", "saves_tipped", "shots_on_target_faced",
+                            "expected_goals_prevented", "passes_attempted", "passes_completed", "tackles_completed",
+                            "open_play_key_passes", "crosses_completed", "mistakes_leading_to_goal")},
+    **{p: {PELNY, PODSTAWOWY} for p in ("possession_won", "possession_lost", "yellow_cards", "red_cards",
+                                        "clear_cut_chances_created")},
+}   # pozostale pola (gole, xG, xA, strzaly, asysty): wszystkie poziomy
+MIN_MINUT_POLA = 270            # ponizej (i ponizej 25% minut zawodnika) pole niepelne = brak danych
+UDZIAL_PELNYCH_OSTRZEZENIE = 0.75   # mniej minut z pelnymi statystykami -> "Statystyki_niepełne"
 # Liczniki sum druzyn (profil druzyny na tle ligi) - sumy po wierszach sezonu zawodnikow danego klubu
 POLA_DRUZYNY = (
     "minutes", "goals", "expected_goals", "shots", "shots_on_target", "passes_attempted", "passes_completed",
@@ -88,6 +113,10 @@ PER_90 = {
     "Stworzone 100% sytuacje/90": "clear_cut_chances_created",
     "Sprinty/90": "high_intensity_sprints",
     "Dystans (km)/90": "distance_km",
+    "Udane odbiory/90": "tackles_completed",
+    "Wygrane główki/90": "headers_won",
+    "Asysty/90": "assists",
+    "Błędy prowadzące do gola/90": "mistakes_leading_to_goal",
 }
 
 
@@ -189,17 +218,39 @@ def preferowana_noga(lewa, prawa):
     return "Lewonożny" if mocniejsza_lewa else "Prawonożny"
 
 
+def poziom_wiersza(w):
+    """Poziom szczegolowosci wiersza statystyk (patrz POZIOMY_POLA)."""
+    minuty = getattr(w, "minutes", None) or 0
+    if minuty <= 0:
+        return PODSTAWOWY
+    km = getattr(w, "distance_km", None) or 0
+    bramkarz = getattr(w, "saves_held", None) is not None
+    if km * 90 >= MIN_KM_PELNEGO * (0.5 if bramkarz else 1.0) * minuty:
+        return PELNY
+    podania = getattr(w, "passes_attempted", None) or 0
+    return POSREDNI if km == 0 and podania * 90 >= MIN_PODAN_POSREDNICH * minuty else PODSTAWOWY
+
+
 def sumuj_statystyki(wiersze, rodzaj):
     """Wiersze PlayerSeasonStats -> {player_uid: {licznik: suma}} dla wybranego rodzaju rozgrywek
-    (zawodnik ma osobny wiersz dla kazdej druzyny, w ktorej gral w tym sezonie)."""
+    (zawodnik ma osobny wiersz dla kazdej druzyny, w ktorej gral w tym sezonie).
+    Pola z POZIOMY_POLA sumowane sa tylko z wierszy, ktore je licza; ich minuty sa w "minuty_pol"."""
     sumy = defaultdict(lambda: defaultdict(float))
     obecne = defaultdict(set)
+    minuty_pol = defaultdict(lambda: defaultdict(float))
     oceny = defaultdict(lambda: [0.0, 0.0])      # srednia ocena wazona liczba ocenionych meczow
     for w in wiersze:
         if str(getattr(w, "kind", "")) != rodzaj:
             continue
         uid = w.player_uid
+        poziom = poziom_wiersza(w)
+        minuty = float(getattr(w, "minutes", None) or 0)
         for pole in POLA_LICZNIKOW:
+            poziomy = POZIOMY_POLA.get(pole)
+            if poziomy is not None:
+                if poziom not in poziomy:
+                    continue
+                minuty_pol[uid][pole] += minuty
             wartosc = getattr(w, pole, None)
             if wartosc is not None:
                 sumy[uid][pole] += float(wartosc)
@@ -210,6 +261,8 @@ def sumuj_statystyki(wiersze, rodzaj):
             oceny[uid][1] += mecze
     # Pola, ktorych zawodnik nie ma wcale (np. obrony u zawodnika z pola), zostaja None
     wynik = {uid: {p: (s[p] if p in obecne[uid] else None) for p in POLA_LICZNIKOW} for uid, s in sumy.items()}
+    for uid in wynik:
+        wynik[uid]["minuty_pol"] = {p: minuty_pol[uid].get(p, 0.0) for p in POZIOMY_POLA}
     for uid, (suma, mecze) in oceny.items():
         if uid in wynik and mecze:
             wynik[uid]["srednia_ocena"] = suma / mecze
@@ -350,12 +403,24 @@ def _iloraz(licznik, mianownik, mnoznik=1.0):
 
 
 def statystyki_kanoniczne(liczniki):
-    """Sumy licznikow -> kolumny aplikacji (per 90 i odsetki)."""
-    liczniki = liczniki or {}
+    """Sumy licznikow -> kolumny aplikacji (per 90 i odsetki). Pole liczone tylko w czesci rozgrywek
+    zawodnika jest dzielone przez minuty tych rozgrywek; gdy bylo ich za malo - brak danych (model wstawia
+    wtedy srednia puli zamiast kary za "zero", ktorego rozgrywki nie mierza)."""
+    liczniki = dict(liczniki or {})
     minuty = liczniki.get("minutes") or 0
+    minuty_pol = liczniki.get("minuty_pol") or {}
+    for pole, m in minuty_pol.items():
+        if m < minuty and m < max(MIN_MINUT_POLA, 0.25 * minuty):
+            liczniki[pole] = None
     wynik = {"Minuty": minuty}
     for kolumna, pole in PER_90.items():
-        wynik[kolumna] = _iloraz(liczniki.get(pole), minuty, 90.0)
+        wynik[kolumna] = _iloraz(liczniki.get(pole), minuty_pol.get(pole, minuty), 90.0)
+    pelne = minuty_pol.get("interceptions", minuty)
+    wynik["Statystyki_niepełne"] = bool(minuty) and pelne < UDZIAL_PELNYCH_OSTRZEZENIE * minuty
+    wynik["Celność podań (%)"] = _iloraz(liczniki.get("passes_completed"), liczniki.get("passes_attempted"), 100.0)
+    kartki = None if liczniki.get("yellow_cards") is None else \
+        liczniki["yellow_cards"] + 3 * (liczniki.get("red_cards") or 0)
+    wynik["Kartki/90"] = _iloraz(kartki, minuty_pol.get("yellow_cards", minuty), 90.0)
     strzaly = liczniki.get("shots")
     wynik["Oczekiwane gole na strzał"] = _iloraz(liczniki.get("expected_goals"), strzaly)
     wynik["Średnia ocena"] = liczniki.get("srednia_ocena", np.nan)
@@ -369,6 +434,7 @@ def statystyki_kanoniczne(liczniki):
     bramkarz = all(o is not None for o in obrony)
     wynik["Skuteczność obron (%)"] = (
         _iloraz(sum(obrony), liczniki.get("shots_on_target_faced"), 100.0) if bramkarz else np.nan)
+    wynik["Obrony chwytem (%)"] = _iloraz(obrony[0], sum(obrony), 100.0) if bramkarz else np.nan
     if not bramkarz:
         wynik["Uniknięte oczekiwane gole/90"] = np.nan
     return wynik

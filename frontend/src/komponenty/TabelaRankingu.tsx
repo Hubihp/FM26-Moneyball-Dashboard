@@ -198,6 +198,12 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         if (k.pole === 'Piłkarz') {
           Object.assign(def, {
             pinned: 'left', minWidth: 170, cellStyle: { cursor: 'pointer', fontWeight: 600 },
+            // niepelne statystyki (czesc minut w rozgrywkach bez szczegolowych statystyk): znak ostrzezenia
+            valueFormatter: (p: { value: unknown; data?: Wiersz }) =>
+              `${p.data?.['Statystyki_niepełne'] ? '⚠ ' : ''}${String(p.value ?? '')}`,
+            tooltipValueGetter: (p: { data?: Wiersz }) => (p.data?.['Statystyki_niepełne']
+              ? 'Niepełne statystyki: część minut w rozgrywkach bez szczegółowych statystyk - te statystyki liczone '
+                + 'z pozostałych minut albo przyjęte na poziomie średniej pozycji' : null),
             cellClassRules: { 'komorka-moj-klub': (p: { data?: Wiersz }) => czyMoj(p.data, mojKlubUid) },
           });
         }

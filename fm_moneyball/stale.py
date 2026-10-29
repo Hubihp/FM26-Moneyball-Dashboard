@@ -19,7 +19,7 @@ SKROT_POZYCJI_APLIKACJI = {
 RODZINA_POZYCJI = {
     "Lewy Obrońca": "Boczny Obrońca", "Prawy Obrońca": "Boczny Obrońca",
     "Lewy Wahadłowy": "Wahadłowy", "Prawy Wahadłowy": "Wahadłowy",
-    "Lewy Pomocnik": "Skrzydłowy", "Prawy Pomocnik": "Skrzydłowy",
+    "Lewy Pomocnik": "Boczny Pomocnik", "Prawy Pomocnik": "Boczny Pomocnik",
     "Lewy Skrzydłowy": "Skrzydłowy", "Prawy Skrzydłowy": "Skrzydłowy",
 }
 
@@ -58,6 +58,13 @@ KOLUMNY_TYLKO_Z_ZAPISU = [
     "Stworzone 100% sytuacje/90",
     "Sprinty/90",
     "Dystans (km)/90",
+    "Udane odbiory/90",
+    "Wygrane główki/90",
+    "Celność podań (%)",
+    "Asysty/90",
+    "Kartki/90",
+    "Błędy prowadzące do gola/90",
+    "Obrony chwytem (%)",
 ]
 
 # Kolumny liczbowe, ktore konwertujemy raz, przy wczytywaniu
@@ -67,11 +74,11 @@ KOLUMNY_STATYSTYK = [v for v in TLUMACZENIE_KOLUMN.values() if v != "Cena"] + KO
 NIE_STATYSTYKI = {
     'SCORE', 'Percentyl', 'Piłkarz', 'ID', 'Wiek', 'Klub', 'Liga', 'Pozycja', 'Cena',
     'Preferowana noga', 'Kraj', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Płaca', 'Wygasa',
-    'Wygasa_Data', 'Minuty', 'Mnożnik_Ligi'
+    'Wygasa_Data', 'Minuty', 'Mnożnik_Ligi', 'Statystyki_niepełne'
 }
 
 # Statystyki, w ktorych MNIEJ znaczy LEPIEJ (uzywane w radarze i wykresach Top 10)
-NIZSZE_LEPSZE = {'Stracone piłki/90', 'Strata piłek na podanie'}
+NIZSZE_LEPSZE = {'Stracone piłki/90', 'Strata piłek na podanie', 'Kartki/90', 'Błędy prowadzące do gola/90'}
 
 # Statystyki opisujace styl, a nie jakosc ("wiecej" nie znaczy "lepiej") - pomijane w radarze
 NEUTRALNE = {'Próby podań/90'}
@@ -100,67 +107,99 @@ CECHY = {
     'Udane dośrodkowania/90': (1, 1.5),
     'Stworzone 100% sytuacje/90': (1, 2.0),
     'Sprinty/90': (1, 1.0),
+    'Udane odbiory/90': (1, 1.0),
+    'Wygrane główki/90': (1, 1.0),
+    'Celność podań (%)': (1, 1.0),          # iloraz, ale z duzym mianownikiem (setki podan)
+    'Asysty/90': (1, 2.0),
+    'Kartki/90': (-1, 2.0),                  # zolta = 1, czerwona = 3
+    'Błędy prowadzące do gola/90': (-1, 3.0),   # rzadkie zdarzenie - mocne skurczenie
+    'Obrony chwytem (%)': (1, 3.0),
 }
 
-# Domyslne WAZNOSCI cech per pozycja (0-100). W obliczeniach sa normalizowane do sumy 1,
-# wiec liczy sie tylko ich wzajemna proporcja. Cechy, ktorych nie ma w danych, sa pomijane.
+# Domyslne WAZNOSCI cech per pozycja (procenty, kazda rodzina sumuje sie do 100). W obliczeniach sa
+# normalizowane do sumy 1, wiec liczy sie tylko ich proporcja; cechy, ktorych nie ma w danych (np. eksport
+# CSV), sa pomijane. Kierunek cechy (np. strata pilek, kartki: mniej = lepiej) jest w CECHY, wiec waga
+# jest zawsze dodatnia. Cechy silnie skorelowane (r > 0,6 na zapisie) tworza bloki o wspolnej wadze:
+# udane odbiory + udany pressing, % wygranych glowek + wygrane glowki, gole + npxG + skutecznosc,
+# xA + asysty. Faule same w sobie nie obnizaja wyniku (rosna razem z odbiorami - to skutek aktywnej
+# obrony), karane sa kartki. Wybicia i bloki pominiete: zaleza od tego, jak czesto druzyna sie broni.
 _WAGI_RODZIN = {
+    # Bramkarz: obrona strzalow ponad oczekiwania (uniknięte xG izoluja bramkarza od obrony druzyny),
+    # bledy, gra nogami (straty), wyjscia (odzyskane pilki), chwytanie zamiast odbijania. Celnosc podan
+    # pominieta: u bramkarza zalezy od stylu wznawiania (dlugie wybicia), a nie od jakosci.
     "Bramkarz": {
-        'Uniknięte oczekiwane gole/90': 50, 'Skuteczność obron (%)': 20, 'Odzyskane piłki/90': 10,
-        'Strata piłek na podanie': 20},
+        'Uniknięte oczekiwane gole/90': 50, 'Skuteczność obron (%)': 15, 'Błędy prowadzące do gola/90': 10,
+        'Strata piłek na podanie': 15, 'Odzyskane piłki/90': 5, 'Obrony chwytem (%)': 5},
+    # Stoper: odbior pilki (47%), gra w powietrzu (15%), wyprowadzenie (20%), bledy i kartki (8%).
     "Środkowy Obrońca": {
-        '% wygranych pojedynków główkowych': 15, 'Przechwyty/90': 20, 'Udane próby pressingu/90': 10,
-        'Kluczowe podania z gry/90': 10, 'Odzyskane piłki/90': 25, 'Strata piłek na podanie': 20,
-        'Podania progresywne/90': 10},
+        'Odzyskane piłki/90': 18, 'Przechwyty/90': 14, 'Udane odbiory/90': 10, 'Udane próby pressingu/90': 5,
+        '% wygranych pojedynków główkowych': 8, 'Wygrane główki/90': 7, 'Podania progresywne/90': 10,
+        'Celność podań (%)': 7, 'Kluczowe podania z gry/90': 3, 'Strata piłek na podanie': 10,
+        'Błędy prowadzące do gola/90': 5, 'Kartki/90': 3},
+    # Boczny obronca: kreowanie z boku (42%), progresja, obrona flanki (35%), bezpieczenstwo pilki.
     "Boczny Obrońca": {
-        'Oczekiwane asysty/90': 30, 'Kluczowe podania z gry/90': 20, 'Przechwyty/90': 15,
-        'Odzyskane piłki/90': 10, 'Udane próby pressingu/90': 10, 'Strata piłek na podanie': 15,
-        'Podania progresywne/90': 10},
-    # Wahadlowy: sam daje szerokosc w ustawieniu z trojka obroncow - glowny kreator z boku (xA,
-    # dosrodkowania), przenosi pilke (drybling, podania progresywne) i biega cala flanke (sprinty).
-    # Obrone asekuruje trzech stoperow, wiec czesc defensywna to 25% (u bocznego obroncy 50%).
+        'Oczekiwane asysty/90': 20, 'Asysty/90': 5, 'Kluczowe podania z gry/90': 12, 'Udane dośrodkowania/90': 5,
+        'Podania progresywne/90': 10, 'Przechwyty/90': 12, 'Odzyskane piłki/90': 10, 'Udane odbiory/90': 8,
+        'Udane próby pressingu/90': 5, 'Celność podań (%)': 3, 'Strata piłek na podanie': 7, 'Kartki/90': 3},
+    # Wahadlowy: sam daje szerokosc w ustawieniu z trojka obroncow - glowny kreator z boku (45%), przenosi
+    # pilke (drybling, progresja) i biega cala flanke (sprinty). Obrone asekuruje trzech stoperow (20%).
     "Wahadłowy": {
-        'Oczekiwane asysty/90': 25, 'Kluczowe podania z gry/90': 15, 'Udane dośrodkowania/90': 10,
-        'Liczba dryblingów/90': 10, 'Podania progresywne/90': 10, 'Sprinty/90': 5, 'Przechwyty/90': 10,
-        'Odzyskane piłki/90': 5, 'Udane próby pressingu/90': 5, 'Strata piłek na podanie': 5},
+        'Oczekiwane asysty/90': 20, 'Asysty/90': 5, 'Kluczowe podania z gry/90': 12, 'Udane dośrodkowania/90': 8,
+        'Liczba dryblingów/90': 10, 'Podania progresywne/90': 10, 'Sprinty/90': 5, 'Przechwyty/90': 8,
+        'Odzyskane piłki/90': 7, 'Udane odbiory/90': 5, 'Strata piłek na podanie': 7, 'Kartki/90': 3},
+    # Defensywny pomocnik: odbior przed linia obrony (53%), rozegranie (32%), bezpieczenstwo i dyscyplina.
     "Defensywny Pomocnik": {
-        'Oczekiwane asysty/90': 10, 'Kluczowe podania z gry/90': 15, 'Przechwyty/90': 20,
-        'Odzyskane piłki/90': 25, 'Udane próby pressingu/90': 15,
-        '% wygranych pojedynków główkowych': 5, 'Strata piłek na podanie': 10,
-        'Podania progresywne/90': 10},
+        'Przechwyty/90': 15, 'Odzyskane piłki/90': 15, 'Udane odbiory/90': 10, 'Udane próby pressingu/90': 8,
+        'Wygrane główki/90': 5, 'Podania progresywne/90': 12, 'Celność podań (%)': 8, 'Kluczowe podania z gry/90': 7,
+        'Oczekiwane asysty/90': 5, 'Strata piłek na podanie': 10, 'Kartki/90': 3, 'Błędy prowadzące do gola/90': 2},
+    # Srodkowy pomocnik (box-to-box): kreowanie (36%), zagrozenie (10%), przenoszenie pilki (25%),
+    # odbior (17%), bezpieczenstwo pilki - najsilniej zwiazane ze srednia ocena na tej pozycji.
     "Środkowy Pomocnik": {
-        'Oczekiwane asysty/90': 25, 'Liczba goli na 90 min': 10, 'Kluczowe podania z gry/90': 20,
-        'Liczba dryblingów/90': 10, 'Odzyskane piłki/90': 10, 'Udane próby pressingu/90': 10,
-        'Strata piłek na podanie': 15, 'Podania progresywne/90': 10},
-    # Ofensywny pomocnik ("dziesiatka"): tworzenie sytuacji (xA, kluczowe podania, 100% sytuacje = 55%)
-    # i zagrozenie z wejsc w pole karne (npxG zamiast losowych goli). Drybling = wyjscie spod presji
-    # miedzy liniami; strata pilek ma mala wage, bo ryzykowne podania naleza do tej roli.
+        'Oczekiwane asysty/90': 17, 'Asysty/90': 4, 'Kluczowe podania z gry/90': 15, 'Liczba goli na 90 min': 5,
+        'Oczekiwane gole bez karnych/90': 5, 'Liczba dryblingów/90': 8, 'Podania progresywne/90': 12,
+        'Celność podań (%)': 5, 'Odzyskane piłki/90': 5, 'Przechwyty/90': 5, 'Udane odbiory/90': 5,
+        'Udane próby pressingu/90': 2, 'Strata piłek na podanie': 10, 'Kartki/90': 2},
+    # Ofensywny pomocnik ("dziesiatka"): tworzenie sytuacji (50%) i zagrozenie z wejsc w pole karne
+    # (npxG zamiast losowych goli). Drybling = wyjscie spod presji miedzy liniami.
     "Ofensywny Pomocnik": {
-        'Oczekiwane asysty/90': 25, 'Kluczowe podania z gry/90': 20, 'Stworzone 100% sytuacje/90': 10,
+        'Oczekiwane asysty/90': 20, 'Asysty/90': 5, 'Kluczowe podania z gry/90': 15, 'Stworzone 100% sytuacje/90': 10,
         'Oczekiwane gole bez karnych/90': 15, 'Liczba goli na 90 min': 5, 'Liczba dryblingów/90': 10,
-        'Podania progresywne/90': 5, 'Udane próby pressingu/90': 5, 'Strata piłek na podanie': 5},
+        'Podania progresywne/90': 5, 'Udane odbiory/90': 3, 'Udane próby pressingu/90': 2,
+        'Strata piłek na podanie': 8, 'Kartki/90': 2},
+    # Boczny pomocnik (4-4-2): szerokosc i dosrodkowania (45% kreowania), mniej strzalow niz skrzydlowy,
+    # wiecej pracy w obronie (15%).
+    "Boczny Pomocnik": {
+        'Oczekiwane asysty/90': 18, 'Asysty/90': 5, 'Kluczowe podania z gry/90': 12, 'Udane dośrodkowania/90': 10,
+        'Liczba goli na 90 min': 7, 'Oczekiwane gole bez karnych/90': 8, 'Liczba dryblingów/90': 10,
+        'Podania progresywne/90': 5, 'Odzyskane piłki/90': 7, 'Udane odbiory/90': 5, 'Udane próby pressingu/90': 3,
+        'Strata piłek na podanie': 8, 'Kartki/90': 2},
+    # Skrzydlowy (czesto odwrocony): gole i zagrozenie (29%), kreowanie (38%), drybling 1 na 1 (15%).
     "Skrzydłowy": {
-        'Oczekiwane asysty/90': 25, 'Liczba goli na 90 min': 15, 'Oczekiwane gole bez karnych/90': 10,
-        'Oczekiwane gole na strzał': 10, 'Kluczowe podania z gry/90': 15, 'Liczba dryblingów/90': 15,
-        'Udane próby pressingu/90': 5, 'Odzyskane piłki/90': 5, 'Strata piłek na podanie': 5},
+        'Oczekiwane asysty/90': 18, 'Asysty/90': 5, 'Kluczowe podania z gry/90': 12, 'Liczba goli na 90 min': 12,
+        'Oczekiwane gole bez karnych/90': 12, 'Oczekiwane gole na strzał': 5, 'Liczba dryblingów/90': 15,
+        'Udane dośrodkowania/90': 3, 'Odzyskane piłki/90': 5, 'Udane próby pressingu/90': 3,
+        'Strata piłek na podanie': 8, 'Kartki/90': 2},
+    # Napastnik: gole i jakosc sytuacji (52%), udzial w akcjach (30%), praca bez pilki i w powietrzu.
     "Napastnik": {
-        'Liczba goli na 90 min': 20, 'Oczekiwane gole bez karnych/90': 20, 'Oczekiwane gole na strzał': 10,
-        'Oczekiwane asysty/90': 15, 'Kluczowe podania z gry/90': 10, 'Liczba dryblingów/90': 10,
-        'Udane próby pressingu/90': 5, 'Odzyskane piłki/90': 5, 'Skuteczność strzałów (%)': 10},
+        'Liczba goli na 90 min': 18, 'Oczekiwane gole bez karnych/90': 20, 'Oczekiwane gole na strzał': 7,
+        'Skuteczność strzałów (%)': 7, 'Oczekiwane asysty/90': 10, 'Asysty/90': 5, 'Kluczowe podania z gry/90': 8,
+        'Liczba dryblingów/90': 7, 'Odzyskane piłki/90': 5, 'Udane próby pressingu/90': 3,
+        '% wygranych pojedynków główkowych': 3, 'Wygrane główki/90': 2, 'Strata piłek na podanie': 5},
 }
 MERYTORYKA_WAG = _na_pozycje(_WAGI_RODZIN, dict)
 
 _PODSTAWA = ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Cena']
 _KOLUMNY_RODZIN = {
-    "Bramkarz": _PODSTAWA + ['Uniknięte oczekiwane gole/90', 'Skuteczność obron (%)', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90'],
-    "Środkowy Obrońca": _PODSTAWA + ['Kluczowe podania z gry/90', 'Podania progresywne/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', '% wygranych pojedynków główkowych'],
-    "Boczny Obrońca": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane dośrodkowania/90', 'Podania progresywne/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90'],
-    "Wahadłowy": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane dośrodkowania/90', 'Podania progresywne/90', 'Liczba dryblingów/90', 'Sprinty/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90'],
-    "Defensywny Pomocnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Podania progresywne/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', '% wygranych pojedynków główkowych'],
-    "Środkowy Pomocnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Podania progresywne/90', 'Liczba goli na 90 min', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
-    "Ofensywny Pomocnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Stworzone 100% sytuacje/90', 'Podania progresywne/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Celność strzałów (%)', 'Liczba dryblingów/90', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90'],
-    "Skrzydłowy": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane dośrodkowania/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Celność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
-    "Napastnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Skuteczność strzałów (%)', 'Celność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Próby podań/90', 'Liczba dryblingów/90'],
+    "Bramkarz": _PODSTAWA + ['Uniknięte oczekiwane gole/90', 'Skuteczność obron (%)', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Błędy prowadzące do gola/90', 'Celność podań (%)', 'Obrony chwytem (%)', 'Próby podań/90'],
+    "Środkowy Obrońca": _PODSTAWA + ['Kluczowe podania z gry/90', 'Podania progresywne/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Udane odbiory/90', 'Wygrane główki/90', 'Celność podań (%)', 'Błędy prowadzące do gola/90', 'Kartki/90', 'Próby podań/90', '% wygranych pojedynków główkowych'],
+    "Boczny Obrońca": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane dośrodkowania/90', 'Podania progresywne/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Asysty/90', 'Udane odbiory/90', 'Celność podań (%)', 'Kartki/90', 'Próby podań/90'],
+    "Wahadłowy": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane dośrodkowania/90', 'Podania progresywne/90', 'Liczba dryblingów/90', 'Sprinty/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Asysty/90', 'Udane odbiory/90', 'Kartki/90', 'Próby podań/90'],
+    "Defensywny Pomocnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Podania progresywne/90', 'Udane próby pressingu/90', 'Przechwyty/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Udane odbiory/90', 'Wygrane główki/90', 'Celność podań (%)', 'Kartki/90', 'Błędy prowadzące do gola/90', 'Próby podań/90', '% wygranych pojedynków główkowych'],
+    "Środkowy Pomocnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Podania progresywne/90', 'Liczba goli na 90 min', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Asysty/90', 'Oczekiwane gole bez karnych/90', 'Celność podań (%)', 'Przechwyty/90', 'Udane odbiory/90', 'Kartki/90', 'Próby podań/90', 'Liczba dryblingów/90'],
+    "Ofensywny Pomocnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Stworzone 100% sytuacje/90', 'Podania progresywne/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Celność strzałów (%)', 'Liczba dryblingów/90', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Asysty/90', 'Udane odbiory/90', 'Kartki/90', 'Próby podań/90'],
+    "Boczny Pomocnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane dośrodkowania/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Celność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Asysty/90', 'Podania progresywne/90', 'Udane odbiory/90', 'Kartki/90', 'Próby podań/90', 'Liczba dryblingów/90'],
+    "Skrzydłowy": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Udane dośrodkowania/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Celność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Asysty/90', 'Kartki/90', 'Próby podań/90', 'Liczba dryblingów/90'],
+    "Napastnik": _PODSTAWA + ['Oczekiwane asysty/90', 'Kluczowe podania z gry/90', 'Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał', 'Skuteczność strzałów (%)', 'Celność strzałów (%)', 'Udane próby pressingu/90', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Asysty/90', '% wygranych pojedynków główkowych', 'Wygrane główki/90', 'Próby podań/90', 'Liczba dryblingów/90'],
 }
 KOLUMNY_PER_POZYCJA = _na_pozycje(_KOLUMNY_RODZIN, list)
 

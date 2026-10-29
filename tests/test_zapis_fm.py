@@ -11,7 +11,7 @@ fmsave = pytest.importorskip("fmsave")
 from fm_moneyball.zrodla.zapis_fm import (KandydatLigi, OpcjeZapisu, glowna_pozycja, grupy_pozycji,  # noqa: E402
                                           kandydaci_lig, kandydaci_lig_z_terminarza, kluby_drugorzedne,
                                           polacz_kandydatow, ligi_klubow, mapa_nazw_z_csv, preferowana_noga, statystyki_kanoniczne,
-                                          sumuj_statystyki, zbuduj_ramki, zapisz_nazwy_rozgrywek,
+                                          sumuj_statystyki, zbuduj_ramki, poziom_wiersza, PELNY, POSREDNI, PODSTAWOWY, zapisz_nazwy_rozgrywek,
                                           wczytaj_nazwy_rozgrywek)
 
 KODY = ("gk", "sw", "dl", "dc", "dr", "dm", "ml", "mc", "mr", "aml", "amc", "amr", "stc", "wbl", "wbr")
@@ -41,7 +41,7 @@ def wiersz_statystyk(uid, kind=fmsave.SeasonStatsKind.LEAGUE, **liczniki):
                 possession_won=40, possession_lost=60, passes_attempted=400, progressive_passes=30,
                 aerial_challenges_attempted=20, headers_won=12, dribbles=15, expected_goals_prevented=None,
                 saves_held=None, saves_parried=None, saves_tipped=None, shots_on_target_faced=None,
-                crosses_completed=18, clear_cut_chances_created=4, high_intensity_sprints=90)
+                crosses_completed=18, clear_cut_chances_created=4, high_intensity_sprints=90, distance_km=100)
     baza.update(liczniki)
     return NS(player_uid=uid, kind=kind, **baza)
 
@@ -131,7 +131,64 @@ def test_bramkarz_ma_obrony():
 
 def test_dzielenie_przez_zero():
     s = statystyki_kanoniczne({"minutes": 0, "shots": 0, "goals": 0})
-    assert all(np.isnan(v) for k, v in s.items() if k != "Minuty")
+    assert all(np.isnan(v) for k, v in s.items() if k not in ("Minuty", "Statystyki_niepełne"))
+    assert s["Statystyki_niepełne"] is False
+
+
+def test_nowe_statystyki():
+    s = statystyki_kanoniczne(sumuj_statystyki([wiersz_statystyk(
+        1, assists=2, passes_completed=340, tackles_completed=18, yellow_cards=3, red_cards=1,
+        mistakes_leading_to_goal=1)], "league")[1])
+    assert s["Asysty/90"] == pytest.approx(0.2)
+    assert s["Celność podań (%)"] == pytest.approx(85)
+    assert s["Udane odbiory/90"] == pytest.approx(1.8)
+    assert s["Wygrane główki/90"] == pytest.approx(1.2)
+    assert s["Kartki/90"] == pytest.approx(0.6)               # zolta = 1, czerwona = 3
+    assert s["Błędy prowadzące do gola/90"] == pytest.approx(0.1)
+    assert np.isnan(s["Obrony chwytem (%)"])                   # tylko bramkarze
+    assert s["Statystyki_niepełne"] is False
+
+
+def test_poziomy_szczegolowosci_wierszy():
+    pelny = wiersz_statystyk(1)                                          # 10 km/90
+    bez = dict(distance_km=0, pressures_completed=0, interceptions=0, progressive_passes=0, headers_won=0,
+               aerial_challenges_attempted=0, high_intensity_sprints=0, dribbles=0)
+    posredni = wiersz_statystyk(1, **bez, possession_won=0)
+    podstawowy = wiersz_statystyk(1, **{**bez, "passes_attempted": 0})
+    assert [poziom_wiersza(w) for w in (pelny, posredni, podstawowy)] == [PELNY, POSREDNI, PODSTAWOWY]
+    # druzyna rezerw: szczatkowe wartosci (4,3 km i 40 podan na 2214 minut) to nie pelne ani posrednie
+    assert poziom_wiersza(wiersz_statystyk(1, minutes=2214, distance_km=4.3, passes_attempted=40)) == PODSTAWOWY
+    # bramkarz biega mniej (~5 km/90)
+    assert poziom_wiersza(wiersz_statystyk(1, distance_km=50, saves_held=10)) == PELNY
+    assert poziom_wiersza(wiersz_statystyk(1, distance_km=50)) == PODSTAWOWY
+
+    # 900 min z pelnymi statystykami + 900 min bez nich: przechwyty liczone tylko z pierwszych 900 minut
+    s = statystyki_kanoniczne(sumuj_statystyki([pelny, podstawowy], "league")[1])
+    assert s["Minuty"] == 1800
+    assert s["Przechwyty/90"] == pytest.approx(0.9)            # a nie 0,45 z "zerami" drugiej druzyny
+    assert s["Próby podań/90"] == pytest.approx(40)
+    assert s["Liczba goli na 90 min"] == pytest.approx(0.3)    # gole licza wszystkie rozgrywki
+    assert s["Odzyskane piłki/90"] == pytest.approx(4)        # pelne i podstawowe licza odzyskane pilki
+    assert s["Statystyki_niepełne"] is True
+
+    # tylko rozgrywki bez szczegolowych statystyk: brak danych zamiast zera
+    s = statystyki_kanoniczne(sumuj_statystyki([podstawowy], "league")[1])
+    assert np.isnan(s["Przechwyty/90"]) and np.isnan(s["Udane próby pressingu/90"])
+    assert np.isnan(s["Próby podań/90"]) and s["Oczekiwane asysty/90"] == pytest.approx(0.1)
+    assert s["Odzyskane piłki/90"] == pytest.approx(4) and np.isnan(s["Kluczowe podania z gry/90"])
+    # wiersz posredni: podania i odbiory wygladaja na generowane - tylko gole, xG, xA, strzaly
+    s = statystyki_kanoniczne(sumuj_statystyki([posredni], "league")[1])
+    assert np.isnan(s["Próby podań/90"]) and np.isnan(s["Przechwyty/90"]) and np.isnan(s["Udane odbiory/90"])
+    assert np.isnan(s["Odzyskane piłki/90"]) and s["Liczba goli na 90 min"] == pytest.approx(0.3)
+
+    # niewielka czesc minut bez pelnych statystyk: liczone z pelnych minut, bez ostrzezenia
+    krotki = wiersz_statystyk(1, **{**bez, "minutes": 90, "passes_attempted": 0})
+    s = statystyki_kanoniczne(sumuj_statystyki([pelny, krotki], "league")[1])
+    assert s["Przechwyty/90"] == pytest.approx(0.9) and s["Statystyki_niepełne"] is False
+    # malo minut z pelnymi statystykami (ponizej 270 i 25% minut): brak danych
+    malo = wiersz_statystyk(1, minutes=200, distance_km=22)
+    s = statystyki_kanoniczne(sumuj_statystyki([malo, podstawowy], "league")[1])
+    assert np.isnan(s["Przechwyty/90"])
 
 
 def _liga(nazwa="Ekstraklasa"):

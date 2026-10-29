@@ -40,7 +40,7 @@ log = logging.getLogger("fm_moneyball")
 CO_ILE_SPRAWDZAC = 15        # sekundy miedzy sprawdzeniami folderu zapisow
 # 2: domyslnie zawodnik we wszystkich pulach, w ktorych jest naturalny (wczesniej tylko glowna)
 WERSJA_USTAWIEN = 2
-WERSJA_CACHE = 15            # zmiana formatu wyniku = nowy klucz cache (15: budzet z finansow)
+WERSJA_CACHE = 16            # zmiana formatu wyniku = nowy klucz cache (16: nowe statystyki, statystyki niepelne)
 ILE_W_CACHE = 3
 DEMO_DATA_GRY = date(2027, 1, 15)
 

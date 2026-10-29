@@ -147,12 +147,14 @@ def pula_migawki(df, pozycja):
     return df[maska].reset_index(drop=True)
 
 
-def dolicz_rozwoj(teraz, wtedy, min_minut=MIN_MINUT, wymagaj_minut=False):
+def dolicz_rozwoj(teraz, wtedy, min_minut=MIN_MINUT, wymagaj_minut=False, teraz_porownywalna=None):
     """
     Pula biezaca (z SCORE) + policzona pula migawki z poprzedniego sezonu -> kopia z kolumnami
     rozwoju (KOLUMNY_ROZWOJU). Para zawodnikow po UID i nazwisku. Zmiany sa liczone takze przy malej
     liczbie minut; 'Δ_mała_próba' = ponizej min_minut w ktoryms sezonie (wynik mniej pewny).
     wymagaj_minut=True: bez progu minut w obu okresach wskazniki sa puste (np. listy w profilu druzyny).
+    teraz_porownywalna: SCORE i Percentyl biezacej puli na cechach wspolnych z migawka (gdy migawka nie
+    ma czesci cech) - zmiany liczone od nich, a nie od pelnego SCORE.
     """
     teraz = teraz.copy()
     for kol in KOLUMNY_ROZWOJU:
@@ -170,9 +172,10 @@ def dolicz_rozwoj(teraz, wtedy, min_minut=MIN_MINUT, wymagaj_minut=False):
     minuty = (pd.to_numeric(teraz['Minuty'], errors="coerce").fillna(0) >= min_minut) & \
         (pd.to_numeric(p['Minuty'], errors="coerce").fillna(0) >= min_minut)
     ok = ten_sam & minuty if wymagaj_minut else ten_sam
-    teraz['Δ SCORE'] = (teraz['SCORE'] - p['SCORE']).where(ok)
+    baza = teraz if teraz_porownywalna is None else teraz_porownywalna.reindex(teraz.index)
+    teraz['Δ SCORE'] = (baza['SCORE'] - p['SCORE']).where(ok)
     teraz['Δ_mała_próba'] = teraz['Δ SCORE'].notna() & ~minuty
-    teraz['Δ percentyl'] = (teraz['Percentyl'] - p['Percentyl']).where(ok)
+    teraz['Δ percentyl'] = (baza['Percentyl'] - p['Percentyl']).where(ok)
     teraz['Δ minut'] = (teraz['Minuty'] - p['Minuty']).where(ok)
     teraz['Nowe pozycje'] = [
         ", ".join(s for s in str(t or "").split(", ") if s and s not in str(w or "").split(", ")) or None

@@ -3,6 +3,20 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 1.7.0
+
+- Nowe statystyki z zapisu gry w SCORE: udane odbiory, wygrane główki, celność podań, asysty, kartki,
+  błędy prowadzące do gola i obrony chwytem (bramkarz). Nowe wagi wszystkich pozycji (tabela w README);
+  statystyki ujemne (straty, kartki, błędy) obniżają wynik, a skorelowane dzielą jedną wagę.
+- Boczny pomocnik (LP/PP) ma osobne wagi od skrzydłowego (LS/PS): więcej dośrodkowań i obrony.
+- Niepełne statystyki: część rozgrywek (np. ligi drużyn rezerw) nie ma szczegółowych statystyk, a zapis
+  podaje je jako 0 - dotąd zaniżało to SCORE wielu zawodników. Teraz każda statystyka liczona jest tylko
+  z minut, w których była mierzona; brak danych = średnia pozycji. Tacy zawodnicy mają ⚠ przy nazwisku.
+- Skala SCORE wyznaczana przez zawodników z pełnymi danymi; Δ SCORE względem starszych migawek liczone
+  na wspólnych statystykach (bez skoku wynikającego ze zmiany modelu).
+- Uwaga: własne wagi pozycji zapisane w programie mają pierwszeństwo - nowe wagi zobaczysz po „Przywróć
+  domyślne wagi” w panelu wag.
+
 ## 1.6.0
 
 - Nowa nazwa: **FM27 Dashboard** (karta przeglądarki, nagłówek, okno programu, instalator i skróty, komunikaty).

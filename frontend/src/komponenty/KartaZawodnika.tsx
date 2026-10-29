@@ -60,6 +60,13 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
             {w['Wypożyczony'] ? (
               <Badge color="orange">wypożyczony{w['Wypożyczenie_do'] ? ` do ${formatuj(w['Wypożyczenie_do'], 'data')}` : ''}</Badge>
             ) : null}
+            {w['Statystyki_niepełne'] ? (
+              <Tooltip multiline w={320} label={'Część minut zawodnik rozegrał w rozgrywkach, w których gra nie liczy '
+                + 'szczegółowych statystyk (pressing, przechwyty, dryblingi, główki, sprinty). Te statystyki liczone są '
+                + 'tylko z pozostałych minut, a gdy ich za mało - wynik przyjmuje średnią pozycji (bez kary za brak danych).'}>
+                <Badge color="orange" variant="light">⚠ niepełne statystyki</Badge>
+              </Tooltip>
+            ) : null}
             {w['Pareto'] ? (
               <Tooltip label="Nikt w tabeli nie ma jednocześnie wyższego SCORE i niższego kosztu">
                 <Badge color="teal" variant="outline">granica wynik/koszt</Badge>

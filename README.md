@@ -13,7 +13,7 @@ Aplikacja działa lokalnie: serwer w Pythonie czyta zapisy gry z dysku, a interf
 
 Co jest w aplikacji:
 - **Źródło danych:** po starcie aplikacja pyta, co wczytać: zapis z folderu gry (najszybciej; opcjonalnie śledzi kolejne zapisy), wgranie pliku `.fm` albo dane demo. Nic nie wczytuje się samo, chyba że włączysz „Wczytuj to źródło automatycznie przy uruchomieniu”. Podczas odczytu widać etap i czas. Wynik odczytu trafia do pamięci podręcznej (`~/.fm_moneyball/cache`, 3 ostatnie zapisy), więc ponowne otwarcie tego samego zapisu, także po restarcie, jest natychmiastowe.
-- **Pozycja** wybierana kliknięciem na boisku. 14 pozycji, każda to osobna pula: BR (Bramkarz), ŚO (Środkowy Obrońca), LO/PO (Lewy/Prawy Obrońca), LWAH/PWAH (Lewy/Prawy Wahadłowy), DP (Defensywny Pomocnik), ŚP (Środkowy Pomocnik), LP/PP (Lewy/Prawy Pomocnik), OP (Ofensywny Pomocnik), LS/PS (Lewy/Prawy Skrzydłowy), N (Napastnik). W puli są tylko zawodnicy, którzy mają tę pozycję w kolumnie „Pozycje” (np. PS pokazuje wyłącznie prawych skrzydłowych). SCORE, percentyl i wycena są liczone w obrębie dokładnej pozycji; strona lewa i prawa mają te same wagi statystyk (LP/PP jak skrzydłowi).
+- **Pozycja** wybierana kliknięciem na boisku. 14 pozycji, każda to osobna pula: BR (Bramkarz), ŚO (Środkowy Obrońca), LO/PO (Lewy/Prawy Obrońca), LWAH/PWAH (Lewy/Prawy Wahadłowy), DP (Defensywny Pomocnik), ŚP (Środkowy Pomocnik), LP/PP (Lewy/Prawy Pomocnik), OP (Ofensywny Pomocnik), LS/PS (Lewy/Prawy Skrzydłowy), N (Napastnik). W puli są tylko zawodnicy, którzy mają tę pozycję w kolumnie „Pozycje” (np. PS pokazuje wyłącznie prawych skrzydłowych). SCORE, percentyl i wycena są liczone w obrębie dokładnej pozycji; strona lewa i prawa mają te same wagi statystyk.
 - **Ranking:** tabela z sortowaniem i filtrami w kolumnach (menu po polsku), płynna przy tysiącach zawodników. Ligę i narodowość filtrujesz w menu kolumny. Filtry po lewej: wiek, cena, pensja (tygodniowa, jak w grze), kontrakt, niedowartościowanie, rozwój w sezonie, noga, minimum minut (domyślnie 1000, także w Okazjach, Wykresach i Podobnych), pomijanie własnego klubu. Wagi statystyk zmieniasz suwakami. Filtry są wspólne dla wszystkich pozycji (zmiana pozycji ich nie zmienia; osobno dla pozycji są tylko „Kandydaci z innych pozycji”), wagi statystyk są osobne dla każdej pozycji, a układ tabel (sortowanie, kolejność, szerokość i widoczność kolumn, przycisk „Kolumny”) - po odświeżeniu strony; „Przywróć układ” wraca do domyślnego.
 - **Kandydaci z innych pozycji:** pole wielokrotnego wyboru w panelu (puste = wyłączone) dodaje do rankingu zawodników grających nominalnie na wskazanych pozycjach, ocenionych według kryteriów wybranej pozycji (np. defensywny pomocnik, który ma profil prawego obrońcy). Nie zmieniają oni wyników zawodników tej pozycji. W tabeli mają fioletowy pasek, kolumnę „Kandydat z pozycji” i, z zapisu gry, „Ocena na pozycji” (1–20, czyli jak łatwo go przekwalifikować).
 - **Lista życzeń:** gwiazdka przy zawodniku (w rankingu, okazjach i karcie zawodnika) dodaje go do listy; lista jest zapamiętywana w przeglądarce, a wynik liczony w pozycji, z której zawodnik został dodany. Zawodnik jest odnajdywany niezależnie od tej pozycji: także gdy dodano go jako kandydata z innej pozycji, a w ostateczności w jego głównej pozycji. Tabela ma te same kolumny, kolejność, formatowanie i zaznaczanie co Ranking pozycji wybranej na boisku, plus kolumnę „Pozycja na liście”. Zaznaczonych zawodników (pola wyboru) można przekazać do Porównania.
@@ -32,28 +32,48 @@ Co jest w aplikacji:
 - **Wykresy:** wynik względem kosztu lub wartości z granicą wynik/koszt (zawodnicy, od których nikt nie jest jednocześnie lepszy i tańszy), „Cena vs wycena wg wyniku”, „Wiek vs SCORE” (kolor = cena, rozmiar = minuty: młodzi z wysokim wynikiem przed wzrostem ceny) i, gdy jest historia, „Rozwój: Δ SCORE vs wiek”.
 - **Ligi i kraje:** ligi wykryte w zapisie (z przykładowymi klubami) i narodowości zawodników; w każdej sekcji od razu widać 5 najliczniejszych, resztę po „Pokaż więcej”, a te bez nazwy zawsze są na górze. Nazwę i mnożnik siły ligi oraz nazwę kraju wpisujesz ręcznie; zmiany działają od razu i zapisują się w katalogu `~/.fm_moneyball` (`nazwy_rozgrywek.csv`, `mnozniki_lig.csv`, `nazwy_krajow.csv`), poza folderem aplikacji, więc pobranie nowej wersji ich nie nadpisze.
 
-### Wagi nowych pozycji
+### Wagi statystyk w SCORE
 
-| Cecha | Wahadłowy | Ofensywny pomocnik |
-|---|---|---|
-| Oczekiwane asysty/90 | 25 | 25 |
-| Kluczowe podania z gry/90 | 15 | 20 |
-| Udane dośrodkowania/90 | 10 | – |
-| Stworzone 100% sytuacje/90 | – | 10 |
-| Oczekiwane gole bez karnych/90 | – | 15 |
-| Gole/90 | – | 5 |
-| Dryblingi/90 | 10 | 10 |
-| Podania progresywne/90 | 10 | 5 |
-| Sprinty/90 | 5 | – |
-| Przechwyty/90 | 10 | – |
-| Odzyskane piłki/90 | 5 | – |
-| Udany pressing/90 | 5 | 5 |
-| Strata piłek na podanie | 5 | 5 |
+Wagi domyślne (procenty, każda pozycja sumuje się do 100; strona lewa i prawa mają te same wagi). Wagi zmienisz suwakami w panelu; własne wagi pozycji mają pierwszeństwo przed domyślnymi.
 
-- **Wahadłowy** sam daje szerokość w ustawieniu z trójką obrońców: jest głównym kreatorem z boku (xA, dośrodkowania), przenosi piłkę do przodu (drybling, podania progresywne) i biega całą flankę (sprinty). Obronę asekuruje trzech stoperów, więc część defensywna to 25% (u bocznego obrońcy 50%).
-- **Ofensywny pomocnik** jest oceniany głównie za tworzenie sytuacji (55%) i zagrożenie z wejść w pole karne. Zamiast goli liczy się npxG, bo gole są losowe. Drybling oznacza wyjście spod presji między liniami. Strata piłek ma małą wagę, bo ryzykowne podania należą do tej roli.
+| Cecha | BR | ŚO | LO/PO | LWAH/PWAH | DP | ŚP | LP/PP | OP | LS/PS | N |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Liczba goli na 90 min | – | – | – | – | – | 5 | 7 | 5 | 12 | 18 |
+| Oczekiwane gole bez karnych/90 | – | – | – | – | – | 5 | 8 | 15 | 12 | 20 |
+| Oczekiwane gole na strzał | – | – | – | – | – | – | – | – | 5 | 7 |
+| Skuteczność strzałów (%) | – | – | – | – | – | – | – | – | – | 7 |
+| Oczekiwane asysty/90 | – | – | 20 | 20 | 5 | 17 | 18 | 20 | 18 | 10 |
+| Asysty/90 | – | – | 5 | 5 | – | 4 | 5 | 5 | 5 | 5 |
+| Kluczowe podania z gry/90 | – | 3 | 12 | 12 | 7 | 15 | 12 | 15 | 12 | 8 |
+| Stworzone 100% sytuacje/90 | – | – | – | – | – | – | – | 10 | – | – |
+| Udane dośrodkowania/90 | – | – | 5 | 8 | – | – | 10 | – | 3 | – |
+| Liczba dryblingów/90 | – | – | – | 10 | – | 8 | 10 | 10 | 15 | 7 |
+| Podania progresywne/90 | – | 10 | 10 | 10 | 12 | 12 | 5 | 5 | – | – |
+| Celność podań (%) | – | 7 | 3 | – | 8 | 5 | – | – | – | – |
+| Strata piłek na podanie (mniej = lepiej) | 15 | 10 | 7 | 7 | 10 | 10 | 8 | 8 | 8 | 5 |
+| Przechwyty/90 | – | 14 | 12 | 8 | 15 | 5 | – | – | – | – |
+| Odzyskane piłki/90 | 5 | 18 | 10 | 7 | 15 | 5 | 7 | – | 5 | 5 |
+| Udane odbiory/90 | – | 10 | 8 | 5 | 10 | 5 | 5 | 3 | – | – |
+| Udane próby pressingu/90 | – | 5 | 5 | – | 8 | 2 | 3 | 2 | 3 | 3 |
+| % wygranych pojedynków główkowych | – | 8 | – | – | – | – | – | – | – | 3 |
+| Wygrane główki/90 | – | 7 | – | – | 5 | – | – | – | – | 2 |
+| Sprinty/90 | – | – | – | 5 | – | – | – | – | – | – |
+| Uniknięte oczekiwane gole/90 | 50 | – | – | – | – | – | – | – | – | – |
+| Skuteczność obron (%) | 15 | – | – | – | – | – | – | – | – | – |
+| Obrony chwytem (%) | 5 | – | – | – | – | – | – | – | – | – |
+| Błędy prowadzące do gola/90 (mniej = lepiej) | 10 | 5 | – | – | 2 | – | – | – | – | – |
+| Kartki/90 (mniej = lepiej) | – | 3 | 3 | 3 | 3 | 2 | 2 | 2 | 2 | – |
 
-Dośrodkowania, 100% sytuacje i sprinty pochodzą tylko z zapisu gry. Przy imporcie CSV te wagi są pomijane. Zawodnik trafia do każdej puli, w której jest naturalny (ocena pozycji ≥ 18, jak „naturalna” w grze), np. środkowy i prawy obrońca jest i w ŚO, i w PO. Wyłączenie opcji „Zawodnik na wszystkich naturalnych pozycjach” zostawia tylko pozycję z najwyższą oceną.
+- **Statystyki ujemne** (strata piłek na podanie, kartki, błędy prowadzące do gola) obniżają wynik: im więcej, tym niższy SCORE. Kartki: żółta = 1, czerwona = 3. Same faule nie obniżają wyniku, bo w danych z gry rosną razem z udanymi odbiorami (to skutek aktywnej obrony) i nie obniżają średniej oceny, w przeciwieństwie do kartek.
+- **Bez podwójnego liczenia:** statystyki silnie ze sobą skorelowane (r > 0,6 na zapisie) dzielą jedną wagę zamiast dostawać dwie: udane odbiory i udany pressing, % wygranych główek i wygrane główki, gole, npxG i skuteczność, xA i asysty. Pominięte, bo dublują inne: strzały (npxG), wszystkie kluczowe podania (z gry), próby pressingu (udany pressing).
+- **Pominięte celowo:** wybicia, bloki i zablokowane strzały (zależą od tego, jak często drużyna się broni, a nie od jakości obrońcy), czyste konta i stracone gole bramkarza (wynik drużyny; uniknięte xG izolują bramkarza), celność podań bramkarza (styl wznawiania gry), spalone, faule wywalczone, gracz meczu.
+- **Boczny pomocnik** (LP/PP, np. w 4-4-2) ma osobne wagi od skrzydłowego (LS/PS): więcej dośrodkowań i pracy w obronie, mniej strzałów.
+- **Wahadłowy** sam daje szerokość w ustawieniu z trójką obrońców: główny kreator z boku, przenosi piłkę i biega całą flankę. Obronę asekuruje trzech stoperów, więc część defensywna jest mniejsza niż u bocznego obrońcy.
+- **Ofensywny pomocnik** jest oceniany głównie za tworzenie sytuacji i zagrożenie z wejść w pole karne (npxG zamiast losowych goli).
+
+**Niepełne statystyki.** Zapis gry zawiera szczegółowe statystyki (dystans, pressing, przechwyty, podania, odbiory, kluczowe podania, główki, dryblingi) tylko z części rozgrywek; z pozostałych (np. lig drużyn rezerw i młodzieżowych) ma tylko gole, xG, xA, strzały, asysty, odzyskane piłki i kartki, a brakujące pola podaje jako 0. Aplikacja rozpoznaje takie wiersze (pełne statystyki mają dystans ok. 10 km/90, bramkarz ok. 5) i liczy każdą statystykę tylko z minut, w których była mierzona. Gdy takich minut jest za mało (poniżej 270 i 25% minut zawodnika), statystyka jest brakiem danych, a wynik przyjmuje dla niej średnią pozycji - bez kary za „zero”, którego gra nie zmierzyła. Tacy zawodnicy mają ⚠ przy nazwisku i plakietkę „niepełne statystyki” w karcie; ich SCORE opiera się na mniejszej liczbie statystyk, więc jest mniej pewny. Skalę SCORE (50 = przeciętny, 10 = jedno odchylenie) wyznaczają zawodnicy z danymi dla co najmniej 90% wag. Δ SCORE względem migawki sprzed wersji 1.7.0 jest liczone na statystykach wspólnych dla obu sezonów, żeby pokazywało rozwój zawodnika, a nie zmianę modelu.
+
+Dośrodkowania, 100% sytuacje, sprinty, odbiory, wygrane główki, celność podań, asysty, kartki, błędy i obrony chwytem pochodzą tylko z zapisu gry. Przy imporcie CSV te wagi są pomijane, a pozostałe przeliczane do 100%. Zawodnik trafia do każdej puli, w której jest naturalny (ocena pozycji ≥ 18, jak „naturalna” w grze), np. środkowy i prawy obrońca jest i w ŚO, i w PO. Wyłączenie opcji „Zawodnik na wszystkich naturalnych pozycjach” zostawia tylko pozycję z najwyższą oceną.
 
 ### Windows krok po kroku
 

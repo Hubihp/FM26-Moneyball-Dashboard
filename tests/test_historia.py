@@ -61,6 +61,24 @@ def test_dolicz_rozwoj_prog_minut_i_nazwisko():
     assert historia.dolicz_rozwoj(teraz, None)['Δ SCORE'].isna().all()
 
 
+def test_zmiana_liczona_na_cechach_wspolnych_z_migawka():
+    """Starsza migawka nie ma cech dodanych w nowej wersji: Δ SCORE z SCORE liczonego na wspolnych cechach."""
+    from fm_moneyball.serwer.obliczenia import wynik_na_wspolnych_cechach
+    teraz = _ramka([1, 2, 3]).assign(Minuty=[2000, 2000, 2000], Pozycja=["N"] * 3,
+                                     **{"Przechwyty/90": [1.0, 2.0, 3.0], "Kartki/90": [0.9, 0.1, 0.5]})
+    from fm_moneyball.analiza import policz_wynik
+    wtedy, _ = policz_wynik(_ramka([1, 2, 3]).assign(Minuty=[2000] * 3, **{"Przechwyty/90": [1.0, 2.0, 3.0]}),
+                            {"Przechwyty/90": 50}, True, 0)
+    wagi = {"Przechwyty/90": 50, "Kartki/90": 50}
+    porownywalna = wynik_na_wspolnych_cechach(teraz, wagi, wtedy, True, 0)
+    assert porownywalna is not None
+    teraz = teraz.assign(SCORE=[30.0, 70.0, 50.0], Percentyl=[33.0, 100, 67])    # pelny SCORE z kartkami
+    wynik = historia.dolicz_rozwoj(teraz, wtedy, teraz_porownywalna=porownywalna)
+    # te same przechwyty co w migawce -> brak zmiany, mimo innego pelnego SCORE
+    assert wynik['Δ SCORE'].abs().max() < 1e-6
+    assert wynik_na_wspolnych_cechach(teraz, {"Przechwyty/90": 50}, wtedy, True, 0) is None   # wszystkie cechy sa
+
+
 @pytest.fixture()
 def klient_z_historia(tmp_path, monkeypatch):
     """Atrapa zapisu kariery: migawka z poprzedniego sezonu ze slabszymi statystykami."""

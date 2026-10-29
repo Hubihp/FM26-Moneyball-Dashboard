@@ -34,7 +34,7 @@ def test_meta_pozycji(klient):
     assert meta["liczba"] == 150
     wiersze = klient.post("/api/ranking", json={"pozycja": "Napastnik"}).json()["wiersze"]
     assert "Premier League (ANG 1)" in {w["Liga"] for w in wiersze}
-    assert meta["wagi_domyslne"]["Liczba goli na 90 min"] == 20
+    assert meta["wagi_domyslne"]["Liczba goli na 90 min"] == 18
     assert klient.get("/api/pozycja/Nieznana").status_code == 404
     # filtr pensji (tygodniowej) przez API: wszyscy widoczni maja pensje w zakresie albo brak pensji
     assert meta["pensja_max"] > 0
@@ -232,9 +232,10 @@ def test_nowe_pozycje_w_demo(klient):
     ps = klient.post("/api/ranking", json={"pozycja": "Prawy Skrzydłowy"}).json()["wiersze"]
     assert ps and all("PS" in w["Pozycja"].split(", ") for w in ps)
     meta = klient.get("/api/pozycja/Ofensywny Pomocnik").json()
-    assert meta["wagi_domyslne"]["Oczekiwane asysty/90"] == 25
+    assert meta["wagi_domyslne"]["Oczekiwane asysty/90"] == 20
     # cechy tylko z zapisu (100% sytuacje) sa pomijane w danych CSV/demo
     assert "Stworzone 100% sytuacje/90" not in meta["wagi_domyslne"]
+    assert "Asysty/90" not in meta["wagi_domyslne"] and "Kartki/90" not in meta["wagi_domyslne"]
 
 
 def test_narodowosc_w_tabeli_i_filtr(klient):

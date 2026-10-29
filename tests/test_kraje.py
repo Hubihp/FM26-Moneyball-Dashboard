@@ -53,9 +53,10 @@ def test_mnozniki_uzytkownika_nad_domyslnymi(tmp_path):
 
 def test_nowe_pozycje_maja_wagi_i_kolumny():
     assert len(POZYCJE) == 14
-    assert MERYTORYKA_WAG["Lewy Skrzydłowy"] == MERYTORYKA_WAG["Prawy Pomocnik"]     # rodzina: Skrzydłowy
-    for pozycja in ("Lewy Wahadłowy", "Prawy Wahadłowy", "Ofensywny Pomocnik"):
-        assert pozycja in POZYCJE
+    assert MERYTORYKA_WAG["Lewy Skrzydłowy"] == MERYTORYKA_WAG["Prawy Skrzydłowy"]   # rodzina: Skrzydłowy
+    assert MERYTORYKA_WAG["Lewy Pomocnik"] == MERYTORYKA_WAG["Prawy Pomocnik"]       # rodzina: Boczny Pomocnik
+    assert MERYTORYKA_WAG["Lewy Pomocnik"] != MERYTORYKA_WAG["Lewy Skrzydłowy"]
+    for pozycja in POZYCJE:
         wagi = MERYTORYKA_WAG[pozycja]
         assert sum(wagi.values()) == 100
         assert set(wagi) <= set(KOLUMNY_PER_POZYCJA[pozycja])

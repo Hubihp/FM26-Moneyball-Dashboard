@@ -77,3 +77,15 @@ def test_ustaw_ligi_po_wczytaniu():
     assert list(wynik['Liga']) == ["Serie A (WLO 1)", "Liga Testowa", "Wolny agent"]
     assert list(wynik['Mnożnik_Ligi']) == [MNOZNIKI_LIG["Serie A"], 0.7, MNOZNIK_NIEZNANEJ_LIGI]
     assert list(wynik['Liga_bez_mnoznika']) == [False, False, True]
+
+
+def test_skala_wyniku_bez_zawodnikow_z_brakami():
+    """Zawodnicy bez danych (uzupelniani srednia) nie zawezaja skali wyniku pozostalych."""
+    rng = np.random.default_rng(1)
+    pelni = pd.DataFrame({"Przechwyty/90": rng.normal(2, 0.5, 100), "Odzyskane piłki/90": rng.normal(8, 2, 100)})
+    braki = pd.DataFrame({"Przechwyty/90": [np.nan] * 300, "Odzyskane piłki/90": [np.nan] * 300})
+    wagi = {"Przechwyty/90": 50, "Odzyskane piłki/90": 50}
+    sami, _ = oblicz_score(pelni, wagi, True, 0)
+    razem, _ = oblicz_score(pd.concat([pelni, braki], ignore_index=True), wagi, True, 0)
+    assert np.allclose(razem[:100], sami)                  # ta sama skala dla zawodnikow z danymi
+    assert np.allclose(razem[100:], 50, atol=0.1)          # brak danych = przecietny

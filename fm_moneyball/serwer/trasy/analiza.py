@@ -7,7 +7,7 @@ import time
 
 from fm_moneyball import analiza, historia, optymalizator, profil
 from fm_moneyball.serwer.modele import HistoriaModel, HistoriaWieluModel, NastepcaModel, PorownanieZMoimModel, KadraModel, ListaZyczenModel, OptymalizatorModel, PodobniModel, RadarModel, RankingModel, SprzedajDrogoModel, ZawodnikModel
-from fm_moneyball.serwer.obliczenia import kandydat
+from fm_moneyball.serwer.obliczenia import kandydat, wynik_na_wspolnych_cechach
 from fm_moneyball.stale import POZYCJE
 
 
@@ -273,8 +273,11 @@ def utworz(stan, obl):
             if stan.pula(pozycja) is None:
                 continue
             policzona, _, _ = obl.policz(pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
-            wtedy = obl.pula_migawki(porownanie[0], pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
-            policzona = historia.dolicz_rozwoj(policzona, wtedy, prog, wymagaj_minut=True)
+            wagi = z.wagi.get(pozycja) or analiza.wagi_domyslne(pozycja, stan.pula(pozycja))
+            wtedy = obl.pula_migawki(porownanie[0], pozycja, wagi, z.ignoruj_mnoznik, z.k_baza)
+            porownywalna = wynik_na_wspolnych_cechach(stan.pula(pozycja), wagi, wtedy, z.ignoruj_mnoznik, z.k_baza)
+            policzona = historia.dolicz_rozwoj(policzona, wtedy, prog, wymagaj_minut=True,
+                                               teraz_porownywalna=porownywalna)
             glowna = policzona['Pula_główna'] == pozycja if 'Pula_główna' in policzona.columns else True
             moi_w_puli = analiza.moi_zawodnicy(policzona, uid, z.tylko_pierwsza)
             if not isinstance(glowna, bool):

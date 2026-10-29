@@ -226,7 +226,8 @@ def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
 # --- kolumny tabeli -----------------------------------------------------------------------------
 # Format wartosci dla interfejsu: score, pasek (0-100), int, dec1, dec2, eur, eur_tyg, data, tekst
 _FORMATY = {'SCORE': 'score', 'Percentyl': 'pasek', 'Wiek': 'int', 'Minuty': 'int',
-            'Ocena na pozycji': 'int', 'Strata piłek na podanie': 'dec2',
+            'Ocena na pozycji': 'int', 'Strata piłek na podanie': 'dec2', 'Asysty/90': 'dec2', 'Kartki/90': 'dec2',
+            'Błędy prowadzące do gola/90': 'dec2',
             'Niedowartościowanie': 'mnoznik', 'Wycena wg wyniku': 'eur', 'Δ SCORE': 'zmiana'}
 # Kolumny prezentowane z pol liczbowych (sortowanie po liczbie, nie po tekscie)
 _POLA = {'Cena': ('Wartość_Numeryczna', 'eur'), 'Płaca': ('Zarobki_Numeryczne', 'eur_tyg'),
@@ -317,7 +318,7 @@ POLA_WIERSZA = ['ID', 'UID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Kraj', 'Wi
                 'Mnożnik_Ligi', 'Wypożyczony', 'Wypożyczenie_do', 'Wolny_agent', 'Lata_kontraktu', 'Koszt',
                 'Okazje', 'Pareto', 'Kandydat', 'Kandydat z pozycji', 'Ocena na pozycji',
                 'Wycena wg wyniku', 'Niedowartościowanie', 'Kontuzje_2_lata', 'Δ SCORE', 'Δ percentyl',
-                'Δ minut', 'Nowe pozycje', 'Δ_mała_próba', 'U21', 'Wycena_ograniczona']
+                'Δ minut', 'Nowe pozycje', 'Δ_mała_próba', 'U21', 'Wycena_ograniczona', 'Statystyki_niepełne']
 
 
 def pola_wiersza(pozycja, pula):
