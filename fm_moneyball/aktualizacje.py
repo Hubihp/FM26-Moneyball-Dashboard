@@ -27,7 +27,7 @@ log = logging.getLogger("fm_moneyball")
 REPOZYTORIUM = "Hubihp/FM26-Moneyball-Dashboard"
 ADRES_WYDANIA = f"https://api.github.com/repos/{REPOZYTORIUM}/releases/latest"
 STRONA_WYDAN = f"https://github.com/{REPOZYTORIUM}/releases/latest"
-NAZWA_INSTALATORA = "FM26Moneyball-Setup.exe"
+NAZWA_INSTALATORA = "FM27Dashboard-Setup.exe"
 ARGUMENTY_INSTALATORA = ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS"]
 LIMIT_CZASU = 5
 
@@ -50,7 +50,7 @@ def mozna_instalowac():
 
 def _pobierz_json(adres):
     zapytanie = urllib.request.Request(adres, headers={"Accept": "application/vnd.github+json",
-                                                       "User-Agent": f"FM26Moneyball/{__version__}"})
+                                                       "User-Agent": f"FM27Dashboard/{__version__}"})
     with urllib.request.urlopen(zapytanie, timeout=LIMIT_CZASU) as odp:
         return json.loads(odp.read().decode("utf-8"))
 
@@ -118,8 +118,8 @@ class Aktualizacje:
 
     def _instaluj(self, w):
         try:
-            katalog = Path(tempfile.mkdtemp(prefix="fm26_aktualizacja_"))
-            plik = katalog / f"FM26Moneyball-Setup-{w['wersja']}.exe"
+            katalog = Path(tempfile.mkdtemp(prefix="fm27_aktualizacja_"))
+            plik = katalog / f"FM27Dashboard-Setup-{w['wersja']}.exe"
             skrot = pobierz(w["instalator"], plik, lambda proc: self._ustaw_postep(proc=proc))
             if w["suma"]:
                 with urllib.request.urlopen(w["suma"], timeout=LIMIT_CZASU * 4) as odp:
@@ -139,7 +139,7 @@ class Aktualizacje:
 def pobierz(adres, cel, postep=None):
     """Pobiera plik z postepem (0-100); zwraca SHA-256 (hex)."""
     skrot = hashlib.sha256()
-    zapytanie = urllib.request.Request(adres, headers={"User-Agent": f"FM26Moneyball/{__version__}"})
+    zapytanie = urllib.request.Request(adres, headers={"User-Agent": f"FM27Dashboard/{__version__}"})
     with urllib.request.urlopen(zapytanie, timeout=LIMIT_CZASU * 6) as odp, open(cel, "wb") as plik:
         razem = int(odp.headers.get("Content-Length") or 0)
         pobrano = 0

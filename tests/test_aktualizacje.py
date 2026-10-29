@@ -16,9 +16,9 @@ from fm_moneyball.serwer.stan import Stan  # noqa: E402
 
 def _wydanie(tag):
     return {"tag_name": tag, "body": "Nowe wykresy", "html_url": "https://example/wydanie",
-            "assets": [{"name": "FM26Moneyball-Setup.exe", "browser_download_url": "https://example/setup.exe",
+            "assets": [{"name": "FM27Dashboard-Setup.exe", "browser_download_url": "https://example/setup.exe",
                         "size": 60 * 2**20},
-                       {"name": "FM26Moneyball-Setup.exe.sha256", "browser_download_url": "https://example/sha"}]}
+                       {"name": "FM27Dashboard-Setup.exe.sha256", "browser_download_url": "https://example/sha"}]}
 
 
 def test_porownanie_wersji():

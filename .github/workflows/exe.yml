@@ -1,9 +1,9 @@
-# Buduje program FM26 Moneyball dla Windows (okno bez konsoli) i instalator FM26Moneyball-Setup.exe.
+# Buduje program FM27 Dashboard dla Windows (okno bez konsoli) i instalator FM27Dashboard-Setup.exe.
 # - push na galaz robocza: budowanie + testy, instalator jako artefakt; gdy wersja w
 #   fm_moneyball/__init__.py nie ma jeszcze wydania - wydanie v<wersja> na GitHubie (opis z ZMIANY.md)
 # - tag v1.2.3: to samo (wydanie tej wersji). Program sprawdza przy starcie
 #   najnowsze wydanie i proponuje aktualizacje. Staly link do instalatora:
-#   https://github.com/Hubihp/FM26-Moneyball-Dashboard/releases/latest/download/FM26Moneyball-Setup.exe
+#   https://github.com/Hubihp/FM26-Moneyball-Dashboard/releases/latest/download/FM27Dashboard-Setup.exe
 name: Plik exe dla Windows
 
 on:
@@ -60,12 +60,12 @@ jobs:
       - name: Budowanie programu
         run: |
           pyinstaller --noconfirm fm26_moneyball.spec
-          $mb = (Get-ChildItem dist\FM26Moneyball -Recurse | Measure-Object Length -Sum).Sum / 1MB
+          $mb = (Get-ChildItem dist\FM27Dashboard -Recurse | Measure-Object Length -Sum).Sum / 1MB
           Write-Host ("Rozmiar programu: {0:N0} MB" -f $mb)
 
       - name: Test dymny programu (serwer bez okna)
         run: |
-          $proces = Start-Process -FilePath "dist\FM26Moneyball\FM26Moneyball.exe" -ArgumentList "--bez-przegladarki" -PassThru
+          $proces = Start-Process -FilePath "dist\FM27Dashboard\FM27Dashboard.exe" -ArgumentList "--bez-przegladarki" -PassThru
           $ok = $false
           for ($i = 0; $i -lt 60; $i++) {
             Start-Sleep -Seconds 2
@@ -84,17 +84,20 @@ jobs:
           choco install innosetup -y --no-progress
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DWersja=${{ steps.wersja.outputs.wersja }}" instalator\fm26_moneyball.iss
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          $skrot = (Get-FileHash dist\FM26Moneyball-Setup.exe -Algorithm SHA256).Hash.ToLower()
+          $skrot = (Get-FileHash dist\FM27Dashboard-Setup.exe -Algorithm SHA256).Hash.ToLower()
+          [IO.File]::WriteAllText("dist\FM27Dashboard-Setup.exe.sha256", "$skrot  FM27Dashboard-Setup.exe`n")
+          # kopia pod stara nazwa: wersje do 1.5.x (FM26 Moneyball) szukaja w wydaniu tego pliku
+          Copy-Item dist\FM27Dashboard-Setup.exe dist\FM26Moneyball-Setup.exe
           [IO.File]::WriteAllText("dist\FM26Moneyball-Setup.exe.sha256", "$skrot  FM26Moneyball-Setup.exe`n")
-          Get-Item dist\FM26Moneyball-Setup.exe | Format-List Name, Length
+          Get-Item dist\FM27Dashboard-Setup.exe | Format-List Name, Length
 
       - name: Test instalatora (cicha instalacja, start w oknie)
         timeout-minutes: 8
         run: |
           # bez -Wait: ono czeka tez na procesy potomne, a instalator na koncu uruchamia program
-          $instalator = Start-Process -FilePath "dist\FM26Moneyball-Setup.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -PassThru
+          $instalator = Start-Process -FilePath "dist\FM27Dashboard-Setup.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -PassThru
           if (-not $instalator.WaitForExit(300000)) { Write-Error "Instalator nie skończył w 5 minut"; exit 1 }
-          $exe = "$env:LOCALAPPDATA\Programs\FM26 Moneyball\FM26Moneyball.exe"
+          $exe = "$env:LOCALAPPDATA\Programs\FM27 Dashboard\FM27Dashboard.exe"
           if (-not (Test-Path $exe)) { Write-Error "Brak zainstalowanego programu"; exit 1 }
           # instalator w trybie cichym sam uruchamia program (jak przy aktualizacji z programu)
           $ok = $false
@@ -110,17 +113,17 @@ jobs:
           if (Test-Path $log) { Get-Content $log }
           if (Test-Path $log) { Select-String -Path $log -Pattern "Czas startu" | ForEach-Object { Write-Host "::notice::$($_.Line)" } }
           $bledy = (Test-Path $log) -and (Select-String -Path $log -Pattern " ERROR " -Quiet)
-          Get-Process FM26Moneyball -ErrorAction SilentlyContinue | Stop-Process -Force
+          Get-Process FM27Dashboard -ErrorAction SilentlyContinue | Stop-Process -Force
           if (-not $ok) { Write-Error "Zainstalowany program nie wystartował w oknie"; exit 1 }
           if ($bledy) { Write-Error "Błędy w dzienniku programu"; exit 1 }
           Write-Host "Instalator i program w oknie działają"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FM26Moneyball-Setup-${{ steps.wersja.outputs.wersja }}
+          name: FM27Dashboard-Setup-${{ steps.wersja.outputs.wersja }}
           path: |
-            dist/FM26Moneyball-Setup.exe
-            dist/FM26Moneyball-Setup.exe.sha256
+            dist/FM27Dashboard-Setup.exe
+            dist/FM27Dashboard-Setup.exe.sha256
 
       - name: Opis wydania z ZMIANY.md
         if: steps.wersja.outputs.wydac == 'true'
@@ -137,9 +140,11 @@ jobs:
         with:
           tag_name: v${{ steps.wersja.outputs.wersja }}
           target_commitish: ${{ github.sha }}
-          name: FM26 Moneyball ${{ steps.wersja.outputs.wersja }}
+          name: FM27 Dashboard ${{ steps.wersja.outputs.wersja }}
           body_path: opis_wydania.md
           files: |
+            dist/FM27Dashboard-Setup.exe
+            dist/FM27Dashboard-Setup.exe.sha256
             dist/FM26Moneyball-Setup.exe
             dist/FM26Moneyball-Setup.exe.sha256
           make_latest: true

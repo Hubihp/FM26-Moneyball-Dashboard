@@ -3,6 +3,14 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 1.6.0
+
+- Nowa nazwa: **FM27 Dashboard** (karta przeglądarki, nagłówek, okno programu, instalator i skróty, komunikaty).
+  Dane użytkownika (`~/.fm_moneyball`) i folder instalacji zostają bez zmian; skróty „FM26 Moneyball” zastępują nowe.
+  Instalator nazywa się teraz `FM27Dashboard-Setup.exe`.
+- Tablica taktyczna: przeciągany zawodnik zachowuje miejsce chwycenia - jedzie za kursorem bez przeskoku środkiem
+  pod kursor; po upuszczeniu na wolne miejsce zostaje tam, gdzie go widać.
+
 ## 1.5.0
 
 - Δ SCORE liczone także przy małej liczbie minut i pokazywane w Rankingu - z oznaczeniem ⚠ (pomarańczowa kursywa),

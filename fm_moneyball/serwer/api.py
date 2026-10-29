@@ -18,7 +18,7 @@ KATALOG_STATIC = Path(__file__).resolve().parent / "static"
 
 def utworz_aplikacje(stan, pamiec=None, aktualizacje=None, okno=None):
     """okno: {"okno": bool, "port": int}; aktualizacje: obiekt Aktualizacje (domyslnie bez sprawdzania)."""
-    app = FastAPI(title="FM26 Moneyball", docs_url="/api/docs", openapi_url="/api/openapi.json")
+    app = FastAPI(title="FM27 Dashboard", docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.stan = stan
     obl = Obliczenia(stan)
     app.include_router(zrodlo.utworz(stan))

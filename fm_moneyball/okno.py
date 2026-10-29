@@ -28,7 +28,7 @@ KATALOG_WEBVIEW = KATALOG_DOMOWY / "webview"
 ADRES_WEBVIEW2 = "https://developer.microsoft.com/microsoft-edge/webview2/"
 EKRAN_LADOWANIA = """<html><body style="background:#1a1b1e;color:#c1c2c5;font-family:Segoe UI,sans-serif;
 display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
-<div style="text-align:center"><h2 style="color:#38d9a9;margin:0 0 8px">FM26 Moneyball</h2>
+<div style="text-align:center"><h2 style="color:#38d9a9;margin:0 0 8px">FM27 Dashboard</h2>
 <div id="etap">Uruchamianie...</div></div>
 </body></html>"""
 ETAPY = {}          # nazwa etapu -> sekundy od startu procesu (do dziennika i /api/system/gotowe)
@@ -45,10 +45,10 @@ def ustaw_dziennik():
         strumien = open(plik.with_name("wyjscie.log"), "a", encoding="utf-8", buffering=1)
         sys.stdout = sys.stdout or strumien
         sys.stderr = sys.stderr or strumien
-    log.info("FM26 Moneyball %s - start", __version__)
+    log.info("FM27 Dashboard %s - start", __version__)
 
 
-def komunikat(tekst, tytul="FM26 Moneyball"):
+def komunikat(tekst, tytul="FM27 Dashboard"):
     """Okienko komunikatu Windows (bez konsoli print jest niewidoczny)."""
     log.warning(tekst)
     if sys.platform == "win32":
@@ -100,7 +100,7 @@ def uruchom(utworz_app, host, port, start):
 
     # okno pod tym samym adresem co w przegladarce (przenoszenie danych z przegladarki)
     adres = f"http://localhost:{port}"
-    okno = webview.create_window(f"FM26 Moneyball {__version__}", html=EKRAN_LADOWANIA, width=1500, height=950,
+    okno = webview.create_window(f"FM27 Dashboard {__version__}", html=EKRAN_LADOWANIA, width=1500, height=950,
                                  min_size=(1100, 700), text_select=True)
     serwer = None
 

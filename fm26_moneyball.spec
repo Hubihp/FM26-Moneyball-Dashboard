@@ -1,8 +1,8 @@
-# Specyfikacja PyInstallera: program FM26Moneyball (Windows) we wlasnym oknie, bez konsoli.
-# Tryb "folder" (onedir): dist/FM26Moneyball/FM26Moneyball.exe + _internal/ - start bez rozpakowywania
+# Specyfikacja PyInstallera: program FM27Dashboard (Windows) we wlasnym oknie, bez konsoli.
+# Tryb "folder" (onedir): dist/FM27Dashboard/FM27Dashboard.exe + _internal/ - start bez rozpakowywania
 # (szybciej niz jeden plik) i mniej falszywych alarmow antywirusa. Instalator buduje z tego folderu
 # Inno Setup (instalator/fm26_moneyball.iss).
-# Budowanie: pyinstaller fm26_moneyball.spec   (wynik w dist/FM26Moneyball/)
+# Budowanie: pyinstaller fm26_moneyball.spec   (wynik w dist/FM27Dashboard/)
 # Na GitHubie buduje go workflow .github/workflows/exe.yml.
 import re
 from pathlib import Path
@@ -30,11 +30,11 @@ plik_wersji.write_text(f"""VSVersionInfo(
                     fileType=0x1, subtype=0x0, date=(0, 0)),
   kids=[StringFileInfo([StringTable('041504B0', [
           StringStruct('CompanyName', 'Hubihp'),
-          StringStruct('FileDescription', 'FM26 Moneyball'),
+          StringStruct('FileDescription', 'FM27 Dashboard'),
           StringStruct('FileVersion', '{WERSJA}'),
-          StringStruct('ProductName', 'FM26 Moneyball'),
+          StringStruct('ProductName', 'FM27 Dashboard'),
           StringStruct('ProductVersion', '{WERSJA}'),
-          StringStruct('OriginalFilename', 'FM26Moneyball.exe')])]),
+          StringStruct('OriginalFilename', 'FM27Dashboard.exe')])]),
         VarFileInfo([VarStruct('Translation', [0x0415, 1200])])]
 )""", encoding="utf-8")
 
@@ -51,10 +51,10 @@ exe = EXE(
     pyz,
     a.scripts,
     exclude_binaries=True,
-    name="FM26Moneyball",
+    name="FM27Dashboard",
     icon="assets/fm26.ico",
     version=str(plik_wersji),
     console=False,          # bez czarnego okna; komunikaty w okienkach, dziennik w ~/.fm_moneyball/logi
     upx=False,              # UPX zwieksza ryzyko falszywych alarmow antywirusa
 )
-coll = COLLECT(exe, a.binaries, a.datas, name="FM26Moneyball", upx=False)
+coll = COLLECT(exe, a.binaries, a.datas, name="FM27Dashboard", upx=False)

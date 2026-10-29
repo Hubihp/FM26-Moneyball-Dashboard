@@ -248,7 +248,7 @@ export default function App() {
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap">
-            <Title order={3}>FM26 Moneyball</Title>
+            <Title order={3}>FM27 Dashboard</Title>
             <WersjaProgramu />
             {s?.meta.nazwa_zapisu && <Badge variant="light" size="lg">{s.meta.nazwa_zapisu}</Badge>}
             {s?.meta.data_gry && <Badge variant="outline" color="gray">data w grze: {s.meta.data_gry}</Badge>}

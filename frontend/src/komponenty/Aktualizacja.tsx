@@ -149,7 +149,7 @@ export function WersjaProgramu() {
         onClick={() => setOtwarte(true)} title="O programie i aktualizacje">
         v{s.wersja_programu}{s.dostepna ? ` → ${s.wersja}` : ''}
       </Badge>
-      <Modal opened={otwarte} onClose={() => setOtwarte(false)} title={<b>FM26 Moneyball {s.wersja_programu}</b>}>
+      <Modal opened={otwarte} onClose={() => setOtwarte(false)} title={<b>FM27 Dashboard {s.wersja_programu}</b>}>
         <Stack gap="sm">
           <Group gap="xs">
             <Button size="xs" variant="light" loading={sprawdzanie} onClick={sprawdz}>Sprawdź aktualizacje</Button>

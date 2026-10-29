@@ -1,4 +1,4 @@
-# FM26 Moneyball Dashboard
+# FM27 Dashboard
 
 Narzędzie do wyszukiwania zawodników w Football Manager 26 w stylu Moneyball. Liczy wynik (SCORE) na tle innych zawodników z tej samej pozycji, z korektą na małą liczbę minut i siłę ligi. Do tego porównanie na radarze, wyszukiwanie „sobowtóra” i wykresy wyniku względem ceny.
 
@@ -64,14 +64,14 @@ Dośrodkowania, 100% sytuacje i sprinty pochodzą tylko z zapisu gry. Przy impor
 
 ### Program dla Windows (zalecane)
 
-Pobierz [FM26Moneyball-Setup.exe](https://github.com/Hubihp/FM26-Moneyball-Dashboard/releases/latest/download/FM26Moneyball-Setup.exe) i uruchom. Instalator nie wymaga uprawnień administratora: instaluje program w `%LOCALAPPDATA%\Programs\FM26 Moneyball` i tworzy skrót w menu Start (opcjonalnie na pulpicie). Program otwiera się we własnym oknie, bez okna konsoli i bez przeglądarki; zamknięcie okna kończy jego działanie.
+Pobierz [FM27Dashboard-Setup.exe](https://github.com/Hubihp/FM26-Moneyball-Dashboard/releases/latest/download/FM27Dashboard-Setup.exe) i uruchom. Instalator nie wymaga uprawnień administratora: instaluje program w `%LOCALAPPDATA%\Programs\FM27 Dashboard` i tworzy skrót w menu Start (opcjonalnie na pulpicie). Program otwiera się we własnym oknie, bez okna konsoli i bez przeglądarki; zamknięcie okna kończy jego działanie.
 
 - **Aktualizacje:** przy każdym starcie program sprawdza na GitHubie, czy jest nowsza wersja. Jeśli jest, pokazuje pasek z opisem zmian i przyciskiem „Zainstaluj teraz”: pobiera instalator, sprawdza jego sumę kontrolną, instaluje go po cichu i uruchamia się ponownie. Wersja w nagłówku (np. „v1.0.0”) otwiera okno „O programie” z ręcznym sprawdzeniem aktualizacji.
 - **Twoje dane** są w `%USERPROFILE%\.fm_moneyball`, poza folderem programu, więc aktualizacja ani odinstalowanie ich nie zmieniają: lista życzeń, filtry, wagi i układ tabel (`pamiec.json`), ustawienia źródła, historia zawodników, nazwy lig i krajów, pamięć podręczna zapisów i dziennik (`logi`). Zapisy gry zostają w folderze gry.
 - **Przeniesienie danych z przeglądarki:** jeśli wcześniej używałeś aplikacji w przeglądarce, przy pierwszym uruchomieniu kliknij „Przenieś dane z przeglądarki” (także w oknie „O programie”). Twoja przeglądarka otworzy aplikację i prześle do programu listę życzeń, filtry i układ tabel; potem kliknij „Odśwież” w oknie programu.
 - **SmartScreen:** instalator nie jest podpisany certyfikatem, więc przy pierwszej instalacji Windows może ostrzec o nieznanym wydawcy: „Więcej informacji”, potem „Uruchom mimo to”. Aktualizacje pobierane przez sam program tego ostrzeżenia zwykle nie wywołują.
 - **Wymagania:** Windows 10 lub 11 z Microsoft Edge WebView2 (wbudowany w Windows 11 i aktualne Windows 10; jeśli go brakuje, program pokaże link do instalatora Microsoftu).
-- Tryb przeglądarki nadal działa: `FM26Moneyball.exe --przegladarka` albo `py -m fm_moneyball --przegladarka`.
+- Tryb przeglądarki nadal działa: `FM27Dashboard.exe --przegladarka` albo `py -m fm_moneyball --przegladarka`.
 
 **Publikowanie nowej wersji** (dla dewelopera): podnieś `__version__` w `fm_moneyball/__init__.py`, dopisz sekcję `## <wersja>` w `ZMIANY.md` i wypchnij zmiany na gałąź roboczą (albo tag `v<wersja>`). Gdy tej wersji nie ma jeszcze na GitHubie, GitHub Actions zbuduje program i instalator, przetestuje cichą instalację i opublikuje wydanie; programy użytkowników wykryją je przy następnym starcie.
 

@@ -23,7 +23,12 @@ const POZYCJE = Object.keys(SKROTY);
 const PROG_PRZECIAGANIA = 4;      // px - mniejszy ruch to klikniecie
 const MALO_MINUT = 1000;
 
-type Przeciaganie = { typ: 'slot' | 'gracz'; id: string; sx: number; sy: number; x: number; y: number; aktywne: boolean };
+// dx, dy: przesuniecie srodka przeciaganego elementu wzgledem kursora z chwili chwycenia (px),
+// dzieki ktoremu element jedzie za kursorem bez przeskoku srodkiem pod kursor
+type Przeciaganie = {
+  typ: 'slot' | 'gracz'; id: string; sx: number; sy: number; x: number; y: number; dx: number; dy: number; aktywne: boolean;
+};
+const MAKS_PRZESUNIECIA_PLAKIETKI = { x: 40, y: 10 };   // kursor zawsze zostaje na plakietce z nazwiskiem
 const nazwisko = (z: ZawodnikSkladu) => z.Piłkarz.split(' ').slice(-1)[0];
 const najlepszyWynik = (z: ZawodnikSkladu) => Math.max(...Object.values(z.score), -Infinity);
 
@@ -178,7 +183,15 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
   const chwyc = (e: React.PointerEvent, typ: 'slot' | 'gracz', id: string) => {
     if (e.button !== 0) return;
     if (e.pointerType === 'mouse') e.preventDefault();      // bez zaznaczania tekstu podczas przeciagania
-    const p = { typ, id, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, aktywne: false };
+    const r = e.currentTarget.getBoundingClientRect();
+    let dx = r.left + r.width / 2 - e.clientX;
+    let dy = r.top + r.height / 2 - e.clientY;
+    if (typ === 'gracz') {
+      // plakietka jest mniejsza od wiersza listy: przesuniecie ograniczone do jej rozmiaru
+      dx = Math.max(-MAKS_PRZESUNIECIA_PLAKIETKI.x, Math.min(MAKS_PRZESUNIECIA_PLAKIETKI.x, dx));
+      dy = Math.max(-MAKS_PRZESUNIECIA_PLAKIETKI.y, Math.min(MAKS_PRZESUNIECIA_PLAKIETKI.y, dy));
+    }
+    const p = { typ, id, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, dx, dy, aktywne: false };
     przeciaganieRef.current = p;
     setPrzeciaganie(p);
   };
@@ -214,14 +227,15 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
     return { x: Math.min(97, Math.max(3, ((x - r.left) / r.width) * 100)),
       y: Math.min(97, Math.max(3, ((y - r.top) / r.height) * 100)) };
   };
-  // Upuszczenie: cel spod kursora (przeciagany element ma pointer-events: none, wiec go nie zaslania)
+  // Upuszczenie: cel spod kursora (przeciagany element ma pointer-events: none, wiec go nie zaslania),
+  // nowa pozycja - tam, gdzie widac srodek przeciaganego elementu
   upuscRef.current = (p: Przeciaganie) => {
     const elementy = document.elementsFromPoint(p.x, p.y);
     const celSlot = elementy.map((el) => el.closest('[data-slot]')).find((el) => el && el.getAttribute('data-slot') !== p.id);
     const slotCel = celSlot?.getAttribute('data-slot') ?? null;
     const naBoisku = elementy.some((el) => el.closest('[data-boisko]'));
     const naLiscie = elementy.some((el) => el.closest('[data-lista]'));
-    const punkt = naBoiskuProcent(p.x, p.y);
+    const punkt = naBoiskuProcent(p.x + p.dx, p.y + p.dy);
     if (p.typ === 'gracz') {
       if (slotCel) setBiezace(przypisz(u, slotCel, p.id));
       else if (naBoisku && punkt) {
@@ -254,7 +268,7 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
   return (
     <Group align="flex-start" gap="md" wrap="nowrap">
       {przeciaganie?.aktywne && przeciaganie.typ === 'gracz' && wgKlucza[przeciaganie.id] && (
-        <div style={{ position: 'fixed', left: przeciaganie.x, top: przeciaganie.y, transform: 'translate(-50%, -50%)',
+        <div style={{ position: 'fixed', left: przeciaganie.x + przeciaganie.dx, top: przeciaganie.y + przeciaganie.dy, transform: 'translate(-50%, -50%)',
           pointerEvents: 'none', zIndex: 1000, background: '#c92a2a', color: 'white', fontWeight: 700, fontSize: 13,
           padding: '4px 10px', borderRadius: 14, boxShadow: '0 4px 10px rgba(0,0,0,0.5)', whiteSpace: 'nowrap' }}>
           {wgKlucza[przeciaganie.id].Piłkarz}
@@ -269,7 +283,7 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
             naKlik={() => !poPrzeciagnieciu.current && setWybranySlot(wybranySlot === s.id ? null : s.id)}
             naChwyt={(e) => chwyc(e, 'slot', s.id)}
             przeciagany={przeciaganie?.aktywne && przeciaganie.typ === 'slot' && przeciaganie.id === s.id
-              ? naBoiskuProcent(przeciaganie.x, przeciaganie.y) : null}
+              ? naBoiskuProcent(przeciaganie.x + przeciaganie.dx, przeciaganie.y + przeciaganie.dy) : null}
             naZdjecie={() => zdejmij(s.id)}
             naZmianePozycji={(p) => setBiezace({ ...u, sloty: u.sloty.map((x) => (x.id === s.id ? { ...x, pozycja: p } : x)) })}
             naKarte={() => {

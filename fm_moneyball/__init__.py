@@ -1,5 +1,5 @@
 """
-Rdzen FM26 Moneyball Dashboard - logika niezalezna od interfejsu.
+Rdzen FM27 Dashboard - logika niezalezna od interfejsu.
 
   stale.py            - slowniki kolumn, cechy, wagi, ligi
   parsery.py          - tekst z FM (ceny, place, liczby) -> liczby
@@ -10,4 +10,4 @@ Rdzen FM26 Moneyball Dashboard - logika niezalezna od interfejsu.
   zrodla/folder.py    - folder zapisow gry: wyszukiwanie najnowszego zapisu, bezpieczna kopia
 """
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"

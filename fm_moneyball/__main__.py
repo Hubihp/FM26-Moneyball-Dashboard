@@ -51,7 +51,7 @@ def main():
     if importlib.util.find_spec("uvicorn") is None:
         _zakoncz("Brakuje bibliotek. Zainstaluj je poleceniem:\n    py -m pip install -r requirements.txt")
 
-    parser = argparse.ArgumentParser(description="FM26 Moneyball - lokalny serwer aplikacji")
+    parser = argparse.ArgumentParser(description="FM27 Dashboard - lokalny serwer aplikacji")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--przegladarka", action="store_true", help="otwórz w przeglądarce zamiast w oknie")
@@ -68,9 +68,9 @@ def main():
     adres = f"http://{'localhost' if args.host in ('127.0.0.1', '0.0.0.0') else args.host}:{args.port}"
     if port_zajety(args.host, args.port):
         if w_oknie or BEZ_KONSOLI:
-            _zakoncz("FM26 Moneyball już działa (okno może być zminimalizowane na pasku zadań).")
+            _zakoncz("FM27 Dashboard już działa (okno może być zminimalizowane na pasku zadań).")
         # tryb przegladarki: aplikacja juz dziala (np. drugi start) - wystarczy otworzyc przegladarke
-        print(f"FM26 Moneyball już działa pod adresem {adres} - otwieram przeglądarkę.")
+        print(f"FM27 Dashboard już działa pod adresem {adres} - otwieram przeglądarkę.")
         if not args.bez_przegladarki:
             webbrowser.open(adres)
         return
@@ -95,7 +95,7 @@ def main():
     import uvicorn
     app = utworz_app()
 
-    print(f"FM26 Moneyball działa pod adresem {adres}  "
+    print(f"FM27 Dashboard działa pod adresem {adres}  "
           f"({'zamknięcie tego okna' if ZAMROZONY else 'Ctrl+C'} kończy aplikację)")
     if not args.bez_przegladarki:
         threading.Timer(1.5, lambda: webbrowser.open(adres)).start()

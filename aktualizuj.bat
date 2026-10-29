@@ -1,6 +1,6 @@
 @echo off
 setlocal
-REM Aktualizacja FM26 Moneyball bez gita: pobiera najnowsza wersje z GitHuba i nadpisuje pliki aplikacji.
+REM Aktualizacja FM27 Dashboard bez gita: pobiera najnowsza wersje z GitHuba i nadpisuje pliki aplikacji.
 REM Twoje dane (nazwy lig i krajow, ustawienia, cache) sa w %USERPROFILE%\.fm_moneyball i zostaja bez zmian.
 
 set "GALAZ=claude/optimistic-lamport-we8t1j"
@@ -10,7 +10,7 @@ set "ZIP=%TEMP%\fm26_moneyball.zip"
 set "ROZPAK=%TEMP%\fm26_moneyball_aktualizacja"
 
 echo.
-echo === Aktualizacja FM26 Moneyball ===
+echo === Aktualizacja FM27 Dashboard ===
 echo Jesli aplikacja jest uruchomiona, zamknij ja najpierw (Ctrl+C w jej oknie).
 echo.
 
