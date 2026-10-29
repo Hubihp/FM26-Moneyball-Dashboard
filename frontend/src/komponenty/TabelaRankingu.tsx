@@ -244,8 +244,19 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
             },
           });
           if (k.pole === 'Δ SCORE') {
-            def.headerTooltip = 'Zmiana SCORE względem ostatniej migawki z poprzedniego sezonu (te same wagi); '
-              + 'liczona przy co najmniej 1000 minutach w obu sezonach.';
+            def.headerTooltip = 'Zmiana SCORE względem ostatniej migawki z poprzedniego sezonu (te same wagi). '
+              + '⚠ i pomarańczowa kursywa = mała próba: mniej niż 1000 minut w którymś sezonie, wynik mniej pewny.';
+            // mala proba: pomaranczowa kursywa z ostrzezeniem
+            def.valueFormatter = (p: { value: unknown; data?: Wiersz }) =>
+              typeof p.value === 'number' ? `${p.data?.['Δ_mała_próba'] ? '⚠ ' : ''}${formatuj(p.value, 'zmiana')}` : '';
+            def.tooltipValueGetter = (p: { data?: Wiersz }) =>
+              p.data?.['Δ_mała_próba'] ? 'Mała próba: mniej niż 1000 minut w którymś sezonie - zmiana mniej pewna' : null;
+            def.cellStyle = (p: { value: number | null; data?: Wiersz }): Record<string, string> | null => {
+              if (typeof p.value !== 'number') return null;
+              if (p.data?.['Δ_mała_próba']) return { color: '#fd7e14', fontStyle: 'italic' };
+              const kolor = kolorZmiany(p.value, prog);
+              return kolor ? { color: kolor, fontWeight: '600' } : null;
+            };
           }
         }
                 if (k.sortuj) {

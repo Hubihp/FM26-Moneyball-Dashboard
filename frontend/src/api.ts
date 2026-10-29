@@ -66,6 +66,8 @@ export type PunktHistorii = {
   Percentyl: number | null;
   Minuty: number | null;
   mala_proba: boolean; // mniej niz min_minut (1000) - dane z malej liczby minut
+  inna_pozycja?: boolean; // wtedy bez tej pozycji - oceniony wg jej kryteriow (jak kandydat)
+  pozycje_wtedy?: string | null;
   Wartość: number | null;
   statystyki: Record<string, number | null>;
 };

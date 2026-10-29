@@ -76,7 +76,10 @@ def wzbogac(pula, data_gry=None, horyzont_lat=3):
         "kontrakt ≤ 12 mies.": (lata > 0) & (lata <= 1) & ~wolny,
     }
     if 'Δ SCORE' in pula.columns:
-        znaczniki["szybki rozwój"] = (pula['Δ SCORE'] >= PROG_SZYBKIEGO_ROZWOJU) & (pula['Wiek'] <= MAKS_WIEK_ROZWOJU)
+        # okazja tylko z pelnej proby (min. 1000 minut w obu sezonach) - mala proba to czesto przypadek
+        pelna = ~pula['Δ_mała_próba'].fillna(False).astype(bool) if 'Δ_mała_próba' in pula.columns else True
+        znaczniki["szybki rozwój"] = ((pula['Δ SCORE'] >= PROG_SZYBKIEGO_ROZWOJU) & (pula['Wiek'] <= MAKS_WIEK_ROZWOJU)
+                                      & pelna)
     okazje = pd.Series("", index=pula.index, dtype=object)
     for znacznik, maska in znaczniki.items():
         maska = maska.fillna(False).astype(bool)
@@ -314,7 +317,7 @@ POLA_WIERSZA = ['ID', 'UID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Kraj', 'Wi
                 'Mnożnik_Ligi', 'Wypożyczony', 'Wypożyczenie_do', 'Wolny_agent', 'Lata_kontraktu', 'Koszt',
                 'Okazje', 'Pareto', 'Kandydat', 'Kandydat z pozycji', 'Ocena na pozycji',
                 'Wycena wg wyniku', 'Niedowartościowanie', 'Kontuzje_2_lata', 'Δ SCORE', 'Δ percentyl',
-                'Δ minut', 'Nowe pozycje', 'U21', 'Wycena_ograniczona']
+                'Δ minut', 'Nowe pozycje', 'Δ_mała_próba', 'U21', 'Wycena_ograniczona']
 
 
 def pola_wiersza(pozycja, pula):

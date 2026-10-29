@@ -58,23 +58,33 @@ export default function HistoriaZawodnika({ id, wiersz, zapytanie, wersja }: Pro
   const sezony = ostatniePerSezon(punkty);
   const delta = dane?.delta;
   const dScore = wiersz['Δ SCORE'] as number | null | undefined;
+  const dMalaProba = !!wiersz['Δ_mała_próba'];
+  const innaPozycja = punkty.filter((p) => p.inna_pozycja);
   const malaProba = punkty.some((p) => p.mala_proba);
 
   return (
     <Stack gap="xs">
       {naglowek}
       <Group gap="lg">
-        <Text size="sm">Δ SCORE: <b style={{ color: typeof dScore === 'number' ? kolorZmiany(dScore) : undefined }}>
-          {formatuj(dScore, 'zmiana')}</b></Text>
+        <Text size="sm" title={dMalaProba ? `Mniej niż ${minMinut} minut w którymś sezonie - zmiana mniej pewna` : undefined}>
+          Δ SCORE: <b style={{ color: dMalaProba ? KOLOR_MALEJ_PROBY : typeof dScore === 'number' ? kolorZmiany(dScore) : undefined,
+            fontStyle: dMalaProba ? 'italic' : undefined }}>
+            {dMalaProba ? '⚠ ' : ''}{formatuj(dScore, 'zmiana')}</b></Text>
         <Text size="sm">Δ percentyl: <b>{formatuj(wiersz['Δ percentyl'], 'zmiana')}</b></Text>
         {delta && <Text size="sm" c="dimmed">względem migawki z {formatuj(delta.wzgledem, 'data')}</Text>}
         {wiersz['Nowe pozycje'] ? <Text size="sm">Nowe pozycje: <b>{String(wiersz['Nowe pozycje'])}</b></Text> : null}
       </Group>
-      {(dScore === null || dScore === undefined) && delta && (
+      {dMalaProba && delta && (
         <Text size="xs" c="orange">
-          ⚠ Zmiana z małej liczby minut: {formatuj(delta.wartosc, 'zmiana')} ({formatuj(delta.minuty_wtedy, 'int')} →{' '}
-          {formatuj(delta.minuty_teraz, 'int')} min). Kolumna Δ SCORE w rankingu wymaga co najmniej {minMinut} minut
-          w obu sezonach.
+          ⚠ Zmiana z małej liczby minut ({formatuj(delta.minuty_wtedy, 'int')} → {formatuj(delta.minuty_teraz, 'int')} min,
+          poniżej {minMinut} w którymś sezonie) - traktuj ostrożnie.
+        </Text>
+      )}
+      {innaPozycja.length > 0 && (
+        <Text size="xs" c="dimmed">
+          W migawkach z {innaPozycja.map((p) => formatuj(p.data, 'data')).join(', ')} zawodnik nie miał tej pozycji
+          (grał wtedy: {[...new Set(innaPozycja.map((p) => p.pozycje_wtedy).filter(Boolean))].join('; ') || '?'}) - SCORE
+          policzony według jej kryteriów, na skali zawodników, którzy wtedy na niej grali.
         </Text>
       )}
       <Wykres

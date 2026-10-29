@@ -27,7 +27,7 @@ MIN_MINUT = 1000             # prog minut w obu okresach, od ktorego liczymy roz
 KARIERA_BEZ_MENEDZERA = "kariera"   # katalog, gdy zapis nie podaje menedzera
 POLA_MIGAWKI = ['ID', 'UID', 'Piłkarz', 'Wiek', 'Klub', 'Klub_UID', 'Liga', 'Mnożnik_Ligi', 'Pozycja', 'Pule',
                 'Minuty', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Wygasa_Data', 'Średnia ocena']
-KOLUMNY_ROZWOJU = ['Δ SCORE', 'Δ percentyl', 'Δ minut', 'Nowe pozycje']
+KOLUMNY_ROZWOJU = ['Δ SCORE', 'Δ percentyl', 'Δ minut', 'Nowe pozycje', 'Δ_mała_próba']
 
 _pamiec = {}                 # sciezka -> (mtime, ramka)
 
@@ -147,15 +147,16 @@ def pula_migawki(df, pozycja):
     return df[maska].reset_index(drop=True)
 
 
-def dolicz_rozwoj(teraz, wtedy, min_minut=MIN_MINUT):
+def dolicz_rozwoj(teraz, wtedy, min_minut=MIN_MINUT, wymagaj_minut=False):
     """
     Pula biezaca (z SCORE) + policzona pula migawki z poprzedniego sezonu -> kopia z kolumnami
-    rozwoju (KOLUMNY_ROZWOJU). Para zawodnikow po UID i nazwisku; bez progu minut w obu okresach
-    wskazniki sa puste.
+    rozwoju (KOLUMNY_ROZWOJU). Para zawodnikow po UID i nazwisku. Zmiany sa liczone takze przy malej
+    liczbie minut; 'Δ_mała_próba' = ponizej min_minut w ktoryms sezonie (wynik mniej pewny).
+    wymagaj_minut=True: bez progu minut w obu okresach wskazniki sa puste (np. listy w profilu druzyny).
     """
     teraz = teraz.copy()
     for kol in KOLUMNY_ROZWOJU:
-        teraz[kol] = np.nan if kol != 'Nowe pozycje' else None
+        teraz[kol] = None if kol == 'Nowe pozycje' else False if kol == 'Δ_mała_próba' else np.nan
     if wtedy is None or wtedy.empty or 'UID' not in teraz.columns or 'UID' not in wtedy.columns:
         return teraz
     poprzednie = wtedy.drop_duplicates('UID').set_index('UID')
@@ -168,8 +169,9 @@ def dolicz_rozwoj(teraz, wtedy, min_minut=MIN_MINUT):
     ten_sam = znany & (p['Piłkarz'].astype(str) == teraz['Piłkarz'].astype(str))
     minuty = (pd.to_numeric(teraz['Minuty'], errors="coerce").fillna(0) >= min_minut) & \
         (pd.to_numeric(p['Minuty'], errors="coerce").fillna(0) >= min_minut)
-    ok = ten_sam & minuty
+    ok = ten_sam & minuty if wymagaj_minut else ten_sam
     teraz['Δ SCORE'] = (teraz['SCORE'] - p['SCORE']).where(ok)
+    teraz['Δ_mała_próba'] = teraz['Δ SCORE'].notna() & ~minuty
     teraz['Δ percentyl'] = (teraz['Percentyl'] - p['Percentyl']).where(ok)
     teraz['Δ minut'] = (teraz['Minuty'] - p['Minuty']).where(ok)
     teraz['Nowe pozycje'] = [

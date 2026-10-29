@@ -3,6 +3,14 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 1.5.0
+
+- Δ SCORE liczone także przy małej liczbie minut i pokazywane w Rankingu - z oznaczeniem ⚠ (pomarańczowa kursywa),
+  gdy w którymś sezonie zawodnik miał mniej niż 1000 minut. Znacznik okazji „szybki rozwój” nadal wymaga pełnej próby.
+- Historia zawodnika i Δ SCORE także wtedy, gdy w dawnej migawce zawodnik nie miał danej pozycji (np. przed
+  przekwalifikowaniem) - SCORE według kryteriów pozycji, na skali zawodników, którzy wtedy na niej grali.
+- Zmiany bliskie zeru wyświetlane jako 0,0 (bez „-0,0”).
+
 ## 1.4.1
 
 - Naprawiony błąd 500 w „Profilu drużyny” przy migawce z poprzedniego sezonu i domyślnych wagach statystyk.

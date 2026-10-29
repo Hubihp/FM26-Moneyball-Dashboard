@@ -68,8 +68,10 @@ class Obliczenia:
 
     def pula_migawki(self, sciezka, pozycja, wagi, ignoruj_mnoznik, k_baza):
         """
-        Zawodnicy pozycji z migawki historii z SCORE i percentylem liczonymi tymi samymi wagami
-        (wagi None = domyslne pozycji, jak w policz).
+        Zawodnicy migawki historii z SCORE i percentylem pozycji liczonymi tymi samymi wagami (wagi None =
+        domyslne pozycji, jak w policz). Skala wyniku to zawodnicy, ktorzy wtedy mieli te pozycje; pozostali
+        (np. przed przekwalifikowaniem) sa oceniani na tej skali jak kandydaci z innych pozycji
+        ('Na_pozycji_wtedy' = False) - dzieki temu maja SCORE w historii i Δ SCORE.
         """
         if wagi is None:
             wagi = analiza.wagi_domyslne(pozycja, self.pula(pozycja))
@@ -79,11 +81,15 @@ class Obliczenia:
             if klucz in self._policzone:
                 self._policzone.move_to_end(klucz)
                 return self._policzone[klucz]
-        df = historia.pula_migawki(historia.wczytaj(sciezka), pozycja)
+        wszyscy = historia.wczytaj(sciezka)
+        nominalni = historia.pula_migawki(wszyscy, pozycja)
         wynik = None
-        if not df.empty:
+        if not nominalni.empty and 'UID' in wszyscy.columns:
+            df = wszyscy.drop_duplicates('UID').reset_index(drop=True)
+            na_pozycji = df['UID'].isin(set(nominalni['UID']))
             wynik, _ = analiza.policz_wynik(df, {k: v for k, v in wagi.items() if k in df.columns},
-                                            ignoruj_mnoznik, k_baza)
+                                            ignoruj_mnoznik, k_baza, odniesienie=na_pozycji)
+            wynik['Na_pozycji_wtedy'] = na_pozycji
         with self._blokada:
             self._policzone[klucz] = wynik
             while len(self._policzone) > ILE_POLICZONYCH:
@@ -115,6 +121,9 @@ class Obliczenia:
             minuty = liczba(wiersz.get('Minuty'))
             punkty.append({
                 "data": dzien.isoformat(), "sezon": historia.sezon(dzien),
+                # wtedy bez tej pozycji: oceniony wg jej kryteriow (jak kandydat z innej pozycji)
+                "inna_pozycja": bool(jest and not w_puli['Na_pozycji_wtedy'].iloc[0]),
+                "pozycje_wtedy": None if pd.isna(wiersz.get('Pozycja')) else wiersz.get('Pozycja'),
                 "SCORE": liczba(w_puli['SCORE'].iloc[0]) if jest else None,
                 "Percentyl": liczba(w_puli['Percentyl'].iloc[0]) if jest else None,
                 "Minuty": minuty, "mala_proba": minuty is None or minuty < historia.MIN_MINUT,

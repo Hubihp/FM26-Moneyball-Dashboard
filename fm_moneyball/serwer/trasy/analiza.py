@@ -274,7 +274,7 @@ def utworz(stan, obl):
                 continue
             policzona, _, _ = obl.policz(pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
             wtedy = obl.pula_migawki(porownanie[0], pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
-            policzona = historia.dolicz_rozwoj(policzona, wtedy, prog)
+            policzona = historia.dolicz_rozwoj(policzona, wtedy, prog, wymagaj_minut=True)
             glowna = policzona['Pula_główna'] == pozycja if 'Pula_główna' in policzona.columns else True
             moi_w_puli = analiza.moi_zawodnicy(policzona, uid, z.tylko_pierwsza)
             if not isinstance(glowna, bool):

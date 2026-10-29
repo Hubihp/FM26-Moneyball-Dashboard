@@ -51,9 +51,13 @@ def test_dolicz_rozwoj_prog_minut_i_nazwisko():
     assert wynik.loc[0, 'Δ SCORE'] == 8 and wynik.loc[0, 'Δ minut'] == 500
     assert 'Δ wartości' not in wynik.columns and 'Rozwój vs wiek' not in wynik.columns
     assert wynik.loc[0, 'Nowe pozycje'] == "PS"
-    assert np.isnan(wynik.loc[1, 'Δ SCORE'])            # teraz 900 minut < 1000
-    assert np.isnan(wynik.loc[2, 'Δ SCORE'])            # wtedy 999 minut
-    assert np.isnan(wynik.loc[3, 'Δ SCORE'])            # inne nazwisko
+    # mala proba: zmiana liczona, ale oznaczona (teraz 900 minut, wtedy 999 minut)
+    assert wynik.loc[1, 'Δ SCORE'] == 5 and wynik.loc[1, 'Δ_mała_próba']
+    assert wynik.loc[2, 'Δ SCORE'] == 1 and wynik.loc[2, 'Δ_mała_próba']
+    assert not wynik.loc[0, 'Δ_mała_próba']
+    assert np.isnan(wynik.loc[3, 'Δ SCORE']) and not wynik.loc[3, 'Δ_mała_próba']   # inne nazwisko
+    scisle = historia.dolicz_rozwoj(teraz, wtedy, wymagaj_minut=True)                 # np. listy w profilu
+    assert scisle.loc[0, 'Δ SCORE'] == 8 and scisle[['Δ SCORE']].iloc[1:].isna().all().all()
     assert historia.dolicz_rozwoj(teraz, None)['Δ SCORE'].isna().all()
 
 

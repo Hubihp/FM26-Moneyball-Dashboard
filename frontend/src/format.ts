@@ -31,6 +31,8 @@ export function formatuj(wartosc: unknown, format: Format): string {
     case 'eur_tyg':
       return `${eur(wartosc / 52)} / tydz.`;
     case 'zmiana':
+      // ponizej dokladnosci wyswietlania (np. -0,04) to brak zmiany - bez "-0,0"
+      if (Math.abs(wartosc) < 0.05) return '0,0';
       return `${wartosc > 0 ? '+' : ''}${wartosc.toFixed(1).replace('.', ',')}`;
     default:
       return wartosc.toFixed(1).replace('.', ',');

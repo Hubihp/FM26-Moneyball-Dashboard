@@ -502,5 +502,10 @@ def test_pula_migawki_z_wagami_domyslnymi(tmp_path):
     df = stan.pula("Napastnik").assign(UID=lambda d: range(len(d)), Pule="Napastnik")
     sciezka = tmp_path / "2026-03-01.csv.gz"
     df.to_csv(sciezka, index=False, compression="gzip")
+    df.loc[0, 'Pule'] = "Prawy Skrzydłowy"          # wtedy bez pozycji N (np. przed przekwalifikowaniem)
+    df.to_csv(sciezka, index=False, compression="gzip")
     wynik = Obliczenia(stan).pula_migawki(sciezka, "Napastnik", None, False, 5)
-    assert wynik is not None and wynik['SCORE'].notna().any()
+    assert wynik is not None and wynik['SCORE'].notna().all()
+    # zawodnik spoza pozycji tez ma SCORE (ocena wg kryteriow N), ale nie wplywa na skale pozycji
+    assert not wynik.loc[wynik['UID'] == 0, 'Na_pozycji_wtedy'].iloc[0]
+    assert wynik.loc[wynik['UID'] == 0, 'SCORE'].notna().all() and wynik['Na_pozycji_wtedy'].sum() == len(df) - 1
