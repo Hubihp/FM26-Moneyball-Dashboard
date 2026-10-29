@@ -247,8 +247,9 @@ def zmiany_zawodnikow(moi_z_rozwojem, oceny_teraz, oceny_wtedy, min_minut, ile=5
     po_score = sorted(score, key=lambda m: m["Δ SCORE"])
     po_ocenie = sorted(oceny, key=lambda m: m["zmiana"])
     return {
-        "spadki": [m for m in po_score if m["Δ SCORE"] < 0][:ile],
-        "wzrosty": [m for m in reversed(po_score) if m["Δ SCORE"] > 0][:ile],
-        "oceny_spadki": [m for m in po_ocenie if m["zmiana"] < 0][:ile],
-        "oceny_wzrosty": [m for m in reversed(po_ocenie) if m["zmiana"] > 0][:ile],
+        # zmiany ponizej dokladnosci wyswietlania (0,1 SCORE, 0,01 oceny) to brak zmiany
+        "spadki": [m for m in po_score if m["Δ SCORE"] <= -0.05][:ile],
+        "wzrosty": [m for m in reversed(po_score) if m["Δ SCORE"] >= 0.05][:ile],
+        "oceny_spadki": [m for m in po_ocenie if m["zmiana"] <= -0.005][:ile],
+        "oceny_wzrosty": [m for m in reversed(po_ocenie) if m["zmiana"] >= 0.005][:ile],
     }

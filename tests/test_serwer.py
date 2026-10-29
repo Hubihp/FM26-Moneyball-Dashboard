@@ -492,3 +492,15 @@ def test_zawodnik_ponizej_progu_i_sredni_score(klient):
     for p in klient.post("/api/moja-kadra", json={}).json()["pozycje"]:
         if p["zawodnicy"]:
             assert p["sredni_score"] == pytest.approx(sum(z["SCORE"] for z in p["zawodnicy"]) / len(p["zawodnicy"]))
+
+
+def test_pula_migawki_z_wagami_domyslnymi(tmp_path):
+    # regresja: profil druzyny przy migawce z poprzedniego sezonu i domyslnych wagach (wagi None) dawal blad 500
+    from fm_moneyball.serwer.obliczenia import Obliczenia
+    stan = _stan(tmp_path)
+    stan.ustaw_zrodlo("demo", w_tle=False)
+    df = stan.pula("Napastnik").assign(UID=lambda d: range(len(d)), Pule="Napastnik")
+    sciezka = tmp_path / "2026-03-01.csv.gz"
+    df.to_csv(sciezka, index=False, compression="gzip")
+    wynik = Obliczenia(stan).pula_migawki(sciezka, "Napastnik", None, False, 5)
+    assert wynik is not None and wynik['SCORE'].notna().any()

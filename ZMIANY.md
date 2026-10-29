@@ -3,6 +3,11 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 1.4.1
+
+- Naprawiony błąd 500 w „Profilu drużyny” przy migawce z poprzedniego sezonu i domyślnych wagach statystyk.
+- Zmiany mniejsze niż wyświetlana dokładność nie trafiają do list spadków i wzrostów.
+
 ## 1.4.0
 
 - Karta zawodnika działa dla każdego zawodnika, także spoza bieżącego Rankingu (np. z małą liczbą minut, otwarta

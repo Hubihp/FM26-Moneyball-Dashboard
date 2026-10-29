@@ -67,7 +67,12 @@ class Obliczenia:
         return wynik
 
     def pula_migawki(self, sciezka, pozycja, wagi, ignoruj_mnoznik, k_baza):
-        """Zawodnicy pozycji z migawki historii z SCORE i percentylem liczonymi tymi samymi wagami."""
+        """
+        Zawodnicy pozycji z migawki historii z SCORE i percentylem liczonymi tymi samymi wagami
+        (wagi None = domyslne pozycji, jak w policz).
+        """
+        if wagi is None:
+            wagi = analiza.wagi_domyslne(pozycja, self.pula(pozycja))
         klucz = ("migawka", str(sciezka), sciezka.stat().st_mtime, pozycja, json.dumps(wagi, sort_keys=True),
                  ignoruj_mnoznik, k_baza)
         with self._blokada:
