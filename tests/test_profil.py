@@ -122,3 +122,23 @@ def test_druzyny_w_klubie_i_pierwsza_druzyna():
     assert list(analiza.moi_zawodnicy(df, 1).index) == [0]
     assert list(analiza.moi_zawodnicy(df, 1, tylko_pierwsza=False).index) == [0, 1, 2]
     assert len(analiza.moi_zawodnicy(df.drop(columns='Drużyna_slot'), 1)) == 3      # CSV/demo: wszyscy
+
+
+def test_oceny_poprzedniego_sezonu_i_budzet():
+    from datetime import date as d
+    from fm_moneyball.zrodla.zapis_fm import budzet_klubu, oceny_sezonu
+    wiersze = [NS(player_uid=1, minutes=900, average_rating=7.0, rated_appearances=10),
+               NS(player_uid=1, minutes=300, average_rating=6.0, rated_appearances=5),     # druga druzyna w sezonie
+               NS(player_uid=2, minutes=50, average_rating=None, rated_appearances=0)]
+    o = oceny_sezonu(wiersze)
+    assert o[1][0] == pytest.approx((70 + 30) / 15) and o[1][1] == 1200 and 2 not in o
+    miesiace = [NS(club_uid=5, month=d(2032, 1, 1), transfer_budget_remaining=100, transfer_budget_allocated=200,
+                   wage_budget_weekly=50, wage_payroll_weekly=40),
+                NS(club_uid=5, month=d(2032, 2, 1), transfer_budget_remaining=90, transfer_budget_allocated=200,
+                   wage_budget_weekly=50, wage_payroll_weekly=60),
+                NS(club_uid=6, month=d(2032, 3, 1), transfer_budget_remaining=1, transfer_budget_allocated=1,
+                   wage_budget_weekly=1, wage_payroll_weekly=1)]
+    b = budzet_klubu(miesiace, 5, 2.0)
+    assert b["miesiac"] == "2032-02-01" and b["transfer"] == 180 and b["place_budzet"] == 100
+    assert b["place_wolne"] == 0                                                     # wydatki ponad budzet
+    assert budzet_klubu(miesiace, 7, 1.0) is None

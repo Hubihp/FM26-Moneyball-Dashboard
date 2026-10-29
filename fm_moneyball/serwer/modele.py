@@ -129,3 +129,11 @@ class OptymalizatorModel(SprzedajDrogoModel):
     budzet: float = Field(ge=0)                  # EUR na transfery
     budzet_plac: float = Field(ge=0)             # EUR na tydzien (pensje nowych zawodnikow)
     pozycje: list[str] = Field(default_factory=list)
+
+
+class ZawodnikModel(BaseModel):
+    pozycja: str
+    id: str
+    wagi: dict[str, float] | None = None
+    ignoruj_mnoznik: bool = False
+    k_baza: float = 5

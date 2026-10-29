@@ -40,7 +40,7 @@ log = logging.getLogger("fm_moneyball")
 CO_ILE_SPRAWDZAC = 15        # sekundy miedzy sprawdzeniami folderu zapisow
 # 2: domyslnie zawodnik we wszystkich pulach, w ktorych jest naturalny (wczesniej tylko glowna)
 WERSJA_USTAWIEN = 2
-WERSJA_CACHE = 13            # zmiana formatu wyniku = nowy klucz cache (13: druzyny w klubie - pierwsza / rezerwy)
+WERSJA_CACHE = 15            # zmiana formatu wyniku = nowy klucz cache (15: budzet z finansow)
 ILE_W_CACHE = 3
 DEMO_DATA_GRY = date(2027, 1, 15)
 
@@ -100,6 +100,8 @@ class Stan:
         self.ligi = []                 # podsumowanie lig z zapisu
         self.druzyny = {}              # club_uid -> sumy statystyk sezonu (tylko zapis gry)
         self.tabele = {}               # club_uid prowadzonego klubu -> tabela jego ligi (tylko zapis gry)
+        self.oceny_poprzednie = {}     # player_uid -> (srednia ocena, minuty) w poprzednim sezonie (tylko zapis gry)
+        self.oceny_status = "brak"     # brak | wczytywanie | gotowe | blad - historia ocen czytana w tle
         self.status = "pusto"          # pusto | wczytywanie | gotowe | blad
         self.komunikat = "Wybierz źródło danych."
         self.etap = None               # {"nr", "z", "nazwa", "start"} podczas wczytywania
@@ -343,6 +345,7 @@ class Stan:
             "moje_kluby": wynik.moje_kluby or ([{"uid": wynik.moj_klub_uid, "nazwa": wynik.moj_klub}]
                                                if wynik.moj_klub_uid is not None else []),
             "ostrzezenia": wynik.ostrzezenia, "liczniki": wynik.liczniki,
+            "budzety": {str(k): v for k, v in (getattr(wynik, "budzety", None) or {}).items()},
             "czas_odczytu_s": round(time.time() - start, 1),
             "z_cache": z_cache,
             "wczytano": datetime.now().isoformat(timespec="seconds"),
@@ -356,6 +359,7 @@ class Stan:
                 return False
             self.surowe, self.meta, self.ligi, self._klucz = dane, meta, ligi, klucz
             self.druzyny, self.tabele = druzyny or {}, tabele or {}
+            self.oceny_poprzednie, self.oceny_status = {}, "brak"
             self.kraje_auto = kraje_auto or {}
             self._sciezka_odczytu = sciezka_odczytu
             self._uzupelnij_moj_klub()
@@ -363,7 +367,44 @@ class Stan:
             self._zapisz_historie()
             self.status, self.komunikat, self.etap = "gotowe", "", None
             self.wersja += 1
-            return True
+        self._uruchom_oceny(pokolenie, klucz)
+        return True
+
+    # --- historia ocen z poprzedniego sezonu (w tle, po wczytaniu zapisu) -----------------------------
+    def _uruchom_oceny(self, pokolenie, klucz):
+        data_gry = self.meta.get("data_gry")
+        if self.meta.get("demo") or not self._sciezka_odczytu or not data_gry or not self.meta.get("moje_kluby"):
+            return
+        moje = {m["uid"] for m in self.meta["moje_kluby"]}
+        gracze = set()
+        for df in self.dane.values():
+            if not df.empty and {'UID', 'Klub_UID'} <= set(df.columns):
+                gracze |= set(df.loc[df['Klub_UID'].isin(moje), 'UID'].dropna().astype(int))
+        self.oceny_status = "wczytywanie"
+        threading.Thread(target=self._wczytaj_oceny, daemon=True, name="historia-ocen",
+                         args=(pokolenie, klucz, self._sciezka_odczytu, gracze, date.fromisoformat(data_gry),
+                               self.konfig.opcje_zapisu().rodzaj_statystyk)).start()
+
+    def _wczytaj_oceny(self, pokolenie, klucz, sciezka, gracze, data_gry, rodzaj):
+        plik = self._plik_cache(("oceny", klucz))
+        try:
+            if plik is not None and plik.is_file():
+                with open(plik, "rb") as f:
+                    oceny = pickle.load(f)
+            else:
+                from fm_moneyball.zrodla.zapis_fm import oceny_poprzedniego_sezonu
+                oceny = oceny_poprzedniego_sezonu(sciezka, gracze, data_gry, rodzaj)
+                if plik is not None:
+                    plik.parent.mkdir(parents=True, exist_ok=True)
+                    with open(plik, "wb") as f:
+                        pickle.dump(oceny, f)
+            status = "gotowe"
+        except Exception as e:   # dodatek (profil druzyny) - brak nie blokuje aplikacji
+            log.warning("Nie udało się odczytać historii ocen: %s", e)
+            oceny, status = {}, "blad"
+        with self._blokada:
+            if pokolenie == self.pokolenie:
+                self.oceny_poprzednie, self.oceny_status = oceny, status
 
     def katalog_kariery(self):
         """Katalog historii biezacej kariery (tylko zapis gry, nie demo/CSV) albo None."""
@@ -384,6 +425,7 @@ class Stan:
         wybrany = next((m for m in moje if m["uid"] == self.konfig.moj_klub_uid), moje[0] if moje else None)
         self.meta["moj_klub"] = wybrany["nazwa"] if wybrany else None
         self.meta["moj_klub_uid"] = wybrany["uid"] if wybrany else None
+        self.meta["budzet"] = (self.meta.get("budzety") or {}).get(str(wybrany["uid"])) if wybrany else None
 
     def _zastosuj_ligi(self):
         nazwy, mnozniki = wczytaj_nazwy_rozgrywek(self.plik_nazw), wszystkie_mnozniki(self.plik_mnoznikow)

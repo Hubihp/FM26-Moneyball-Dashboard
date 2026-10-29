@@ -2,7 +2,7 @@ import { Alert, Badge, Button, Card, Group, Loader, SegmentedControl, SimpleGrid
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { lazy, Suspense, useState } from 'react';
 
-import { api, type Filtry, type Kadra, type Wiersz, type ZapytanieRankingu } from '../api';
+import { api, type Filtry, type Kadra, type Stan, type Wiersz, type ZapytanieRankingu } from '../api';
 import { formatuj } from '../format';
 import { usePamiec } from '../pamiec';
 import Nastepca from './Nastepca';
@@ -23,6 +23,7 @@ type Props = {
   filtry: Filtry;                 // wspolne filtry panelu (zastepcy, kandydaci optymalizatora)
   ulubione: Set<string>;
   przelaczUlubione: (wiersz: Wiersz, pozycja: string) => void;
+  budzetGry?: NonNullable<Stan['meta']['budzet']> | null;
 };
 
 // Analiza kadry: moi zawodnicy na kazdej pozycji, od bramkarza do napastnika
@@ -64,7 +65,7 @@ export default function MojaKadra(p: Props) {
           kadra.data ? (
             <Optymalizator zapytanie={zapytanie} wersja={wersja} kadra={kadra.data.pozycje}
               pozycje={kadra.data.pozycje.map((x) => x.pozycja)} otworz={otworz} ulubione={p.ulubione}
-              przelaczUlubione={p.przelaczUlubione} />
+              przelaczUlubione={p.przelaczUlubione} budzetGry={p.budzetGry} />
           ) : kadra.error ? <Alert color="red">{(kadra.error as Error).message}</Alert> : <Loader size="sm" />
         ) : (
           <WidokPozycji {...p} kadra={kadra} />
@@ -100,6 +101,7 @@ function WidokPozycji({ wersja, szukajNastepcy, otworz, zapytanieDla, mojKlubUid
             <Group gap="xs" mb="xs">
               <Badge variant="outline" color="gray">zawodników: {p.liczba}</Badge>
               <Badge variant="outline" color="gray">najlepszy: {formatuj(p.najlepszy, 'score')}</Badge>
+              <Badge variant="outline" color="gray">Śr. SCORE: {formatuj(p.sredni_score, 'score')}</Badge>
               <Badge variant="outline" color="gray">śr. wiek: {formatuj(p.sredni_wiek, 'dec1')}</Badge>
               {p.konczace_kontrakty > 0 && (
                 <Badge variant="light" color="orange">kontrakt ≤ 12 mies.: {p.konczace_kontrakty}</Badge>

@@ -197,7 +197,16 @@ export default function App() {
   const rankingPozycji = ranking.data?.pozycja === pozycja ? ranking.data : undefined;
 
   const wiersze = rankingPozycji?.wiersze ?? [];
-  const wierszKarty = wiersze.find((w) => w['ID'] === karta) ?? (kartaWiersz?.['ID'] === karta ? kartaWiersz : undefined);
+  const wierszLokalny = wiersze.find((w) => w['ID'] === karta) ?? (kartaWiersz?.['ID'] === karta ? kartaWiersz : undefined);
+  // zawodnik spoza biezacego Rankingu (np. ponizej progu minut, otwarty z tablicy taktycznej) - wiersz z serwera
+  const wierszZSerwera = useQuery({
+    queryKey: ['zawodnik', wersja, pozycja, karta, zapytanie.wagi, ustawienia.k_baza, ustawienia.ignoruj_mnoznik],
+    queryFn: () => api.zawodnik({ pozycja, id: karta!, wagi: zapytanie.wagi, ignoruj_mnoznik: ustawienia.ignoruj_mnoznik,
+      k_baza: ustawienia.k_baza }),
+    enabled: !!karta && !wierszLokalny && gotowe,
+    retry: false,
+  });
+  const wierszKarty = wierszLokalny ?? wierszZSerwera.data;
   const otworzKarte = (id: string, wiersz?: Wiersz) => {
     setKarta(id);
     setKartaWiersz(wiersz);
@@ -388,7 +397,7 @@ export default function App() {
               {zakladka === 'kadra' && (
                 <MojaKadra wersja={wersja} wagi={wagiWlasne} ustawienia={ustawienia} szukajNastepcy={szukajNastepcy}
                   zapytanieDla={zapytanieDla} mojKlubUid={mojKlubUid} filtry={filtryKadry}
-                  ulubione={ulubione} przelaczUlubione={przelaczUlubione}
+                  ulubione={ulubione} przelaczUlubione={przelaczUlubione} budzetGry={s?.meta.budzet}
                   otworz={(poz, id, wiersz) => {
                     setPozycja(poz);
                     otworzKarte(id, wiersz);

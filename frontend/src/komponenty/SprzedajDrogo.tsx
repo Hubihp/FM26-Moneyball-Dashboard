@@ -40,7 +40,8 @@ export default function SprzedajDrogo({ zapytanie, wersja, otworz, ulubione, prz
       <Text size="sm" c="dimmed">
         Twoi zawodnicy, których cena rynkowa jest co najmniej {formatuj(d.prog, 'dec1')} raza wyższa niż wycena wg
         wyniku (tyle kosztuje typowy zawodnik grający tak samo), oraz najtańszy zastępca: spoza twojego klubu, spełniający
-        filtry panelu, z SCORE niższym najwyżej o {d.tolerancja} i podobnym stylem gry. Zysk = cena twojego zawodnika
+        filtry panelu, tańszy, z SCORE niższym najwyżej o {d.tolerancja} i stylem gry podobnym w co najmniej{' '}
+        {Math.round(d.podobienstwo * 100)}%. Zysk = cena twojego zawodnika
         − cena zastępcy. Ceny to wartości z gry; klub sprzedający zwykle żąda więcej, a kupujący płaci mniej.
       </Text>
       <Alert color="gray" variant="light" p="xs">
@@ -51,7 +52,7 @@ export default function SprzedajDrogo({ zapytanie, wersja, otworz, ulubione, prz
         </Text>
       </Alert>
       {d.wymiany.length === 0 ? (
-        <Alert color="gray">Brak opłacalnych wymian przy obecnych filtrach panelu.</Alert>
+        <Alert color="gray">Żaden z twoich zawodników nie jest wyraźnie przepłacony.</Alert>
       ) : (
         <Table striped highlightOnHover fz="sm">
           <Table.Thead>
@@ -86,20 +87,31 @@ export default function SprzedajDrogo({ zapytanie, wersja, otworz, ulubione, prz
                       wycena {eur(m['Wycena wg wyniku'] as number)} · ×{formatuj(w.przeplacenie, 'dec1')}
                     </Text>
                   </Table.Td>
-                  <Table.Td style={{ cursor: 'pointer' }} onClick={() => otworz(w.pozycja, String(z['ID']), z)}>
-                    <Text size="sm" fw={600}>{String(z['Piłkarz'])}</Text>
-                    <Text size="xs" c="dimmed">
-                      {String(z['Klub'] ?? '')} · {formatuj(z['Wiek'], 'int')} lat · SCORE {formatuj(z['SCORE'], 'score')}
-                      {' '}· styl {Math.round((z['Podobieństwo'] as number) * 100)}%
-                    </Text>
-                    <Kontrakt w={z} />
-                  </Table.Td>
-                  <Table.Td ta="right">{eur(w.cena_zastepcy)}</Table.Td>
-                  <Table.Td ta="right"><Text size="sm" fw={700} c="teal">+{eur(w.zysk)}</Text></Table.Td>
-                  <Table.Td>
-                    <PrzyciskGwiazdki aktywna={ulubione.has(kluczZawodnika(z))}
-                      przelacz={() => przelaczUlubione(z, w.pozycja)} />
-                  </Table.Td>
+                  {z ? (
+                    <>
+                      <Table.Td style={{ cursor: 'pointer' }} onClick={() => otworz(w.pozycja, String(z['ID']), z)}>
+                        <Text size="sm" fw={600}>{String(z['Piłkarz'])}</Text>
+                        <Text size="xs" c="dimmed">
+                          {String(z['Klub'] ?? '')} · {formatuj(z['Wiek'], 'int')} lat · SCORE {formatuj(z['SCORE'], 'score')}
+                          {' '}· styl {Math.round((z['Podobieństwo'] as number) * 100)}%
+                        </Text>
+                        <Kontrakt w={z} />
+                      </Table.Td>
+                      <Table.Td ta="right">{eur(w.cena_zastepcy)}</Table.Td>
+                      <Table.Td ta="right"><Text size="sm" fw={700} c="teal">+{eur(w.zysk)}</Text></Table.Td>
+                      <Table.Td>
+                        <PrzyciskGwiazdki aktywna={ulubione.has(kluczZawodnika(z))}
+                          przelacz={() => przelaczUlubione(z, w.pozycja)} />
+                      </Table.Td>
+                    </>
+                  ) : (
+                    <Table.Td colSpan={4}>
+                      <Text size="sm" c="dimmed" fs="italic">
+                        Brak zastępcy o podobieństwie stylu ≥ {Math.round(d.podobienstwo * 100)}% (tańszego, z SCORE niższym
+                        najwyżej o {d.tolerancja}) przy obecnych filtrach panelu.
+                      </Text>
+                    </Table.Td>
+                  )}
                 </Table.Tr>
               );
             })}

@@ -2,7 +2,7 @@ import { Alert, Badge, Button, Card, Group, Loader, MultiSelect, NumberInput, Si
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { api, type PozycjaKadry, type Wiersz, type WyborOptymalizatora, type ZapytanieKadry } from '../api';
+import { api, type PozycjaKadry, type Stan, type Wiersz, type WyborOptymalizatora, type ZapytanieKadry } from '../api';
 import { eur, formatuj } from '../format';
 import { kluczZawodnika, usePamiec } from '../pamiec';
 import { PrzyciskGwiazdki } from './Gwiazdka';
@@ -15,13 +15,10 @@ type Props = {
   otworz: (pozycja: string, id: string, wiersz: Wiersz) => void;
   ulubione: Set<string>;
   przelaczUlubione: (wiersz: Wiersz, pozycja: string) => void;
+  budzetGry?: NonNullable<Stan['meta']['budzet']> | null;   // z finansow klubu w zapisie gry
 };
 
 type Parametry = { budzet: number; budzet_plac: number; pozycje: string[] };
-
-// Domyslnie: 3 pozycje, na ktorych moj najlepszy zawodnik jest najslabszy (brak zawodnika = najslabsza)
-const najslabsze = (kadra: PozycjaKadry[]) =>
-  [...kadra].sort((a, b) => (a.najlepszy ?? -1) - (b.najlepszy ?? -1)).slice(0, 3).map((p) => p.pozycja);
 
 function Kontrakt({ w }: { w: Wiersz }) {
   if (w['Wolny_agent']) return <Badge size="xs" color="teal" variant="light">wolny agent</Badge>;
@@ -30,11 +27,18 @@ function Kontrakt({ w }: { w: Wiersz }) {
 }
 
 // Optymalizator budzetu: najwiekszy przyrost SCORE za dany budzet (zestaw, nie jedna gwiazda)
-export default function Optymalizator({ zapytanie, wersja, pozycje, kadra, otworz, ulubione, przelaczUlubione }: Props) {
-  const [budzetMln, setBudzetMln] = usePamiec('fm-opt-budzet', 50);
-  const [placTys, setPlacTys] = usePamiec('fm-opt-plac', 200);
-  const [wybrane, setWybrane] = usePamiec<string[] | null>('fm-opt-pozycje', null);
-  const pozycjeWybrane = wybrane ?? najslabsze(kadra);
+export default function Optymalizator({ zapytanie, wersja, pozycje, otworz, ulubione, przelaczUlubione, budzetGry }: Props) {
+  // budzet: domyslnie z finansow klubu w zapisie gry; wlasna kwota zastepuje go do czasu "Wartosci z gry"
+  const zGry = {
+    transfer: budzetGry?.transfer != null ? Math.round(budzetGry.transfer / 1e5) / 10 : null,
+    place: budzetGry?.place_wolne != null ? Math.round(budzetGry.place_wolne / 1e3) : null,
+  };
+  const [budzetWlasny, setBudzetWlasny] = usePamiec<number | null>('fm-opt-budzet-wlasny', null);
+  const [placWlasne, setPlacWlasne] = usePamiec<number | null>('fm-opt-plac-wlasne', null);
+  const budzetMln = budzetWlasny ?? zGry.transfer ?? 50;
+  const placTys = placWlasne ?? zGry.place ?? 200;
+  const [wybrane, setWybrane] = usePamiec<string[]>('fm-opt-pozycje-wybrane', []);
+  const pozycjeWybrane = wybrane;
   const [parametry, setParametry] = useState<Parametry | null>(null);
 
   const wynik = useQuery({
@@ -79,13 +83,32 @@ export default function Optymalizator({ zapytanie, wersja, pozycje, kadra, otwor
       </Text>
       <Group align="end" gap="sm">
         <NumberInput label="Budżet transferowy (mln €)" w={190} min={0} step={5} decimalScale={1} value={budzetMln}
-          onChange={(v) => setBudzetMln(Number(v) || 0)} />
+          onChange={(v) => setBudzetWlasny(Number(v) || 0)} />
         <NumberInput label="Pensje nowych (tys. € / tydz.)" w={210} min={0} step={10} value={placTys}
-          onChange={(v) => setPlacTys(Number(v) || 0)} />
+          onChange={(v) => setPlacWlasne(Number(v) || 0)} />
         <MultiSelect label="Pozycje do wzmocnienia" w={420} data={pozycje} value={pozycjeWybrane}
           onChange={setWybrane} maxValues={8} placeholder="Wybierz pozycje" />
         <Button onClick={policz} disabled={!pozycjeWybrane.length} loading={wynik.isFetching}>Policz</Button>
       </Group>
+      {budzetGry ? (
+        <Group gap="xs">
+          <Text size="xs" c="dimmed">
+            Z zapisu gry (stan na {formatuj(budzetGry.miesiac, 'data')}): pozostały budżet transferowy {eur(budzetGry.transfer)}
+            {budzetGry.transfer_przydzielony != null ? ` z ${eur(budzetGry.transfer_przydzielony)}` : ''}; budżet płacowy{' '}
+            {eur(budzetGry.place_budzet)} / tydz., wydane {eur(budzetGry.place_wydatki)} / tydz., wolne{' '}
+            {eur(budzetGry.place_wolne)} / tydz.
+            {budzetWlasny !== null || placWlasne !== null ? ' Używasz własnych kwot.' : ''}
+          </Text>
+          {(budzetWlasny !== null || placWlasne !== null) && (
+            <Button size="compact-xs" variant="light" onClick={() => { setBudzetWlasny(null); setPlacWlasne(null); }}>
+              Wartości z gry
+            </Button>
+          )}
+        </Group>
+      ) : (
+        <Text size="xs" c="dimmed">Budżet klubu jest dostępny tylko przy wczytanym zapisie gry - wpisz kwoty ręcznie.</Text>
+      )}
+      {!pozycjeWybrane.length && <Text size="xs" c="dimmed">Wybierz pozycje do wzmocnienia, aby policzyć zestaw.</Text>}
       {wynik.error && <Alert color="red">{(wynik.error as Error).message}</Alert>}
       {wynik.isLoading && <Loader size="sm" />}
       {d && (

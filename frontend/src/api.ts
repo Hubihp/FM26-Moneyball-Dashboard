@@ -30,6 +30,8 @@ export type Stan = {
     data_gry?: string | null;
     moj_klub?: string | null;
     moj_klub_uid?: number | null;
+    budzet?: { transfer: number | null; transfer_przydzielony: number | null; place_budzet: number | null;
+      place_wydatki: number | null; place_wolne: number | null; miesiac: string } | null;
     moje_kluby?: Klub[];
     z_cache?: boolean;
     ostrzezenia?: string[];
@@ -188,6 +190,7 @@ export type PozycjaKadry = {
   pozycja: string;
   liczba: number;
   ukryci?: number;
+  sredni_score?: number | null;
   najlepszy: number | null;
   sredni_wiek: number | null;
   konczace_kontrakty: number;
@@ -255,7 +258,8 @@ export type ProfilDruzyny = {
   } | null;
   zmiany: {
     spadki: ZmianaScore[]; wzrosty: ZmianaScore[]; oceny_spadki: ZmianaOceny[]; oceny_wzrosty: ZmianaOceny[];
-    historia: boolean; data_porownania: string | null; min_minut: number;
+    historia: boolean; historia_ocen: boolean; oceny_z_zapisu: boolean;
+    oceny_status: 'brak' | 'wczytywanie' | 'gotowe' | 'blad'; data_porownania: string | null; min_minut: number;
   };
 };
 
@@ -271,12 +275,12 @@ export type Wymiana = {
   pozycja: string;
   moj: Wiersz;
   przeplacenie: number;
-  zastepca: Wiersz;
-  cena_zastepcy: number;
-  zysk: number;
+  zastepca: Wiersz | null;
+  cena_zastepcy: number | null;
+  zysk: number | null;
 };
 
-export type SprzedajDrogo = { wymiany: Wymiana[]; prog: number; tolerancja: number };
+export type SprzedajDrogo = { wymiany: Wymiana[]; prog: number; tolerancja: number; podobienstwo: number };
 
 export type WyborOptymalizatora = {
   pozycja: string;
@@ -386,6 +390,8 @@ export const api = {
   mojaKadra: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number;
     tylko_pierwsza?: boolean }) =>
     post<Kadra>('/api/moja-kadra', body),
+  zawodnik: (body: { pozycja: string; id: string; wagi: Record<string, number> | null; ignoruj_mnoznik: boolean;
+    k_baza: number }) => post<Wiersz>('/api/zawodnik', body),
   sklad: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number;
     tylko_pierwsza: boolean }) => post<{ zawodnicy: ZawodnikSkladu[]; pozycje: string[] }>('/api/sklad', body),
   profilDruzyny: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number;

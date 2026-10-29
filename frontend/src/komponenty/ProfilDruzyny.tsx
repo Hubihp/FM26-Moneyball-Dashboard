@@ -223,6 +223,8 @@ export default function ProfilDruzyny({ wersja, wagi, ustawienia, otworz }: Prop
   const profil = useQuery({
     queryKey: ['profil-druzyny', wersja, wagi, ustawienia.k_baza, ustawienia.ignoruj_mnoznik],
     queryFn: () => api.profilDruzyny({ wagi, ignoruj_mnoznik: ustawienia.ignoruj_mnoznik, k_baza: ustawienia.k_baza }),
+    // historia ocen z poprzedniego sezonu czyta sie w tle po wczytaniu zapisu - odswiezamy, az bedzie gotowa
+    refetchInterval: (q) => (q.state.data?.zmiany.oceny_status === 'wczytywanie' ? 4000 : false),
   });
   if (profil.isLoading) return <Loader m="md" />;
   if (profil.error) return <Alert m="md" color="red">{(profil.error as Error).message}</Alert>;
@@ -266,7 +268,7 @@ export default function ProfilDruzyny({ wersja, wagi, ustawienia, otworz }: Prop
           )) : <Text size="sm" c="dimmed">Brak wskaźników w czołowej ćwiartce ligi.</Text>}
         </Card>
         <Card withBorder padding="sm">
-          <Title order={5} c="orange" mb={4}>Słabe strony</Title>
+          <Title order={5} c="red" mb={4}>Słabe strony</Title>
           {p.podsumowanie.slabe.length ? p.podsumowanie.slabe.map((m) => (
             <Text key={m.nazwa} size="sm">{m.nazwa} - <b>{m.miejsce}. z {m.n}</b></Text>
           )) : <Text size="sm" c="dimmed">Brak wskaźników w ostatniej ćwiartce ligi.</Text>}
@@ -295,24 +297,40 @@ export default function ProfilDruzyny({ wersja, wagi, ustawienia, otworz }: Prop
 
       <Stack gap="sm">
         <Title order={4}>Największe zmiany względem poprzedniego sezonu</Title>
-        {!p.zmiany.historia ? (
-          <Alert color="gray" variant="light">
-            Potrzebna migawka z poprzedniego sezonu - powstaje automatycznie przy wczytywaniu zapisów tej kariery
-            (historia w ~/.fm_moneyball/historia).
-          </Alert>
-        ) : (
-          <>
-            <Text size="xs" c="dimmed">
-              Względem migawki z {formatuj(p.zmiany.data_porownania, 'data')}; tylko zawodnicy z co najmniej {p.zmiany.min_minut}{' '}
-              minutami w obu sezonach. Spadki i wzrosty obok siebie - sama lista spadków przesadnie pokazuje kryzys.
-            </Text>
-            <SimpleGrid cols={{ base: 1, md: 2 }}>
+        <Text size="xs" c="dimmed">
+          Tylko zawodnicy z co najmniej {p.zmiany.min_minut} minutami w lidze w obu sezonach (25% minut możliwych, jak
+          w atletyzmie). Spadki i wzrosty obok siebie - sama lista spadków przesadnie pokazuje kryzys.
+        </Text>
+        <SimpleGrid cols={{ base: 1, md: 2 }}>
+          {p.zmiany.historia ? (
+            <>
               <TabelaZmian tytul="Największe spadki SCORE" wiersze={p.zmiany.spadki} otworz={otworz} />
               <TabelaZmian tytul="Największe wzrosty SCORE" wiersze={p.zmiany.wzrosty} otworz={otworz} />
+            </>
+          ) : (
+            <Alert color="gray" variant="light" style={{ gridColumn: '1 / -1' }}>
+              Zmiany SCORE wymagają migawki z poprzedniego sezonu - powstaje automatycznie przy wczytywaniu zapisów tej
+              kariery (historia w ~/.fm_moneyball/historia).
+            </Alert>
+          )}
+          {p.zmiany.historia_ocen ? (
+            <>
               <TabelaOcen tytul="Największe spadki średniej oceny" wiersze={p.zmiany.oceny_spadki} />
               <TabelaOcen tytul="Największe wzrosty średniej oceny" wiersze={p.zmiany.oceny_wzrosty} />
-            </SimpleGrid>
-          </>
+            </>
+          ) : (
+            <Alert color="gray" variant="light" style={{ gridColumn: '1 / -1' }}>
+              {p.zmiany.oceny_status === 'wczytywanie'
+                ? 'Średnie oceny z poprzedniego sezonu wczytują się w tle z pliku gry (zwykle około minuty)...'
+                : 'Brak średnich ocen z poprzedniego sezonu dla twoich zawodników w tym zapisie.'}
+            </Alert>
+          )}
+        </SimpleGrid>
+        {p.zmiany.historia && (
+          <Text size="xs" c="dimmed">
+            SCORE względem migawki z {formatuj(p.zmiany.data_porownania, 'data')}
+            {p.zmiany.oceny_z_zapisu ? '; średnie oceny z historii sezonów zapisanej w pliku gry.' : '.'}
+          </Text>
         )}
       </Stack>
     </Stack>

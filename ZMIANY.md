@@ -3,6 +3,20 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 1.4.0
+
+- Karta zawodnika działa dla każdego zawodnika, także spoza bieżącego Rankingu (np. z małą liczbą minut, otwarta
+  z tablicy taktycznej).
+- Tablica taktyczna: przeciąganie bez półprzezroczystej kopii, zawodnika można upuścić w dowolnym miejscu boiska
+  (trafia na najbliższą pozycję); w liście kadry minuty w sezonie, poniżej 1000 na pomarańczowo.
+- Optymalizator budżetu: budżet transferowy i wolne miejsce w budżecie płacowym domyślnie z finansów klubu w zapisie
+  gry (można wpisać własne); pozycje do wzmocnienia domyślnie puste.
+- Sprzedaj drogo: zastępca musi mieć styl gry podobny w co najmniej 85%; bez takiego zastępcy - komunikat.
+- Moja kadra: średni SCORE przy każdej pozycji.
+- Profil drużyny: „Słabe strony” na czerwono; zmiany względem poprzedniego sezonu od 25% minut możliwych w lidze;
+  średnie oceny z poprzedniego sezonu z historii sezonów zapisanej w pliku gry (wczytywane w tle).
+- Biblioteka fmsave 0.6.0.
+
 ## 1.3.0
 
 - **Tablica taktyczna** (Moja kadra → Taktyka): pionowe boisko, 9 formacji, przeciąganie zawodników na pozycje,

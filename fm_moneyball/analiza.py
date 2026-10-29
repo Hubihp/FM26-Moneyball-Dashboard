@@ -451,6 +451,7 @@ def moja_kadra(pozycja, pula_policzona, moj_klub_uid, data_gry=None, tylko_pierw
         "pozycja": pozycja,
         "liczba": int(len(moi)),
         "ukryci": int(len(wszyscy_moi) - len(moi)),
+        "sredni_score": float(moi['SCORE'].mean()) if moi['SCORE'].notna().any() else None,
         "najlepszy": float(moi['SCORE'].max()) if not moi.empty else None,
         "sredni_wiek": float(moi['Wiek'].mean()) if not moi.empty else None,
         "konczace_kontrakty": int((moi['Lata_kontraktu'] <= 1).sum()) if not moi.empty else 0,
@@ -460,7 +461,7 @@ def moja_kadra(pozycja, pula_policzona, moj_klub_uid, data_gry=None, tylko_pierw
 
 # --- Moneyball: sprzedaj drogo, optymalizator budzetu -----------------------------------------------
 PROG_PRZEPLACENIA = 1.3     # cena co najmniej o 30% wyzsza niz wycena wg wyniku
-MIN_PODOBIENSTWA_ZASTEPCY = 0.5
+MIN_PODOBIENSTWA_ZASTEPCY = 0.85   # podobienstwo stylu (cosinus) zastepcy
 
 
 def _cena_transferu(pula):
@@ -499,24 +500,21 @@ def sprzedaj_drogo(pozycja, pula, widoczni_idx, moj_klub_uid, k_baza=5, tylko_pi
         with np.errstate(divide='ignore', invalid='ignore'):
             podobienstwo = np.where(normy * normy[i] > 0, macierz @ macierz[i] / (normy * normy[i]), 0.0)
         maska = (obcy & (pula['SCORE'] >= moj['SCORE'] - PROG_WZMOCNIENIA).to_numpy()
-                 & (podobienstwo >= MIN_PODOBIENSTWA_ZASTEPCY))
-        if not maska.any():
-            continue
-        zastepcy = pula[maska].assign(Podobieństwo=podobienstwo[maska], Cena_transferu=cena[maska])
-        zastepca = zastepcy.sort_values(['Cena_transferu', 'SCORE'], ascending=[True, False]).iloc[0]
-        zysk = float(moj['Wartość_Numeryczna'] - zastepca['Cena_transferu'])
-        if zysk <= 0:
-            continue
-        wynik.append({
-            "pozycja": pozycja,
-            "moj": do_json(moi.loc[[idx]], [p for p in pola if p in moi.columns])[0],
-            "przeplacenie": float(moj['Wartość_Numeryczna'] / moj['Wycena wg wyniku']),
-            "zastepca": do_json(zastepcy.loc[[zastepca.name]], [p for p in pola if p in zastepcy.columns]
-                                + ['Podobieństwo'])[0],
-            "cena_zastepcy": float(zastepca['Cena_transferu']),
-            "zysk": zysk,
-        })
-    return sorted(wynik, key=lambda w: -w["zysk"])
+                 & (podobienstwo >= MIN_PODOBIENSTWA_ZASTEPCY) & (cena < moj['Wartość_Numeryczna']).to_numpy())
+        wpis = {"pozycja": pozycja, "moj": do_json(moi.loc[[idx]], [p for p in pola if p in moi.columns])[0],
+                "przeplacenie": float(moj['Wartość_Numeryczna'] / moj['Wycena wg wyniku']),
+                "zastepca": None, "cena_zastepcy": None, "zysk": None}
+        if maska.any():
+            # najtanszy z tanszych, podobnych i niewiele slabszych
+            zastepcy = pula[maska].assign(Podobieństwo=podobienstwo[maska], Cena_transferu=cena[maska])
+            zastepca = zastepcy.sort_values(['Cena_transferu', 'SCORE'], ascending=[True, False]).iloc[0]
+            wpis.update(zastepca=do_json(zastepcy.loc[[zastepca.name]], [p for p in pola if p in zastepcy.columns]
+                                         + ['Podobieństwo'])[0],
+                        cena_zastepcy=float(zastepca['Cena_transferu']),
+                        zysk=float(moj['Wartość_Numeryczna'] - zastepca['Cena_transferu']))
+        wynik.append(wpis)
+    # najpierw wymiany z zastepca (malejaco po zysku), potem przeplaceni bez zastepcy
+    return sorted(wynik, key=lambda w: (w["zysk"] is None, -(w["zysk"] or 0), -w["przeplacenie"]))
 
 
 def kandydaci_optymalizatora(pula, widoczni_idx, moj_klub_uid, tylko_pierwsza=True):

@@ -455,7 +455,9 @@ def test_optymalizator_i_sprzedaj_drogo(klient):
     if w["jedna_gwiazda"]:
         assert w["zysk"] >= w["jedna_gwiazda"]["zysk"]
     s = klient.post("/api/sprzedaj-drogo", json={"filtry": {"min_minut": 0}}).json()
-    assert "wymiany" in s and all(x["zysk"] > 0 for x in s["wymiany"])
+    assert "wymiany" in s and s["podobienstwo"] == 0.85
+    for x in s["wymiany"]:
+        assert (x["zastepca"] is None and x["zysk"] is None) or (x["zysk"] > 0 and x["zastepca"]["Podobieństwo"] >= 0.85)
 
 
 def test_profil_druzyny_demo(klient):
@@ -479,3 +481,14 @@ def test_sklad_i_tylko_pierwsza(klient):
     k2 = klient.post("/api/moja-kadra", json={"tylko_pierwsza": False}).json()
     assert [p["liczba"] for p in k1["pozycje"]] == [p["liczba"] for p in k2["pozycje"]]   # demo: bez rezerw
     assert all(p["ukryci"] == 0 for p in k1["pozycje"])
+
+
+def test_zawodnik_ponizej_progu_i_sredni_score(klient):
+    wiersze = klient.post("/api/ranking", json={"pozycja": "Napastnik", "filtry": {"min_minut": 0}}).json()["wiersze"]
+    malo = min(wiersze, key=lambda w: w["Minuty"])
+    w = klient.post("/api/zawodnik", json={"pozycja": "Napastnik", "id": malo["ID"]}).json()
+    assert w["ID"] == malo["ID"] and w["SCORE"] == pytest.approx(malo["SCORE"])
+    assert klient.post("/api/zawodnik", json={"pozycja": "Napastnik", "id": "nie ma"}).status_code == 404
+    for p in klient.post("/api/moja-kadra", json={}).json()["pozycje"]:
+        if p["zawodnicy"]:
+            assert p["sredni_score"] == pytest.approx(sum(z["SCORE"] for z in p["zawodnicy"]) / len(p["zawodnicy"]))

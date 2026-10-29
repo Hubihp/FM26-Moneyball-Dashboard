@@ -3,6 +3,7 @@ import itertools
 import random
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from fm_moneyball import analiza
@@ -77,15 +78,19 @@ def test_sprzedaj_drogo_i_kandydaci():
     pula.loc[pula['Klub_UID'] == 99, 'Klub_UID'] = 0
     pula.loc[moj, 'Klub_UID'] = 99
     pula.loc[moj, 'Wartość_Numeryczna'] = pula['Wartość_Numeryczna'].max() * 20      # rynek przeplaca
-    wymiany = analiza.sprzedaj_drogo("Napastnik", pula, pula.index, 99)
+    # bliźniak stylu (te same statystyki, inny klub, tani) - podobienstwo 100% >= 85%
+    klon = pula.loc[[moj]].assign(ID="Klon", Klub_UID=3, **{'Wartość_Numeryczna': 1e6})
+    z_klonem = pd.concat([pula, klon], ignore_index=True)
+    wymiany = analiza.sprzedaj_drogo("Napastnik", z_klonem, z_klonem.index, 99)
     assert len(wymiany) == 1
     w = wymiany[0]
     assert w["moj"]["ID"] == pula.at[moj, 'ID'] and w["przeplacenie"] >= analiza.PROG_PRZEPLACENIA
-    assert w["zastepca"]["SCORE"] >= pula.at[moj, 'SCORE'] - analiza.PROG_WZMOCNIENIA
-    assert w["zastepca"]["Podobieństwo"] >= analiza.MIN_PODOBIENSTWA_ZASTEPCY and w["zysk"] > 0
-    # bez podobnych zastepcow (widoczni tylko slabsi) - brak wymiany
+    assert w["zastepca"]["ID"] == "Klon" and w["zastepca"]["Podobieństwo"] >= analiza.MIN_PODOBIENSTWA_ZASTEPCY
+    assert w["zysk"] == pytest.approx(pula.at[moj, 'Wartość_Numeryczna'] - 1e6)
+    # nikt nie spelnia progu (widoczni tylko slabsi) - zawodnik zostaje na liscie, bez zastepcy
     slabsi = pula.index[pula['SCORE'] < pula.at[moj, 'SCORE'] - 10]
-    assert analiza.sprzedaj_drogo("Napastnik", pula, slabsi, 99) == []
+    bez = analiza.sprzedaj_drogo("Napastnik", pula, slabsi, 99)
+    assert len(bez) == 1 and bez[0]["zastepca"] is None and bez[0]["zysk"] is None
 
     baza, zastepczy, kandydaci = analiza.kandydaci_optymalizatora(pula, pula.index, 99)
     assert baza == pytest.approx(pula.at[moj, 'SCORE']) and not zastepczy

@@ -20,8 +20,10 @@ type Props = {
 };
 
 const POZYCJE = Object.keys(SKROTY);
-const GRACZ = 'application/x-fm-gracz';
-const SLOT = 'application/x-fm-slot';
+const PROG_PRZECIAGANIA = 4;      // px - mniejszy ruch to klikniecie
+const MALO_MINUT = 1000;
+
+type Przeciaganie = { typ: 'slot' | 'gracz'; id: string; sx: number; sy: number; x: number; y: number; aktywne: boolean };
 const nazwisko = (z: ZawodnikSkladu) => z.Piłkarz.split(' ').slice(-1)[0];
 const najlepszyWynik = (z: ZawodnikSkladu) => Math.max(...Object.values(z.score), -Infinity);
 
@@ -61,30 +63,23 @@ function Murawa() {
   );
 }
 
-function Zeton({ slot, gracz, numer, wybrany, naKlik, naUpuszczenie, naZmianePozycji, naZdjecie, naKarte }: {
+function Zeton({ slot, gracz, numer, wybrany, naKlik, naChwyt, przeciagany, naZmianePozycji, naZdjecie, naKarte }: {
   slot: Slot; gracz: ZawodnikSkladu | undefined; numer: number; wybrany: boolean; naKlik: () => void;
-  naUpuszczenie: (e: React.DragEvent) => void; naZmianePozycji: (p: string) => void; naZdjecie: () => void;
-  naKarte: () => void;
+  naChwyt: (e: React.PointerEvent) => void; przeciagany: { x: number; y: number } | null;
+  naZmianePozycji: (p: string) => void; naZdjecie: () => void; naKarte: () => void;
 }) {
   const wynik = wynikNa(gracz, slot.pozycja);
   const poza = gracz && !naturalny(gracz, slot.pozycja);
   return (
     <div
       data-slot={slot.id}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData(SLOT, slot.id);
-        e.dataTransfer.effectAllowed = 'move';
-      }}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        naUpuszczenie(e);
-      }}
+      onPointerDown={naChwyt}
       onClick={naKlik}
-      style={{ position: 'absolute', left: `${slot.x}%`, top: `${slot.y}%`, transform: 'translate(-50%, -50%)',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'grab', width: 110, zIndex: wybrany ? 3 : 2 }}
+      // przeciagany zeton sam podaza za kursorem (bez polprzezroczystej kopii) i nie zaslania celu upuszczenia
+      style={{ position: 'absolute', left: `${przeciagany?.x ?? slot.x}%`, top: `${przeciagany?.y ?? slot.y}%`,
+        transform: 'translate(-50%, -50%)', display: 'flex', flexDirection: 'column', alignItems: 'center',
+        cursor: przeciagany ? 'grabbing' : 'grab', width: 110, zIndex: przeciagany ? 10 : wybrany ? 3 : 2,
+        pointerEvents: przeciagany ? 'none' : undefined, touchAction: 'none', userSelect: 'none' }}
     >
       <Menu position="right" withinPortal shadow="md">
         <Menu.Target>
@@ -141,6 +136,52 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
   const [wybranySlot, setWybranySlot] = useState<string | null>(null);
   const [filtr, setFiltr] = useState<string | null>(null);
   const boisko = useRef<HTMLDivElement>(null);
+  const [przeciaganie, setPrzeciaganie] = useState<Przeciaganie | null>(null);
+  const przeciaganieRef = useRef<Przeciaganie | null>(null);
+  const poPrzeciagnieciu = useRef(false);     // klikniecie po upuszczeniu jest ignorowane
+  const upuscRef = useRef<(p: Przeciaganie) => void>(() => undefined);
+  const aktywne = przeciaganie !== null;
+
+  // przeciaganie na zdarzeniach wskaznika (dziala w WebView2), nasluch na oknie do konca ruchu
+  useEffect(() => {
+    if (!aktywne) return;
+    const ruch = (e: PointerEvent) => {
+      const p = przeciaganieRef.current;
+      if (!p) return;
+      const nowe = { ...p, x: e.clientX, y: e.clientY,
+        aktywne: p.aktywne || Math.hypot(e.clientX - p.sx, e.clientY - p.sy) > PROG_PRZECIAGANIA };
+      przeciaganieRef.current = nowe;
+      setPrzeciaganie(nowe);
+    };
+    const koniec = () => {
+      const p = przeciaganieRef.current;
+      przeciaganieRef.current = null;
+      setPrzeciaganie(null);
+      if (p?.aktywne) {
+        poPrzeciagnieciu.current = true;
+        setTimeout(() => { poPrzeciagnieciu.current = false; }, 0);
+        upuscRef.current(p);
+      }
+    };
+    const zaznaczanie = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+    window.addEventListener('pointermove', ruch);
+    window.addEventListener('pointerup', koniec);
+    window.addEventListener('pointercancel', koniec);
+    return () => {
+      document.body.style.userSelect = zaznaczanie;
+      window.removeEventListener('pointermove', ruch);
+      window.removeEventListener('pointerup', koniec);
+      window.removeEventListener('pointercancel', koniec);
+    };
+  }, [aktywne]);
+  const chwyc = (e: React.PointerEvent, typ: 'slot' | 'gracz', id: string) => {
+    if (e.button !== 0) return;
+    if (e.pointerType === 'mouse') e.preventDefault();      // bez zaznaczania tekstu podczas przeciagania
+    const p = { typ, id, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, aktywne: false };
+    przeciaganieRef.current = p;
+    setPrzeciaganie(p);
+  };
   const zawodnicy = useMemo(() => sklad.data?.zawodnicy ?? [], [sklad.data]);
   const wgKlucza = useMemo(() => Object.fromEntries(zawodnicy.map((z) => [z.klucz, z])), [zawodnicy]);
 
@@ -166,21 +207,32 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
     .filter((z) => !filtr || wynikNa(z, filtr) !== null)
     .sort((a, b) => (filtr ? (wynikNa(b, filtr) ?? 0) - (wynikNa(a, filtr) ?? 0) : najlepszyWynik(b) - najlepszyWynik(a)));
 
-  const upuscNaSlot = (slotId: string, e: React.DragEvent) => {
-    const gracz = e.dataTransfer.getData(GRACZ);
-    const inny = e.dataTransfer.getData(SLOT);
-    if (gracz) setBiezace(przypisz(u, slotId, gracz));
-    else if (inny && inny !== slotId) setBiezace(zamienSloty(u, inny, slotId));
-  };
-  // upuszczenie zetonu na wolne miejsce boiska przesuwa pozycje
-  const upuscNaBoisko = (e: React.DragEvent) => {
-    e.preventDefault();
-    const slotId = e.dataTransfer.getData(SLOT);
+  // punkt ekranu -> % boiska (obciete do murawy)
+  const naBoiskuProcent = (x: number, y: number) => {
     const r = boisko.current?.getBoundingClientRect();
-    if (!slotId || !r) return;
-    const x = Math.min(97, Math.max(3, ((e.clientX - r.left) / r.width) * 100));
-    const y = Math.min(97, Math.max(3, ((e.clientY - r.top) / r.height) * 100));
-    setBiezace({ ...u, sloty: u.sloty.map((s) => (s.id === slotId ? { ...s, x, y } : s)) });
+    if (!r) return null;
+    return { x: Math.min(97, Math.max(3, ((x - r.left) / r.width) * 100)),
+      y: Math.min(97, Math.max(3, ((y - r.top) / r.height) * 100)) };
+  };
+  // Upuszczenie: cel spod kursora (przeciagany element ma pointer-events: none, wiec go nie zaslania)
+  upuscRef.current = (p: Przeciaganie) => {
+    const elementy = document.elementsFromPoint(p.x, p.y);
+    const celSlot = elementy.map((el) => el.closest('[data-slot]')).find((el) => el && el.getAttribute('data-slot') !== p.id);
+    const slotCel = celSlot?.getAttribute('data-slot') ?? null;
+    const naBoisku = elementy.some((el) => el.closest('[data-boisko]'));
+    const naLiscie = elementy.some((el) => el.closest('[data-lista]'));
+    const punkt = naBoiskuProcent(p.x, p.y);
+    if (p.typ === 'gracz') {
+      if (slotCel) setBiezace(przypisz(u, slotCel, p.id));
+      else if (naBoisku && punkt) {
+        // dowolne miejsce boiska: najblizsza pozycja
+        const najblizszy = [...u.sloty].sort((a, b) =>
+          Math.hypot(a.x - punkt.x, (a.y - punkt.y) * 1.5) - Math.hypot(b.x - punkt.x, (b.y - punkt.y) * 1.5))[0];
+        if (najblizszy) setBiezace(przypisz(u, najblizszy.id, p.id));
+      }
+    } else if (slotCel) setBiezace(zamienSloty(u, p.id, slotCel));
+    else if (naBoisku && punkt) setBiezace({ ...u, sloty: u.sloty.map((s) => (s.id === p.id ? { ...s, ...punkt } : s)) });
+    else if (naLiscie) zdejmij(p.id);
   };
   const zdejmij = (slotId: string) => {
     const przypisania = { ...u.przypisania };
@@ -201,14 +253,24 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
 
   return (
     <Group align="flex-start" gap="md" wrap="nowrap">
-      <div ref={boisko} data-boisko onDragOver={(e) => e.preventDefault()} onDrop={upuscNaBoisko}
+      {przeciaganie?.aktywne && przeciaganie.typ === 'gracz' && wgKlucza[przeciaganie.id] && (
+        <div style={{ position: 'fixed', left: przeciaganie.x, top: przeciaganie.y, transform: 'translate(-50%, -50%)',
+          pointerEvents: 'none', zIndex: 1000, background: '#c92a2a', color: 'white', fontWeight: 700, fontSize: 13,
+          padding: '4px 10px', borderRadius: 14, boxShadow: '0 4px 10px rgba(0,0,0,0.5)', whiteSpace: 'nowrap' }}>
+          {wgKlucza[przeciaganie.id].Piłkarz}
+        </div>
+      )}
+      <div ref={boisko} data-boisko
         style={{ position: 'relative', height: 'min(78vh, 900px)', aspectRatio: '74 / 111', flexShrink: 0,
           borderRadius: 10, overflow: 'hidden', boxShadow: '0 4px 18px rgba(0,0,0,0.45)' }}>
         <Murawa />
         {u.sloty.map((s, i) => (
           <Zeton key={s.id} slot={s} numer={i + 1} gracz={wgKlucza[u.przypisania[s.id]]} wybrany={wybranySlot === s.id}
-            naKlik={() => setWybranySlot(wybranySlot === s.id ? null : s.id)}
-            naUpuszczenie={(e) => upuscNaSlot(s.id, e)} naZdjecie={() => zdejmij(s.id)}
+            naKlik={() => !poPrzeciagnieciu.current && setWybranySlot(wybranySlot === s.id ? null : s.id)}
+            naChwyt={(e) => chwyc(e, 'slot', s.id)}
+            przeciagany={przeciaganie?.aktywne && przeciaganie.typ === 'slot' && przeciaganie.id === s.id
+              ? naBoiskuProcent(przeciaganie.x, przeciaganie.y) : null}
+            naZdjecie={() => zdejmij(s.id)}
             naZmianePozycji={(p) => setBiezace({ ...u, sloty: u.sloty.map((x) => (x.id === s.id ? { ...x, pozycja: p } : x)) })}
             naKarte={() => {
               const z = wgKlucza[u.przypisania[s.id]];
@@ -264,11 +326,7 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
           zawodników, żeton na wolne miejsce przesuwa pozycję. Kółko pozycji: zmiana pozycji; dwuklik na nazwisku: karta;
           × zdejmuje z boiska. SCORE liczony na pozycji na boisku; „poza pozycją” = ocena pozycji z gry (1–20).
         </Text>
-        <Card withBorder padding="xs" onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            const slotId = e.dataTransfer.getData(SLOT);
-            if (slotId) zdejmij(slotId);
-          }}>
+        <Card withBorder padding="xs" data-lista>
           <Group justify="space-between" mb={6}>
             <Title order={6}>Kadra ({zawodnicy.length})</Title>
             <Select size="xs" w={190} placeholder="Wszystkie pozycje" clearable value={filtr} onChange={setFiltr}
@@ -280,18 +338,20 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
                 const wynik = filtr ? wynikNa(z, filtr) : najlepszyWynik(z);
                 const pozycjeGracza = Object.keys(z.score).map((p) => SKROTY[p]).join(', ');
                 return (
-                  <Group key={z.klucz} data-gracz={z.klucz} draggable gap="xs" wrap="nowrap" justify="space-between"
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData(GRACZ, z.klucz);
-                      e.dataTransfer.effectAllowed = 'move';
-                    }}
-                    onClick={() => kliknijGracza(z)}
+                  <Group key={z.klucz} data-gracz={z.klucz} gap="xs" wrap="nowrap" justify="space-between"
+                    onPointerDown={(e) => chwyc(e, 'gracz', z.klucz)}
+                    onClick={() => !poPrzeciagnieciu.current && kliknijGracza(z)}
                     style={{ padding: '4px 8px', borderRadius: 6, cursor: 'grab', opacity: naBoisku.has(z.klucz) ? 0.5 : 1,
-                      background: 'var(--mantine-color-dark-6)' }}>
+                      background: 'var(--mantine-color-dark-6)', touchAction: 'none', userSelect: 'none' }}>
                     <div style={{ minWidth: 0 }}>
                       <Text size="sm" fw={600} truncate>{z.Piłkarz}</Text>
                       <Text size="xs" c="dimmed" truncate>
-                        {pozycjeGracza || z.Pozycja} · {z.Wiek ?? '?'} lat{naBoisku.has(z.klucz) ? ' · na boisku' : ''}
+                        {pozycjeGracza || z.Pozycja} · {z.Wiek ?? '?'} lat ·{' '}
+                        <span style={{ color: (z.Minuty ?? 0) < MALO_MINUT ? 'var(--mantine-color-orange-5)' : undefined }}
+                          title={(z.Minuty ?? 0) < MALO_MINUT ? `Mniej niż ${MALO_MINUT} minut - mała próba, SCORE mniej pewny` : undefined}>
+                          {formatuj(z.Minuty ?? 0, 'int')} min
+                        </span>
+                        {naBoisku.has(z.klucz) ? ' · na boisku' : ''}
                       </Text>
                     </div>
                     <Group gap={4} wrap="nowrap">

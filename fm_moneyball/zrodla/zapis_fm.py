@@ -130,6 +130,7 @@ class WynikZapisu:
     ligi: list = field(default_factory=list)           # podsumowanie lig: klucz, domyslna, liczba, kluby, kraj
     druzyny: dict = field(default_factory=dict)        # club_uid -> sumy licznikow sezonu (profil druzyny)
     tabele: dict = field(default_factory=dict)         # club_uid prowadzonego klubu -> tabela jego ligi
+    budzety: dict = field(default_factory=dict)        # club_uid prowadzonego klubu -> budzet z finansow
     kraje_auto: dict = field(default_factory=dict)     # nation_id -> nazwa kraju z klubow-kotwic
     menedzer: str | None = None                        # czlowiek prowadzacy kariere (klucz historii)
 
@@ -245,6 +246,47 @@ def sumuj_druzyny(wiersze, rodzaj):
         d["sklad"] = dict(sklady[uid])
         wynik[uid] = d
     return wynik
+
+
+def oceny_sezonu(wiersze):
+    """Wiersze historii sezonu -> {player_uid: (srednia ocena wazona ocenionymi meczami, minuty)}."""
+    sumy = defaultdict(lambda: [0.0, 0.0, 0.0])
+    for w in wiersze:
+        s = sumy[w.player_uid]
+        s[2] += float(w.minutes or 0)
+        if w.average_rating is not None and w.rated_appearances:
+            s[0] += float(w.average_rating) * w.rated_appearances
+            s[1] += w.rated_appearances
+    return {uid: (s[0] / s[1], s[2]) for uid, s in sumy.items() if s[1]}
+
+
+def oceny_poprzedniego_sezonu(sciezka, gracze, data_gry, rodzaj="league"):
+    """
+    Srednia ocena i minuty podanych zawodnikow w poprzednim sezonie (od 1 lipca) z historii sezonow zapisu.
+    Osobne otwarcie pliku: pierwsze zapytanie dekoduje cala historie (ok. minuty), wiec serwer robi to w tle.
+    """
+    import fmsave
+    poprzedni = (data_gry.year if data_gry.month >= 7 else data_gry.year - 1) - 1
+    with _otworz(sciezka) as zapis:
+        wiersze = zapis.player_season_history().where(season_year=poprzedni, kind=fmsave.SeasonStatsKind(rodzaj))
+        return oceny_sezonu(w for w in wiersze if w.player_uid in gracze)
+
+
+def budzet_klubu(miesiace, club_uid, kurs):
+    """
+    Ostatni miesiac finansow klubu -> {transfer (pozostaly budzet transferowy), place_wolne (budzet placowy
+    minus obecne place, na tydzien), place_budzet, place_wydatki, miesiac} w EUR albo None.
+    """
+    klubu = [m for m in miesiace if m.club_uid == club_uid and m.month is not None]
+    if not klubu:
+        return None
+    m = max(klubu, key=lambda m: m.month)
+    eur = lambda x: None if x is None else float(x) * kurs   # noqa: E731
+    budzet, wydatki = eur(m.wage_budget_weekly), eur(m.wage_payroll_weekly)
+    return {"transfer": eur(m.transfer_budget_remaining), "transfer_przydzielony": eur(m.transfer_budget_allocated),
+            "place_budzet": budzet, "place_wydatki": wydatki,
+            "place_wolne": max(0.0, budzet - wydatki) if budzet is not None and wydatki is not None else None,
+            "miesiac": m.month.isoformat()}
 
 
 PIERWSZA_DRUZYNA = "Pierwsza drużyna"
@@ -800,6 +842,13 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
             liczniki = sumuj_statystyki(wiersze_sezonu, opcje.rodzaj_statystyk)
             druzyny = sumuj_druzyny(wiersze_sezonu, opcje.rodzaj_statystyk)
             del wiersze_sezonu
+            moje_uidy = {m.club_uid for m in zarzadzane}
+            try:
+                miesiace = list(zapis.finances())
+                budzety = {uid: budzet_klubu(miesiace, uid, opcje.kurs_waluty) for uid in moje_uidy}
+            except Exception as e:
+                ostrzezenia.append(f"Nie udało się odczytać finansów klubu ({e}).")
+                budzety = {}
             try:
                 etykiety = etykiety_druzyn(zapis.fixtures(), list(zapis.competitions()),
                                            {m.club_uid for m in zarzadzane}, nazwy)
@@ -846,6 +895,7 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
         kraje_auto=kraje_z_kotwic(kluby, zawodnicy),
         druzyny=druzyny,
         tabele={uid: t for uid, t in tabele.items() if t is not None},
+        budzety={uid: b for uid, b in budzety.items() if b is not None},
     )
 
 
