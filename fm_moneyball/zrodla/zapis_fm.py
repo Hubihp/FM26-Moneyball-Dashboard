@@ -10,6 +10,7 @@ testowac bez prawdziwego zapisu. Zapis nie zawiera nazw lig (gra bierze je z wla
 dlatego nazwy pochodza z mapy `dane/nazwy_rozgrywek.csv` (id rozgrywek w bazie -> nazwa),
 ktora mozna zbudowac automatycznie ze starych eksportow CSV (`zbuduj_mape_nazw_lig`).
 """
+import json
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -238,6 +239,7 @@ def sumuj_statystyki(wiersze, rodzaj):
     sumy = defaultdict(lambda: defaultdict(float))
     obecne = defaultdict(set)
     minuty_pol = defaultdict(lambda: defaultdict(float))
+    druzyny = defaultdict(lambda: defaultdict(float))      # (club_uid, team_slot) -> minuty
     oceny = defaultdict(lambda: [0.0, 0.0])      # srednia ocena wazona liczba ocenionych meczow
     for w in wiersze:
         if str(getattr(w, "kind", "")) != rodzaj:
@@ -245,6 +247,8 @@ def sumuj_statystyki(wiersze, rodzaj):
         uid = w.player_uid
         poziom = poziom_wiersza(w)
         minuty = float(getattr(w, "minutes", None) or 0)
+        if minuty:
+            druzyny[uid][(getattr(w, "club_uid", None), getattr(w, "team_slot", None) or 0)] += minuty
         for pole in POLA_LICZNIKOW:
             poziomy = POZIOMY_POLA.get(pole)
             if poziomy is not None:
@@ -263,6 +267,7 @@ def sumuj_statystyki(wiersze, rodzaj):
     wynik = {uid: {p: (s[p] if p in obecne[uid] else None) for p in POLA_LICZNIKOW} for uid, s in sumy.items()}
     for uid in wynik:
         wynik[uid]["minuty_pol"] = {p: minuty_pol[uid].get(p, 0.0) for p in POZIOMY_POLA}
+        wynik[uid]["druzyny"] = dict(druzyny[uid])
     for uid, (suma, mecze) in oceny.items():
         if uid in wynik and mecze:
             wynik[uid]["srednia_ocena"] = suma / mecze
@@ -443,7 +448,23 @@ def statystyki_kanoniczne(liczniki):
 WOLNY_AGENT = "Wolny agent"
 
 
-def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0):
+def minuty_lig(druzyny, liga_klubu):
+    """
+    {(club_uid, team_slot): minuty} -> JSON [[liga_klucz, liga_domyslna, minuty], ...] - gdzie zawodnik grał.
+    Pierwsza druzyna klubu z wykryta liga -> ta liga; rezerwy, mlodziez (inny slot albo osobny klub, np.
+    "U23", "B") i ligi niewykryte -> wpis [None, None, minuty] ("rezerwy i inne rozgrywki").
+    """
+    sumy = defaultdict(float)
+    for (klub, slot), minuty in (druzyny or {}).items():
+        liga = liga_klubu.get(klub) if not slot else None
+        klucz = (liga.database_id, Liga(liga.competition_id, liga.database_id, None).etykieta) if liga else (None, None)
+        sumy[klucz] += minuty
+    if not sumy:
+        return None
+    return json.dumps([[k, d, round(m)] for (k, d), m in sorted(sumy.items(), key=lambda kv: -kv[1])])
+
+
+def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0, liga_klubu=None):
     """Rekord Player (+ jego liczniki sezonowe, liga klubu, liczba kontuzji) -> slownik kolumn aplikacji."""
     kurs = opcje.kurs_waluty
     wolny = zawodnik.club_uid is None
@@ -484,6 +505,7 @@ def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0):
         "Drużyna_slot": getattr(zawodnik, "team_slot", None),
         "UID": zawodnik.uid,
         "Klub_UID": zawodnik.club_uid,
+        "Minuty_lig": minuty_lig((liczniki or {}).get("druzyny"), liga_klubu) if liga_klubu is not None else None,
     }
     # Ocena (1-20) na kazdej puli pozycji = najlepsza z jej kodow; pokazuje latwosc przekwalifikowania
     oceny = oceny_pozycji(zawodnik.positions) if getattr(zawodnik, "positions", None) is not None else {}
@@ -524,7 +546,7 @@ def zbuduj_ramki(zawodnicy, liczniki_po_uid, liga_klubu, opcje, moje_kluby=(), k
                               getattr(zawodnik, "natural_positions", None))
         if not grupy:
             continue
-        wiersz = wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje.get(zawodnik.uid, 0))
+        wiersz = wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje.get(zawodnik.uid, 0), liga_klubu)
         wiersz["Pula_główna"] = grupy[0]
         wiersz["Pule"] = "; ".join(grupy)
         # kolumna "Pozycje" zawiera kazda pule zawodnika (takze glowna, gdy nie jest naturalna)

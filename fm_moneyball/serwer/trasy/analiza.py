@@ -8,7 +8,7 @@ import time
 from fm_moneyball import analiza, historia, optymalizator, profil
 from fm_moneyball.serwer.modele import HistoriaModel, HistoriaWieluModel, NastepcaModel, PorownanieZMoimModel, KadraModel, ListaZyczenModel, OptymalizatorModel, PodobniModel, RadarModel, RankingModel, SprzedajDrogoModel, ZawodnikModel
 from fm_moneyball.serwer.obliczenia import kandydat, wynik_na_wspolnych_cechach
-from fm_moneyball.stale import POZYCJE
+from fm_moneyball.stale import POZYCJE, ROLE_POZYCJI
 
 
 def utworz(stan, obl):
@@ -28,6 +28,9 @@ def utworz(stan, obl):
                            if 'Zarobki_Numeryczne' in df.columns and df['Zarobki_Numeryczne'].notna().any() else None),
             "minuty_max": int(df['Minuty'].max()) if 'Minuty' in df.columns and df['Minuty'].notna().any() else None,
             "wagi_domyslne": analiza.wagi_domyslne(pozycja, df),
+            # presety rol (gotowe wagi): tylko cechy obecne w danych, jak wagi domyslne
+            "role": [{"nazwa": n, "opis": o, "wagi": {c: w for c, w in wagi.items() if c in df.columns}}
+                     for n, o, wagi in ROLE_POZYCJI[pozycja]],
             "ma_kontrakty": bool(df['Wygasa_Data'].notna().any()),
             "okazje": list(analiza.OKAZJE),
             # historia rozwoju: migawki poprzednich wczytan tej kariery
@@ -50,6 +53,7 @@ def utworz(stan, obl):
             "pominiete": pominiete,
             "statystyki": analiza.kolumny_statystyk(z.pozycja, policzona),
             "model_wyceny": model_wyceny,
+            "model_prognozy": policzona.attrs.get("prognoza"),
             "liczba_ukrytych_mojego_klubu": int(ukryci_moi),
         }
 
@@ -210,6 +214,11 @@ def utworz(stan, obl):
             if not wiersz.empty:
                 return analiza.do_json(wiersz.head(1), analiza.pola_wiersza(z.pozycja, policzona))[0]
         raise HTTPException(404, "Nie znaleziono zawodnika.")
+
+    @router.post("/rozbicie")
+    def rozbicie(z: ZawodnikModel):
+        """SCORE zawodnika rozbity na wklady statystyk i korekte ligowa (karta zawodnika)."""
+        return obl.rozbicie(z.pozycja, z.id, z.wagi, z.ignoruj_mnoznik, z.k_baza)
 
     @router.post("/sklad")
     def sklad(z: KadraModel):

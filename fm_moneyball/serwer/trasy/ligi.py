@@ -3,6 +3,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from fm_moneyball.kraje import podsumuj_kraje, zapisz_nazwe_kraju
 from fm_moneyball.ligi import wszystkie_mnozniki, zapisz_mnoznik
+from fm_moneyball.schemat import REZERWY
 from fm_moneyball.serwer.modele import KrajModel, LigaModel
 from fm_moneyball.stale import MNOZNIK_NIEZNANEJ_LIGI, MNOZNIKI_LIG
 from fm_moneyball.zrodla.csv_fm import wczytaj_csv
@@ -22,7 +23,9 @@ def utworz(stan):
         return {"ligi": sorted(wynik, key=lambda l: (l["nazwa"] is not None, -l["liczba"])),
                 "znane_nazwy": sorted(set(MNOZNIKI_LIG) | set(mnozniki)),
                 "mnozniki": mnozniki,
-                "mnoznik_nieznanej": MNOZNIK_NIEZNANEJ_LIGI}
+                "mnoznik_nieznanej": MNOZNIK_NIEZNANEJ_LIGI,
+                # minuty w rezerwach, druzynach mlodziezowych i ligach niewykrytych (mnoznik wazony minutami)
+                "mnoznik_rezerw": mnozniki.get(REZERWY), "nazwa_rezerw": REZERWY}
 
     @router.put("/ligi/{klucz}")
     def zmien_lige(klucz: int, z: LigaModel):
@@ -33,6 +36,12 @@ def utworz(stan):
             zapisz_nazwy_rozgrywek({klucz: nazwa}, stan.plik_nazw)
             if z.mnoznik is not None and wszystkie_mnozniki(stan.plik_mnoznikow).get(nazwa) != z.mnoznik:
                 zapisz_mnoznik(nazwa, z.mnoznik, stan.plik_mnoznikow)
+        stan.zastosuj_ligi()
+        return ligi()
+
+    @router.put("/mnoznik-rezerw")
+    def zmien_mnoznik_rezerw(z: LigaModel):
+        zapisz_mnoznik(REZERWY, z.mnoznik, stan.plik_mnoznikow)     # None = wartosc domyslna (liga nieznana)
         stan.zastosuj_ligi()
         return ligi()
 

@@ -54,6 +54,13 @@ export default function PanelBoczny(p: Props) {
   const { meta, filtry, setFiltry } = p;
   const zmien = <K extends keyof Filtry>(k: K, v: Filtry[K]) => setFiltry({ ...filtry, [k]: v });
   const sumaWag = Object.values(p.wagi).reduce((a, b) => a + b, 0);
+  // rola, ktorej wagi dokladnie odpowiadaja obecnym (inaczej "wlasne wagi")
+  const role = meta?.role ?? [];
+  const takieSame = (a: Record<string, number>, b: Record<string, number>) => {
+    const klucze = new Set([...Object.keys(a), ...Object.keys(b)]);
+    return [...klucze].every((k) => (a[k] ?? 0) === (b[k] ?? 0));
+  };
+  const rola = role.find((r) => takieSame(r.wagi, p.wagi));
   const cenaMax = meta?.cena_max ?? 0;
   const cena = filtry.cena ?? [0, cenaMax];
   const pensjaMax = meta?.pensja_max ?? 0;
@@ -172,6 +179,21 @@ export default function PanelBoczny(p: Props) {
             <Accordion.Control>Wagi statystyk</Accordion.Control>
             <Accordion.Panel>
               <Stack gap="xs">
+                {role.length > 0 && (
+                  <>
+                    <Select label="Rola (gotowe wagi)" size="xs" allowDeselect={false}
+                      data={role.map((r) => r.nazwa)} value={rola?.nazwa ?? null} placeholder="Własne wagi"
+                      onChange={(nazwa) => {
+                        const wybrana = role.find((r) => r.nazwa === nazwa);
+                        if (!wybrana) return;
+                        // domyslna rola = brak wlasnych wag (nowe wagi domyslne w kolejnych wersjach)
+                        p.setWagi(wybrana === role[0] ? null : { ...wybrana.wagi });
+                      }} />
+                    <Text size="xs" c="dimmed">
+                      {rola ? rola.opis : 'Własne wagi - zmienione suwakami. Wybierz rolę, aby zacząć od gotowego zestawu.'}
+                    </Text>
+                  </>
+                )}
                 <Text size="xs" c="dimmed">Ważność 0-100. Liczą się proporcje (wagi są normalizowane do sumy 1).</Text>
                 {Object.entries(p.wagi).map(([cecha, waga]) => (
                   <div key={cecha}>

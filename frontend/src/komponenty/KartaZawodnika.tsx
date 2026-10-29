@@ -5,6 +5,7 @@ import { api, type Wiersz, type ZapytanieRankingu } from '../api';
 import { eur, formatuj } from '../format';
 import HistoriaZawodnika from './HistoriaZawodnika';
 import NaTleMojego from './NaTleMojego';
+import RozbicieWyniku from './RozbicieWyniku';
 import Wykres from './Wykres';
 
 type Props = {
@@ -20,6 +21,8 @@ type Props = {
   otworz: (id: string) => void;
   dodajDoPorownania: (id: string) => void;
 };
+
+const zmiana = (x: unknown) => (typeof x === 'number' ? `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(1).replace('.', ',')}` : '–');
 
 function Pole({ etykieta, wartosc }: { etykieta: string; wartosc: string }) {
   return (
@@ -99,7 +102,20 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
             {w['Kontuzje_2_lata'] !== undefined ? (
               <Pole etykieta="Kontuzje (2 lata)" wartosc={formatuj(w['Kontuzje_2_lata'], 'int')} />
             ) : null}
+            {typeof w['Prognoza SCORE'] === 'number' ? (
+              <Tooltip multiline w={330} label={`Wiek ${formatuj(w['Wiek'], 'int')} → ${zmiana(w['Prognoza_wiek'])} pkt `
+                + `(krzywa wieku); powrót w stronę średniej pozycji ${zmiana(w['Prognoza_regresja'])} pkt (część wyniku `
+                + 'z jednego sezonu to szczęście i mała próba).'}>
+                <div><Pole etykieta="Prognoza SCORE za rok" wartosc={formatuj(w['Prognoza SCORE'], 'score')} /></div>
+              </Tooltip>
+            ) : null}
           </SimpleGrid>
+          {w['Ligi_gry'] ? (
+            <Text size="xs" c="dimmed">
+              Gdzie grał w tym sezonie: {String(w['Ligi_gry'])}. Mnożnik ligi w SCORE ważony minutami:{' '}
+              {formatuj(w['Mnożnik_Ligi'], 'dec2')} (liga klubu {formatuj(w['Mnożnik_ligi_klubu'], 'dec2')}).
+            </Text>
+          ) : null}
           {w['Wycena_ograniczona'] ? (
             <Text size="xs" c="dimmed">
               Wycena ograniczona do zakresu danych modelu: zawodnik ma wynik lub wiek poza zakresem zawodników tej
@@ -112,6 +128,8 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
               kontrakt), więc niedowartościowanie jest zaniżone - zawodnik może być tańszy, niż wynika z tej liczby.
             </Text>
           ) : null}
+
+          {id && <RozbicieWyniku id={id} zapytanie={zapytanie} wersja={wersja} />}
 
           {!moj(w) && <NaTleMojego id={id} zapytanie={zapytanie} wersja={wersja} mojKlub={mojKlub} />}
 

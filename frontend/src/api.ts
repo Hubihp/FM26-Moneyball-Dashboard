@@ -52,6 +52,7 @@ export type MetaPozycji = {
   pensja_max: number | null;
   minuty_max: number | null;
   wagi_domyslne: Record<string, number>;
+  role: { nazwa: string; opis: string; wagi: Record<string, number> }[];
   ma_kontrakty: boolean;
   okazje: string[];
   ma_historie: boolean;
@@ -164,7 +165,20 @@ export type Ranking = {
   pominiete: string[];
   statystyki: string[];
   model_wyceny: ModelWyceny;
+  model_prognozy?: { b: number; pary: number; srednia: number } | null;
 };
+
+export type SkladnikWyniku = {
+  cecha: string;
+  wartosc: number | null;
+  z: number;
+  waga_proc: number;
+  punkty: number;
+  nizsze_lepsze: boolean;
+  brak_danych: boolean;
+};
+
+export type RozbicieWyniku = { start: number; skladniki: SkladnikWyniku[]; liga: number; score: number };
 
 export type Radar = {
   etykiety: string[];
@@ -186,7 +200,10 @@ export type Liga = {
   kluby: string[];
   mnoznik: number | null;
 };
-export type Ligi = { ligi: Liga[]; znane_nazwy: string[]; mnozniki: Record<string, number>; mnoznik_nieznanej: number };
+export type Ligi = {
+  ligi: Liga[]; znane_nazwy: string[]; mnozniki: Record<string, number>; mnoznik_nieznanej: number;
+  mnoznik_rezerw: number | null; nazwa_rezerw: string;
+};
 
 export type PozycjaKadry = {
   pozycja: string;
@@ -375,6 +392,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nazwa, mnoznik }),
     }),
+  zmienMnoznikRezerw: (mnoznik: number | null) =>
+    zadanie<Ligi>('/api/mnoznik-rezerw', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mnoznik }),
+    }),
   kraje: () => zadanie<{ kraje: Kraj[] }>('/api/kraje'),
   zmienKraj: (id: number, nazwa: string) =>
     zadanie<{ kraje: Kraj[] }>(`/api/kraje/${id}`, {
@@ -394,6 +417,8 @@ export const api = {
     post<Kadra>('/api/moja-kadra', body),
   zawodnik: (body: { pozycja: string; id: string; wagi: Record<string, number> | null; ignoruj_mnoznik: boolean;
     k_baza: number }) => post<Wiersz>('/api/zawodnik', body),
+  rozbicie: (body: { pozycja: string; id: string; wagi: Record<string, number> | null; ignoruj_mnoznik: boolean;
+    k_baza: number }) => post<RozbicieWyniku>('/api/rozbicie', body),
   sklad: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number;
     tylko_pierwsza: boolean }) => post<{ zawodnicy: ZawodnikSkladu[]; pozycje: string[] }>('/api/sklad', body),
   profilDruzyny: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number;

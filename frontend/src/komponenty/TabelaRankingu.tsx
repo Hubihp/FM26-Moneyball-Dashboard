@@ -228,6 +228,25 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         if (k.pole === 'Kraj') {
           def.width = 140;
         }
+        if (k.pole === 'Liga') {
+          // czesc minut poza liga klubu (rezerwy, mlodziez, inny klub): gwiazdka i opis, mnoznik wazony minutami
+          Object.assign(def, {
+            valueFormatter: (p: { value: unknown; data?: Wiersz }) => `${String(p.value ?? '')}${
+              typeof p.data?.['Udział_poza_ligą_klubu'] === 'number' && p.data['Udział_poza_ligą_klubu'] >= 0.25 ? ' *' : ''}`,
+            tooltipValueGetter: (p: { data?: Wiersz }) => (p.data?.['Ligi_gry']
+              ? `Gdzie grał: ${String(p.data['Ligi_gry'])}. Mnożnik ligi w SCORE ważony minutami.` : null),
+          });
+        }
+        if (k.pole === 'Prognoza SCORE') {
+          Object.assign(def, {
+            width: 120,
+            headerTooltip: 'SCORE za rok: obecny SCORE z częściowym powrotem w stronę średniej pozycji (część wyniku z '
+              + 'jednego sezonu to szczęście) plus typowa zmiana w tym wieku. Stabilność i krzywa wieku są liczone z '
+              + 'historii kariery (gdy jest), inaczej z wartości typowych.',
+            cellStyle: (p: { value: number | null }) => (p.value === null || p.value === undefined ? null
+              : { color: kolorWyniku(p.value), fontWeight: 600 }),
+          });
+        }
         if (k.pole === 'Okazje') {
           Object.assign(def, { width: 200, tooltipField: 'Okazje' });
         }

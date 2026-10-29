@@ -188,6 +188,90 @@ _WAGI_RODZIN = {
 }
 MERYTORYKA_WAG = _na_pozycje(_WAGI_RODZIN, dict)
 
+# Presety rol: gotowe zestawy wag (kazda rola sumuje sie do 100) jako punkt startu w panelu wag.
+# Pierwsza rola kazdej rodziny to wagi domyslne. Kierunek cech (mniej = lepiej) jest w CECHY.
+_xA, _A, _KP, _CCC, _DOS = ('Oczekiwane asysty/90', 'Asysty/90', 'Kluczowe podania z gry/90',
+                            'Stworzone 100% sytuacje/90', 'Udane dośrodkowania/90')
+_G, _NPXG, _XGS, _SKUT = ('Liczba goli na 90 min', 'Oczekiwane gole bez karnych/90', 'Oczekiwane gole na strzał',
+                          'Skuteczność strzałów (%)')
+_DRB, _PROG, _CEL, _STR = ('Liczba dryblingów/90', 'Podania progresywne/90', 'Celność podań (%)', 'Strata piłek na podanie')
+_PRZ, _ODZ, _ODB, _PRS = ('Przechwyty/90', 'Odzyskane piłki/90', 'Udane odbiory/90', 'Udane próby pressingu/90')
+_GLP, _GLW, _SPR, _KAR, _BL = ('% wygranych pojedynków główkowych', 'Wygrane główki/90', 'Sprinty/90', 'Kartki/90',
+                               'Błędy prowadzące do gola/90')
+_ROLE = {
+    "Bramkarz": [
+        ("Bramkarz klasyczny", "Przede wszystkim obrona strzałów; gra nogami ma małe znaczenie.",
+         {'Uniknięte oczekiwane gole/90': 60, 'Skuteczność obron (%)': 20, _BL: 10, 'Obrony chwytem (%)': 5, _STR: 5}),
+        ("Bramkarz-libero", "Wysoko ustawiony: wyjścia poza pole karne i rozpoczynanie akcji krótkim podaniem.",
+         {'Uniknięte oczekiwane gole/90': 35, 'Skuteczność obron (%)': 10, _BL: 10, _ODZ: 15, _STR: 15, _CEL: 15}),
+    ],
+    "Środkowy Obrońca": [
+        ("Stoper grający piłką", "Wyprowadza piłkę: podania progresywne, celność, mało strat; odbiór nadal ważny.",
+         {_PROG: 20, _CEL: 12, _KP: 5, _STR: 13, _ODZ: 14, _PRZ: 12, _ODB: 6, _GLP: 5, _GLW: 5, _BL: 5, _KAR: 3}),
+        ("Zabijaka", "Klasyczny stoper: wygrywa główki i pojedynki, przecina podania; rozegranie drugorzędne.",
+         {_GLP: 12, _GLW: 13, _ODB: 15, _ODZ: 20, _PRZ: 15, _PRS: 5, _STR: 7, _BL: 7, _KAR: 3, _PROG: 3}),
+    ],
+    "Boczny Obrońca": [
+        ("Ofensywny boczny obrońca", "Daje szerokość i kreuje: xA, dośrodkowania, podłączanie się do ataku.",
+         {_xA: 25, _A: 5, _KP: 15, _DOS: 12, _PROG: 10, _DRB: 5, _PRZ: 8, _ODZ: 7, _ODB: 5, _STR: 5, _KAR: 3}),
+        ("Defensywny boczny obrońca", "Przede wszystkim broni flanki: odbiory, przechwyty, główki.",
+         {_PRZ: 18, _ODZ: 15, _ODB: 15, _PRS: 7, _GLW: 5, _xA: 10, _KP: 7, _PROG: 8, _STR: 10, _KAR: 5}),
+        ("Odwrócony boczny obrońca", "Schodzi do środka pola: celność, progresja i bezpieczeństwo piłki.",
+         {_PROG: 18, _CEL: 15, _STR: 15, _KP: 10, _xA: 10, _PRZ: 12, _ODZ: 10, _ODB: 7, _KAR: 3}),
+    ],
+    "Wahadłowy": [
+        ("Ofensywny wahadłowy", "Główny kreator z boku: xA, dośrodkowania, drybling, sprinty.",
+         {_xA: 25, _A: 5, _KP: 15, _DOS: 12, _DRB: 12, _PROG: 8, _SPR: 8, _PRZ: 5, _STR: 7, _KAR: 3}),
+        ("Defensywny wahadłowy", "Piąty obrońca: odbiór i asekuracja, mniej kreowania.",
+         {_PRZ: 15, _ODZ: 15, _ODB: 12, _PRS: 8, _SPR: 5, _xA: 15, _KP: 8, _PROG: 7, _STR: 10, _KAR: 5}),
+    ],
+    "Defensywny Pomocnik": [
+        ("Regista", "Rozgrywający sprzed obrony: progresja, celność, kluczowe podania, mało strat.",
+         {_PROG: 22, _CEL: 13, _KP: 12, _xA: 8, _STR: 15, _PRZ: 12, _ODZ: 10, _ODB: 5, _KAR: 3}),
+        ("Niszczyciel", "Odbiera piłkę: odbiory, przechwyty, pressing, główki; rozegranie proste.",
+         {_ODB: 18, _PRZ: 18, _ODZ: 18, _PRS: 12, _GLW: 8, _STR: 10, _CEL: 5, _BL: 5, _KAR: 6}),
+    ],
+    "Środkowy Pomocnik": [
+        ("Box-to-box", "Wszędzie po trochu: bieganie, odbiór, wejścia w pole karne.",
+         {_xA: 12, _KP: 10, _G: 8, _NPXG: 10, _DRB: 8, _PROG: 10, _ODZ: 8, _PRZ: 8, _ODB: 8, _PRS: 6, _STR: 10, _KAR: 2}),
+        ("Rozgrywający", "Kreator z głębi: kluczowe podania, xA, progresja i celność.",
+         {_xA: 22, _A: 5, _KP: 20, _PROG: 18, _CEL: 10, _DRB: 5, _STR: 15, _ODZ: 5}),
+        ("Pomocnik pressujący", "Odzyskuje piłkę wysoko: pressing, odbiory, przechwyty.",
+         {_PRS: 18, _ODB: 15, _PRZ: 15, _ODZ: 12, _xA: 10, _KP: 8, _PROG: 7, _STR: 10, _KAR: 5}),
+    ],
+    "Boczny Pomocnik": [
+        ("Klasyczny dośrodkowujący", "Gra przy linii i dośrodkowuje: dośrodkowania, xA, drybling.",
+         {_DOS: 20, _xA: 22, _A: 5, _KP: 13, _DRB: 12, _G: 5, _NPXG: 5, _ODZ: 5, _STR: 10, _KAR: 3}),
+        ("Pracowity boczny pomocnik", "Pomaga w obronie: odbiory, pressing, odzyskane piłki.",
+         {_ODZ: 15, _ODB: 12, _PRS: 10, _PRZ: 8, _xA: 15, _KP: 10, _DOS: 10, _DRB: 5, _STR: 10, _KAR: 5}),
+    ],
+    "Ofensywny Pomocnik": [
+        ("Kreator", "Ostatnie podanie: xA, kluczowe podania, 100% sytuacje.",
+         {_xA: 28, _A: 5, _KP: 22, _CCC: 15, _DRB: 10, _PROG: 5, _NPXG: 5, _STR: 10}),
+        ("Cień napastnika", "Wbiega w pole karne i strzela: npxG, gole, xG na strzał.",
+         {_NPXG: 25, _G: 18, _XGS: 7, _xA: 12, _KP: 10, _DRB: 10, _PRS: 5, _ODZ: 3, _STR: 10}),
+    ],
+    "Skrzydłowy": [
+        ("Odwrócony skrzydłowy", "Schodzi do środka i strzela: gole, npxG, drybling.",
+         {_G: 18, _NPXG: 18, _XGS: 7, _DRB: 17, _xA: 12, _KP: 10, _PRS: 3, _ODZ: 5, _STR: 10}),
+        ("Klasyczny skrzydłowy", "Gra przy linii: dośrodkowania, xA, drybling 1 na 1.",
+         {_DOS: 15, _xA: 22, _A: 5, _KP: 15, _DRB: 18, _G: 5, _NPXG: 5, _ODZ: 5, _STR: 10}),
+    ],
+    "Napastnik": [
+        ("Snajper", "Kończy akcje: gole, npxG, jakość i skuteczność strzałów.",
+         {_G: 25, _NPXG: 25, _XGS: 12, _SKUT: 13, _xA: 8, _KP: 5, _GLP: 4, _STR: 8}),
+        ("Target man", "Gra tyłem i w powietrzu: wygrane główki, gole, zgrywanie piłek.",
+         {_GLW: 18, _GLP: 12, _G: 15, _NPXG: 15, _xA: 8, _KP: 8, _ODZ: 8, _STR: 10, _XGS: 6}),
+        ("Fałszywa 9", "Schodzi do rozegrania: xA, kluczowe podania, drybling, progresja.",
+         {_xA: 20, _A: 5, _KP: 18, _DRB: 12, _PROG: 10, _NPXG: 12, _G: 8, _STR: 10, _ODZ: 5}),
+        ("Napastnik pressujący", "Pierwszy obrońca: pressing, odzyskane piłki, odbiory, do tego gole.",
+         {_PRS: 15, _ODZ: 12, _ODB: 8, _G: 15, _NPXG: 18, _xA: 10, _KP: 7, _STR: 10, _SPR: 5}),
+    ],
+}
+ROLE_RODZIN = {r: [("Domyślna (uniwersalna)", "Wagi domyślne pozycji - uniwersalny zawodnik.", dict(_WAGI_RODZIN[r]))]
+               + [(n, o, dict(w)) for n, o, w in _ROLE[r]] for r in _WAGI_RODZIN}
+ROLE_POZYCJI = {p: ROLE_RODZIN[RODZINA_POZYCJI.get(p, p)] for p in POZYCJE}
+
 _PODSTAWA = ['SCORE', 'Percentyl', 'Piłkarz', 'Wiek', 'Kraj', 'Pozycja', 'Preferowana noga', 'Liga', 'Klub', 'Cena']
 _KOLUMNY_RODZIN = {
     "Bramkarz": _PODSTAWA + ['Uniknięte oczekiwane gole/90', 'Skuteczność obron (%)', 'Odzyskane piłki/90', 'Stracone piłki/90', 'Strata piłek na podanie', 'Błędy prowadzące do gola/90', 'Celność podań (%)', 'Obrony chwytem (%)', 'Próby podań/90'],

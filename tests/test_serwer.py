@@ -510,3 +510,32 @@ def test_pula_migawki_z_wagami_domyslnymi(tmp_path):
     # zawodnik spoza pozycji tez ma SCORE (ocena wg kryteriow N), ale nie wplywa na skale pozycji
     assert not wynik.loc[wynik['UID'] == 0, 'Na_pozycji_wtedy'].iloc[0]
     assert wynik.loc[wynik['UID'] == 0, 'SCORE'].notna().all() and wynik['Na_pozycji_wtedy'].sum() == len(df) - 1
+
+
+def test_rozbicie_role_i_prognoza(klient):
+    ranking = klient.post("/api/ranking", json={"pozycja": "Napastnik"}).json()
+    assert "Prognoza SCORE" in [k["pole"] for k in ranking["kolumny"]]
+    assert ranking["model_prognozy"]["pary"] == 0                  # demo bez historii: wartosci poczatkowe
+    for w in ranking["wiersze"][:5]:
+        r = klient.post("/api/rozbicie", json={"pozycja": "Napastnik", "id": w["ID"]}).json()
+        assert r["score"] == pytest.approx(w["SCORE"])
+        assert w["Prognoza SCORE"] is not None
+    assert klient.post("/api/rozbicie", json={"pozycja": "Napastnik", "id": "nikt"}).status_code == 404
+    meta = klient.get("/api/pozycja/Napastnik").json()
+    nazwy = [r["nazwa"] for r in meta["role"]]
+    assert nazwy[0].startswith("Domyślna") and "Target man" in nazwy
+    assert meta["role"][0]["wagi"] == meta["wagi_domyslne"]
+    # wybrana rola zmienia wynik
+    target = next(r for r in meta["role"] if r["nazwa"] == "Target man")["wagi"]
+    inny = klient.post("/api/ranking", json={"pozycja": "Napastnik", "wagi": target}).json()["wiersze"]
+    assert [w["ID"] for w in inny[:10]] != [w["ID"] for w in ranking["wiersze"][:10]]
+
+
+def test_mnoznik_rezerw_przez_api(klient, tmp_path):
+    """Trasa mnoznika rezerw zapisuje wpis "Rezerwy i inne rozgrywki" i go usuwa (None)."""
+    from fm_moneyball.ligi import wszystkie_mnozniki
+    from fm_moneyball.schemat import REZERWY
+    assert klient.get("/api/ligi").json()["mnoznik_rezerw"] is None
+    assert klient.put("/api/mnoznik-rezerw", json={"mnoznik": 0.7}).json()["mnoznik_rezerw"] == 0.7
+    assert wszystkie_mnozniki(tmp_path / "mnozniki.csv")[REZERWY] == 0.7
+    assert klient.put("/api/mnoznik-rezerw", json={"mnoznik": None}).json()["mnoznik_rezerw"] is None

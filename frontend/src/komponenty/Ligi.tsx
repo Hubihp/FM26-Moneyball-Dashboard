@@ -119,6 +119,36 @@ function PokazWiecej({ rozwiniete, ukryte, przelacz, wszystkich }: {
   );
 }
 
+// Mnoznik minut rozegranych w rezerwach, druzynach mlodziezowych i ligach niewykrytych
+function MnoznikRezerw({ dane }: { dane: DaneLig }) {
+  const klient = useQueryClient();
+  const [mnoznik, setMnoznik] = useState<number | ''>(dane.mnoznik_rezerw ?? '');
+  const [zapisuje, setZapisuje] = useState(false);
+  const [blad, setBlad] = useState<string | null>(null);
+  const zapisz = async () => {
+    setZapisuje(true);
+    setBlad(null);
+    try {
+      await api.zmienMnoznikRezerw(mnoznik === '' ? null : mnoznik);
+      await klient.invalidateQueries({ queryKey: ['stan'] });
+    } catch (e) {
+      setBlad((e as Error).message);
+    } finally {
+      setZapisuje(false);
+    }
+  };
+  return (
+    <Group align="end" gap="xs">
+      <NumberInput size="xs" w={260} label="Mnożnik rezerw, drużyn młodzieżowych i innych rozgrywek" min={0.3} max={1.2}
+        step={0.01} decimalScale={3} value={mnoznik} placeholder={`${dane.mnoznik_nieznanej} (jak liga nieznana)`}
+        onChange={(v) => setMnoznik(v === '' ? '' : Number(v))} />
+      <Button size="xs" onClick={zapisz} loading={zapisuje}
+        disabled={(mnoznik === '' ? null : mnoznik) === dane.mnoznik_rezerw}>Zapisz</Button>
+      {blad && <Text size="xs" c="red">{blad}</Text>}
+    </Group>
+  );
+}
+
 // Edycja nazw i mnoznikow lig wykrytych w zapisie (zapis nie zawiera nazw rozgrywek)
 function SekcjaLig({ wersja }: { wersja: number }) {
   const ligi = useQuery({ queryKey: ['ligi', wersja], queryFn: api.ligi });
@@ -150,7 +180,10 @@ function SekcjaLig({ wersja }: { wersja: number }) {
         Zapis gry nie zawiera nazw lig - tylko numery rozgrywek. Nazwę sprawdzisz w grze, otwierając jeden z klubów z listy.
         Liga bez nazwy dostaje najniższy mnożnik ({dane.mnoznik_nieznanej}). Mnożnik to siła ligi (Premier League ≈ 0,92,
         Ekstraklasa ≈ 0,80); dla nazw z podpowiedzi uzupełnia się sam. Zmiany zapisują się na stałe.
+        Mnożnik w SCORE to średnia mnożników lig, w których zawodnik grał w sezonie, ważona minutami - minuty w
+        rezerwach, drużynach młodzieżowych i ligach niewykrytych liczą się z mnożnikiem poniżej.
       </Text>
+      <MnoznikRezerw key={String(dane.mnoznik_rezerw)} dane={dane} />
       <Table striped highlightOnHover>
         <Table.Thead>
           <Table.Tr>

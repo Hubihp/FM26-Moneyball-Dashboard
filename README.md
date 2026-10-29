@@ -73,6 +73,35 @@ Wagi domyślne (procenty, każda pozycja sumuje się do 100; strona lewa i prawa
 
 **Niepełne statystyki.** Zapis gry zawiera szczegółowe statystyki (dystans, pressing, przechwyty, podania, odbiory, kluczowe podania, główki, dryblingi) tylko z części rozgrywek; z pozostałych (np. lig drużyn rezerw i młodzieżowych) ma tylko gole, xG, xA, strzały, asysty, odzyskane piłki i kartki, a brakujące pola podaje jako 0. Aplikacja rozpoznaje takie wiersze (pełne statystyki mają dystans ok. 10 km/90, bramkarz ok. 5) i liczy każdą statystykę tylko z minut, w których była mierzona. Gdy takich minut jest za mało (poniżej 270 i 25% minut zawodnika), statystyka jest brakiem danych, a wynik przyjmuje dla niej średnią pozycji - bez kary za „zero”, którego gra nie zmierzyła. Tacy zawodnicy mają ⚠ przy nazwisku i plakietkę „niepełne statystyki” w karcie; ich SCORE opiera się na mniejszej liczbie statystyk, więc jest mniej pewny. Skalę SCORE (50 = przeciętny, 10 = jedno odchylenie) wyznaczają zawodnicy z danymi dla co najmniej 90% wag. Δ SCORE względem migawki sprzed wersji 1.7.0 jest liczone na statystykach wspólnych dla obu sezonów, żeby pokazywało rozwój zawodnika, a nie zmianę modelu.
 
+### Role (gotowe wagi)
+
+W panelu „Wagi statystyk” lista „Rola” ustawia gotowy zestaw wag (każdy sumuje się do 100). To punkt startu: suwaki działają dalej, a zmienione wagi są „własne”. „Domyślna (uniwersalna)” wraca do wag z tabeli powyżej. Dokładne wagi ról są w `fm_moneyball/stale.py` (`_ROLE`).
+
+| Pozycja | Role |
+|---|---|
+| BR | **Bramkarz klasyczny** - przede wszystkim obrona strzałów; gra nogami ma małe znaczenie. **Bramkarz-libero** - wysoko ustawiony: wyjścia poza pole karne i rozpoczynanie akcji krótkim podaniem. |
+| ŚO | **Stoper grający piłką** - wyprowadza piłkę: podania progresywne, celność, mało strat; odbiór nadal ważny. **Zabijaka** - klasyczny stoper: wygrywa główki i pojedynki, przecina podania; rozegranie drugorzędne. |
+| LO/PO | **Ofensywny boczny obrońca** - daje szerokość i kreuje: xA, dośrodkowania, podłączanie się do ataku. **Defensywny boczny obrońca** - przede wszystkim broni flanki: odbiory, przechwyty, główki. **Odwrócony boczny obrońca** - schodzi do środka pola: celność, progresja i bezpieczeństwo piłki. |
+| LWAH/PWAH | **Ofensywny wahadłowy** - główny kreator z boku: xA, dośrodkowania, drybling, sprinty. **Defensywny wahadłowy** - piąty obrońca: odbiór i asekuracja, mniej kreowania. |
+| DP | **Regista** - rozgrywający sprzed obrony: progresja, celność, kluczowe podania, mało strat. **Niszczyciel** - odbiera piłkę: odbiory, przechwyty, pressing, główki; rozegranie proste. |
+| ŚP | **Box-to-box** - wszędzie po trochu: bieganie, odbiór, wejścia w pole karne. **Rozgrywający** - kreator z głębi: kluczowe podania, xA, progresja i celność. **Pomocnik pressujący** - odzyskuje piłkę wysoko: pressing, odbiory, przechwyty. |
+| OP | **Kreator** - ostatnie podanie: xA, kluczowe podania, 100% sytuacje. **Cień napastnika** - wbiega w pole karne i strzela: npxG, gole, xG na strzał. |
+| LP/PP | **Klasyczny dośrodkowujący** - gra przy linii i dośrodkowuje: dośrodkowania, xA, drybling. **Pracowity boczny pomocnik** - pomaga w obronie: odbiory, pressing, odzyskane piłki. |
+| LS/PS | **Odwrócony skrzydłowy** - schodzi do środka i strzela: gole, npxG, drybling. **Klasyczny skrzydłowy** - gra przy linii: dośrodkowania, xA, drybling 1 na 1. |
+| N | **Snajper** - kończy akcje: gole, npxG, jakość i skuteczność strzałów. **Target man** - gra tyłem i w powietrzu: wygrane główki, gole, zgrywanie piłek. **Fałszywa 9** - schodzi do rozegrania: xA, kluczowe podania, drybling, progresja. **Napastnik pressujący** - pierwszy obrońca: pressing, odzyskane piłki, odbiory, do tego gole. |
+
+### Mnożnik ligi według drużyny gry
+
+Zawodnik gra często nie w lidze swojego klubu: w rezerwach, drużynie młodzieżowej (np. „U23”, „B”, „C”) albo przed transferem w innym klubie. Mnożnik ligi w SCORE to średnia mnożników lig, w których grał w sezonie, ważona minutami. Minuty w rezerwach, drużynach młodzieżowych i ligach niewykrytych liczą się z mnożnikiem rezerw: domyślnie jak liga nieznana (najsłabsza znana liga), do zmiany w zakładce „Ligi i kraje”. Kolumna „Liga” i filtry zostają według klubu (tam się zawodnika kupuje). Karta zawodnika pokazuje, gdzie grał; w rankingu taki zawodnik ma gwiazdkę przy lidze (≥ 25% minut poza ligą klubu).
+
+### Rozbicie SCORE
+
+Karta zawodnika ma wykres „Skąd ten SCORE”: punkt wyjścia (przeciętny zawodnik pozycji, ok. 50), wkład każdej statystyki (waga × odległość od średniej pozycji w odchyleniach, po skurczeniu przy małej liczbie minut; zielony podnosi, czerwony obniża, szary - brak danych) i korekta ligowa. Suma to dokładnie SCORE.
+
+### Prognoza SCORE za rok
+
+Kolumna „Prognoza SCORE” (i karta zawodnika) to model w stylu „Marcel” z sabermetryki: prognoza = SCORE + powrót w stronę średniej + zmiana z wiekiem. Część wyniku z jednego sezonu to szczęście, więc wynik za grę (bez korekty ligowej, która jest stałą cechą zawodnika) wraca częściowo w stronę średniej pozycji: o (1 − b), gdzie b to stabilność wyniku rok do roku. Krzywa wieku mówi, o ile typowo zmienia się SCORE w danym wieku (młodzi rosną, po ok. 27 latach spadek). Oba elementy są szacowane z historii kariery - par sezonów zawodników z pełnymi statystykami i co najmniej 900 minutami w obu - i łączone z wartościami typowymi (b = 0,7; krzywa od +4 pkt w wieku 19 lat do −3 po 33). Dane mogą przesunąć krzywą typową najwyżej o 2 pkt, bo jeden sezon historii to mało, a starsze migawki bywają liczone innym modelem. Bez historii działają same wartości typowe.
+
 Dośrodkowania, 100% sytuacje, sprinty, odbiory, wygrane główki, celność podań, asysty, kartki, błędy i obrony chwytem pochodzą tylko z zapisu gry. Przy imporcie CSV te wagi są pomijane, a pozostałe przeliczane do 100%. Zawodnik trafia do każdej puli, w której jest naturalny (ocena pozycji ≥ 18, jak „naturalna” w grze), np. środkowy i prawy obrońca jest i w ŚO, i w PO. Wyłączenie opcji „Zawodnik na wszystkich naturalnych pozycjach” zostawia tylko pozycję z najwyższą oceną.
 
 ### Windows krok po kroku

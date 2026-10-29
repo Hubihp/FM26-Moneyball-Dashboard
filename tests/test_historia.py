@@ -204,3 +204,34 @@ def test_mala_proba_w_historii(tmp_path):
     delta = _zmiana_sezonowa(punkty)
     assert delta["wartosc"] == 8 and delta["mala_proba"] is True and delta["wzgledem"] == "2026-03-01"
     assert _zmiana_sezonowa(punkty[1:]) is None
+
+
+def test_prognoza_bez_historii_i_z_historia():
+    rng = np.random.default_rng(7)
+    n = 400
+    wiek = rng.integers(18, 35, n)
+    pula = pd.DataFrame({"SCORE": rng.normal(50, 10, n), "Wiek": wiek, "Minuty": [2000] * n})
+    # bez historii: wartosci poczatkowe (b = 0,7; mlodzi rosna, starsi spadaja)
+    bez = historia.prognoza(pula)
+    assert bez.attrs["prognoza"]["pary"] == 0 and bez.attrs["prognoza"]["b"] == pytest.approx(historia.B_POCZATKOWE)
+    mlody = bez[bez["Wiek"] == 19].iloc[0]
+    assert mlody["Prognoza_wiek"] > 2 and bez[bez["Wiek"] == 34].iloc[0]["Prognoza_wiek"] < -2
+    assert mlody["Prognoza SCORE"] == pytest.approx(
+        mlody["SCORE"] + (historia.B_POCZATKOWE - 1) * (mlody["SCORE"] - pula["SCORE"].mean()) + mlody["Prognoza_wiek"])
+    # korekta ligowa nie podlega regresji
+    z_liga = historia.prognoza(pula, korekta=pd.Series(-5.0, index=pula.index))
+    assert (z_liga["Prognoza SCORE"] - bez["Prognoza SCORE"]).abs().max() < 1e-9
+    # z historia: pary sezonow ze stabilnoscia 0,5 i wzrostem +6 u 20-latkow
+    wtedy = rng.normal(50, 10, n)
+    teraz = 50 + 0.5 * (wtedy - 50) + rng.normal(0, 2, n) + np.where(wiek == 20, 6.0, 0.0)
+    pula = pd.DataFrame({"SCORE": teraz, "Wiek": wiek, "Minuty": [2000] * n, "SCORE_poprzedni": wtedy,
+                         "Δ SCORE": teraz - wtedy, "Δ minut": [0] * n})
+    model = historia.model_prognozy(pula)
+    assert model["pary"] == n and 0.5 < model["b"] < 0.6          # dane (400 par) przewazaja nad poczatkowa
+    assert model["krzywa"][20] > model["krzywa"][24]
+    # dane przesuwaja krzywa poczatkowa najwyzej o MAKS_ODCHYLENIA_KRZYWEJ
+    assert all(abs(model["krzywa"][w] - historia.krzywa_poczatkowa(w)) <= historia.MAKS_ODCHYLENIA_KRZYWEJ + 1e-9
+               for w in model["krzywa"])
+    # stabilnosc obcinana do zakresu
+    pula["Δ SCORE"] = -2 * (pula["SCORE_poprzedni"] - 50)
+    assert historia.model_prognozy(pula)["b"] >= historia.B_ZAKRES[0]

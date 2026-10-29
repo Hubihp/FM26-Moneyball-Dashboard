@@ -62,6 +62,16 @@ def test_nowe_pozycje_maja_wagi_i_kolumny():
         assert set(wagi) <= set(KOLUMNY_PER_POZYCJA[pozycja])
 
 
+def test_role_maja_poprawne_wagi():
+    from fm_moneyball.stale import CECHY, ROLE_POZYCJI
+    for pozycja in POZYCJE:
+        role = ROLE_POZYCJI[pozycja]
+        assert len(role) >= 3 and role[0][2] == MERYTORYKA_WAG[pozycja]          # pierwsza = domyslne
+        assert len({n for n, _, _ in role}) == len(role)
+        for nazwa, opis, wagi in role:
+            assert sum(wagi.values()) == 100 and set(wagi) <= set(CECHY) and opis, (pozycja, nazwa)
+
+
 def test_kraje_z_klubow_kotwic():
     from types import SimpleNamespace as NS
 

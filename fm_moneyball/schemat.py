@@ -5,6 +5,8 @@ Zrodlo dostarcza DataFrame z polskimi nazwami kolumn i liczbami w kolumnach stat
 `dopelnij_schemat` dolicza kolumny pochodne, z ktorych korzysta model i interfejs:
 'Strata piłek na podanie', 'Mnożnik_Ligi', 'Liga_bez_mnoznika', 'Wygasa_Data' oraz unikalne 'ID'.
 """
+import json
+
 import numpy as np
 import pandas as pd
 
@@ -59,19 +61,60 @@ def _ustaw_lige(df, liga_surowa, mnozniki, mnoznik_nieznanej=MNOZNIK_NIEZNANEJ_L
     df['Liga'] = liga_surowa.map(MAPOWANIE_NAZW_LIG).fillna(liga_surowa)
 
 
+REZERWY = "Rezerwy i inne rozgrywki"     # nazwa w mnozniki_lig.csv - wlasny mnoznik rozgrywek rezerw
+
+
 def ustaw_ligi(df, nazwy, mnozniki=None, mnoznik_nieznanej=MNOZNIK_NIEZNANEJ_LIGI):
     """
     Nazwy i mnozniki lig nakladane PO wczytaniu zapisu (bez ponownego parsowania): ramka z zapisu
     ma 'Liga_klucz' (id rozgrywek albo -kraj) i 'Liga_domyslna' ("Rozgrywki #id"). Ramki bez
     tych kolumn (CSV, demo) zwracane sa bez zmian.
+    Mnoznik wyniku to srednia mnoznikow lig, w ktorych zawodnik gral, wazona minutami ('Minuty_lig'):
+    minuty w rezerwach, druzynach mlodziezowych i ligach niewykrytych licza sie z mnoznikiem REZERWY
+    (domyslnie jak liga nieznana). Kolumna 'Liga' (i filtry) zostaje wedlug klubu.
     """
     if 'Liga_klucz' not in df.columns:
         return df
     df = df.copy()
+    mnozniki = MNOZNIKI_LIG if mnozniki is None else mnozniki
     surowa = df['Liga_klucz'].map(lambda k: nazwy.get(int(k)) if pd.notna(k) else None)
     surowa = surowa.where(surowa.notna(), df['Liga_domyslna'])
-    _ustaw_lige(df, surowa, MNOZNIKI_LIG if mnozniki is None else mnozniki, mnoznik_nieznanej)
+    _ustaw_lige(df, surowa, mnozniki, mnoznik_nieznanej)
+    df['Mnożnik_ligi_klubu'] = df['Mnożnik_Ligi']
+    if 'Minuty_lig' in df.columns:
+        mnoznik_rezerw = float(mnozniki.get(REZERWY, mnoznik_nieznanej))
+        wyniki = [_liga_gry(w, nazwy, mnozniki, mnoznik_nieznanej, mnoznik_rezerw, k)
+                  for w, k in zip(df['Minuty_lig'], df['Liga_klucz'])]
+        mnoznik = pd.Series([w[0] for w in wyniki], index=df.index, dtype=float)
+        df['Mnożnik_Ligi'] = mnoznik.fillna(df['Mnożnik_Ligi'])
+        df['Udział_poza_ligą_klubu'] = [w[1] for w in wyniki]
+        df['Ligi_gry'] = [w[2] for w in wyniki]
     return df
+
+
+def _liga_gry(minuty_lig, nazwy, mnozniki, mnoznik_nieznanej, mnoznik_rezerw, klucz_klubu):
+    """JSON 'Minuty_lig' -> (mnoznik wazony minutami, udzial minut poza liga klubu, opis albo None)."""
+    if not isinstance(minuty_lig, str) or not minuty_lig:
+        return np.nan, np.nan, None
+    wpisy = json.loads(minuty_lig)
+    razem = sum(m for _, _, m in wpisy)
+    if not razem:
+        return np.nan, np.nan, None
+    suma, poza, opis = 0.0, 0.0, []
+    for klucz, domyslna, minuty in wpisy:
+        if klucz is None:
+            nazwa, mnoznik = REZERWY.lower(), mnoznik_rezerw
+        else:
+            surowa = nazwy.get(int(klucz)) or domyslna
+            nazwa = MAPOWANIE_NAZW_LIG.get(surowa, surowa)
+            mnoznik = float(mnozniki.get(surowa, mnoznik_nieznanej))
+        suma += mnoznik * minuty
+        if klucz is None or pd.isna(klucz_klubu) or int(klucz) != int(klucz_klubu):
+            poza += minuty
+        if round(100 * minuty / razem):
+            opis.append(f"{nazwa} {round(100 * minuty / razem)}%")
+    udzial = poza / razem
+    return suma / razem, udzial, (" · ".join(opis) if udzial > 0.005 else None)
 
 
 NIEZNANY_KRAJ = "Nieznana"

@@ -11,7 +11,7 @@ from datetime import date
 import pandas as pd
 from fastapi import HTTPException
 
-from fm_moneyball import analiza, historia
+from fm_moneyball import analiza, historia, model
 from fm_moneyball.serwer.modele import RankingModel
 from fm_moneyball.stale import POZYCJE
 from fm_moneyball.wycena import wycen
@@ -75,12 +75,29 @@ class Obliczenia:
             wtedy = self.pula_migawki(porownanie[0], pozycja, wagi, ignoruj_mnoznik, k_baza)
             porownywalna = wynik_na_wspolnych_cechach(df, wagi, wtedy, ignoruj_mnoznik, k_baza, odniesienie)
             policzona = historia.dolicz_rozwoj(policzona, wtedy, teraz_porownywalna=porownywalna)
+        korekta = None if ignoruj_mnoznik or 'Mnożnik_Ligi' not in policzona.columns else \
+            50.0 * (policzona['Mnożnik_Ligi'] - 1.0)
+        policzona = historia.prognoza(policzona, korekta)
         wynik = (analiza.wzbogac(policzona, self.data_gry()), pominiete, model_wyceny)
         with self._blokada:
             self._policzone[klucz] = wynik
             while len(self._policzone) > ILE_POLICZONYCH:
                 self._policzone.popitem(last=False)
         return wynik
+
+    def rozbicie(self, pozycja, id_, wagi, ignoruj_mnoznik, k_baza):
+        """SCORE zawodnika rozbity na wklady cech (ta sama pula i skala co w policz: pozycja, potem kandydaci)."""
+        baza = self.pula(pozycja)
+        wagi = wagi if wagi is not None else analiza.wagi_domyslne(pozycja, baza)
+        wagi = {k: v for k, v in wagi.items() if k in baza.columns}
+        for kandydaci in (False, True):
+            df, odniesienie = baza, None
+            if kandydaci:
+                df, odniesienie = analiza.dolacz_kandydatow(baza, self.stan.wszyscy_zawodnicy(), pozycja, ())
+            trafienia = df.index[df['ID'] == id_]
+            if len(trafienia):
+                return model.rozbicie_score(df, wagi, ignoruj_mnoznik, k_baza, odniesienie, trafienia[0])
+        raise HTTPException(404, "Nie znaleziono zawodnika.")
 
     def pula_migawki(self, sciezka, pozycja, wagi, ignoruj_mnoznik, k_baza):
         """

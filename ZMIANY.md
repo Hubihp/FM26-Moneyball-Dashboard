@@ -3,6 +3,18 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 1.8.0
+
+- Liga według drużyny, w której zawodnik grał: mnożnik ligi w SCORE to średnia mnożników lig ważona minutami.
+  Minuty w rezerwach, drużynach młodzieżowych i ligach niewykrytych liczą się z mnożnikiem rezerw (domyślnie jak
+  liga nieznana, do zmiany w „Ligach i krajach”). Wolni agenci dostają mnożnik lig, w których grali.
+  Karta pokazuje, gdzie zawodnik grał; w rankingu przy lidze gwiazdka i podpowiedź.
+- Karta zawodnika: „Skąd ten SCORE” - wykres wkładu każdej statystyki i korekty ligowej (suma = SCORE).
+- Presety ról w panelu wag: np. stoper grający piłką, regista, niszczyciel, target man, fałszywa 9
+  (2-4 role na pozycję, każda jako punkt startu do własnych wag).
+- Prognoza SCORE za rok (kolumna w rankingu i karta): regresja wyniku za grę w stronę średniej plus krzywa wieku,
+  szacowane z historii kariery i łączone z wartościami typowymi.
+
 ## 1.7.0
 
 - Nowe statystyki z zapisu gry w SCORE: udane odbiory, wygrane główki, celność podań, asysty, kartki,

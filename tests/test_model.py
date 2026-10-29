@@ -89,3 +89,22 @@ def test_skala_wyniku_bez_zawodnikow_z_brakami():
     razem, _ = oblicz_score(pd.concat([pelni, braki], ignore_index=True), wagi, True, 0)
     assert np.allclose(razem[:100], sami)                  # ta sama skala dla zawodnikow z danymi
     assert np.allclose(razem[100:], 50, atol=0.1)          # brak danych = przecietny
+
+
+def test_rozbicie_sumuje_sie_do_score():
+    from fm_moneyball.model import rozbicie_score
+    rng = np.random.default_rng(3)
+    df = pd.DataFrame({"Przechwyty/90": rng.normal(2, 0.5, 60), "Strata piłek na podanie": rng.normal(0.2, 0.05, 60),
+                       "Minuty": rng.integers(300, 3000, 60).astype(float), "Mnożnik_Ligi": rng.uniform(0.7, 0.9, 60)})
+    df.loc[5, "Przechwyty/90"] = np.nan                         # brak danych
+    odniesienie = pd.Series([True] * 50 + [False] * 10)          # kandydaci z innej pozycji
+    wagi = {"Przechwyty/90": 60, "Strata piłek na podanie": 40}
+    score, _ = oblicz_score(df, wagi, False, 5, odniesienie)
+    for i in (0, 5, 55):
+        r = rozbicie_score(df, wagi, False, 5, odniesienie, i)
+        assert r["score"] == pytest.approx(score[i])
+        assert r["start"] + sum(s["punkty"] for s in r["skladniki"]) + r["liga"] == pytest.approx(score[i])
+    r = rozbicie_score(df, wagi, False, 5, odniesienie, 5)
+    assert next(s for s in r["skladniki"] if s["cecha"] == "Przechwyty/90")["brak_danych"]
+    assert next(s for s in r["skladniki"] if s["cecha"] == "Strata piłek na podanie")["nizsze_lepsze"]
+    assert rozbicie_score(df, wagi, True, 5, odniesienie, 0)["liga"] == 0

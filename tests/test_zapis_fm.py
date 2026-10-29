@@ -480,3 +480,34 @@ def test_policz_kontuzje_i_podsumowanie_lig():
     gracze = [NS(club_uid=1, nation_id=700)] * 5 + [NS(club_uid=2, nation_id=701)] * 2 + [NS(club_uid=3, nation_id=9)]
     ligi = podsumuj_ligi(liga_klubu, kluby, narodowosci=narodowosci_lig(gracze, liga_klubu))
     assert ligi[0]["kraj"] == 700 and ligi[1]["kraj"] == 9
+
+
+def test_mnoznik_wazony_minutami_druzyn_gry():
+    """Minuty w rezerwach (inny slot albo osobny klub) licza sie z mnoznikiem rezerw, a nie ligi klubu."""
+    import json
+
+    from fm_moneyball.schemat import REZERWY, ustaw_ligi
+    from fm_moneyball.stale import MNOZNIK_NIEZNANEJ_LIGI
+    wiersze = [wiersz_statystyk(1, minutes=900, club_uid=10, team_slot=0),
+               wiersz_statystyk(1, minutes=900, club_uid=10, team_slot=1),          # rezerwy klubu
+               wiersz_statystyk(2, minutes=1800, club_uid=55, team_slot=0)]         # osobny klub "U23"
+    liczniki = sumuj_statystyki(wiersze, "league")
+    assert liczniki[1]["druzyny"] == {(10, 0): 900, (10, 1): 900}
+    ramki = zbuduj_ramki([zawodnik(1, pozycje(stc=20)), zawodnik(2, pozycje(stc=20))], liczniki,
+                         {10: _liga()}, OpcjeZapisu(kurs_waluty=1.0))
+    nap = ramki["Napastnik"]
+    assert sorted(json.loads(nap.iloc[0]["Minuty_lig"]), key=str) == [[1, "Rozgrywki #1", 900], [None, None, 900]]
+    wynik = ustaw_ligi(nap, {1: "Ekstraklasa"}, {"Ekstraklasa": 0.8})
+    a, b = wynik.iloc[0], wynik.iloc[1]
+    assert a["Mnożnik_ligi_klubu"] == pytest.approx(0.8)
+    assert a["Mnożnik_Ligi"] == pytest.approx((0.8 + MNOZNIK_NIEZNANEJ_LIGI) / 2)
+    assert a["Udział_poza_ligą_klubu"] == pytest.approx(0.5) and "Ekstraklasa (POL 1) 50%" in a["Ligi_gry"]
+    assert b["Liga"] == "Ekstraklasa (POL 1)" and b["Mnożnik_Ligi"] == pytest.approx(MNOZNIK_NIEZNANEJ_LIGI)
+    # wlasny mnoznik rezerw i zmiana mnoznika ligi przeliczaja mnoznik wazony
+    wynik = ustaw_ligi(nap, {1: "Ekstraklasa"}, {"Ekstraklasa": 0.9, REZERWY: 0.7})
+    assert wynik.iloc[0]["Mnożnik_Ligi"] == pytest.approx(0.8) and wynik.iloc[1]["Mnożnik_Ligi"] == pytest.approx(0.7)
+    # tylko pierwsza druzyna: bez opisu "gdzie gral"
+    jeden = zbuduj_ramki([zawodnik(1, pozycje(stc=20))], sumuj_statystyki([wiersz_statystyk(1, club_uid=10)], "league"),
+                         {10: _liga()}, OpcjeZapisu(kurs_waluty=1.0))["Napastnik"]
+    w = ustaw_ligi(jeden, {1: "Ekstraklasa"}, {"Ekstraklasa": 0.8}).iloc[0]
+    assert w["Mnożnik_Ligi"] == pytest.approx(0.8) and w["Ligi_gry"] is None and w["Udział_poza_ligą_klubu"] == 0

@@ -27,7 +27,7 @@ MIN_MINUT = 1000             # prog minut w obu okresach, od ktorego liczymy roz
 KARIERA_BEZ_MENEDZERA = "kariera"   # katalog, gdy zapis nie podaje menedzera
 POLA_MIGAWKI = ['ID', 'UID', 'Piłkarz', 'Wiek', 'Klub', 'Klub_UID', 'Liga', 'Mnożnik_Ligi', 'Pozycja', 'Pule',
                 'Minuty', 'Wartość_Numeryczna', 'Zarobki_Numeryczne', 'Wygasa_Data', 'Średnia ocena']
-KOLUMNY_ROZWOJU = ['Δ SCORE', 'Δ percentyl', 'Δ minut', 'Nowe pozycje', 'Δ_mała_próba']
+KOLUMNY_ROZWOJU = ['Δ SCORE', 'Δ percentyl', 'Δ minut', 'Nowe pozycje', 'Δ_mała_próba', 'SCORE_poprzedni']
 
 _pamiec = {}                 # sciezka -> (mtime, ramka)
 
@@ -174,6 +174,7 @@ def dolicz_rozwoj(teraz, wtedy, min_minut=MIN_MINUT, wymagaj_minut=False, teraz_
     ok = ten_sam & minuty if wymagaj_minut else ten_sam
     baza = teraz if teraz_porownywalna is None else teraz_porownywalna.reindex(teraz.index)
     teraz['Δ SCORE'] = (baza['SCORE'] - p['SCORE']).where(ok)
+    teraz['SCORE_poprzedni'] = p['SCORE'].where(ok)
     teraz['Δ_mała_próba'] = teraz['Δ SCORE'].notna() & ~minuty
     teraz['Δ percentyl'] = (baza['Percentyl'] - p['Percentyl']).where(ok)
     teraz['Δ minut'] = (teraz['Minuty'] - p['Minuty']).where(ok)
@@ -182,3 +183,91 @@ def dolicz_rozwoj(teraz, wtedy, min_minut=MIN_MINUT, wymagaj_minut=False, teraz_
         if czy else None
         for t, w, czy in zip(teraz['Pozycja'], p['Pozycja'], ten_sam)]
     return teraz
+
+
+# --- prognoza SCORE za rok ------------------------------------------------------------------------
+# Model w stylu "Marcel": regresja do sredniej (czesc wyniku to szczescie i mala proba) plus krzywa
+# wieku. Regresji podlega tylko czesc wyniku za gre - korekta ligowa jest stala cecha zawodnika, nie
+# szczesciem. Stabilnosc rok do roku (b) i krzywa sa szacowane z par sezonow w historii kariery
+# (zawodnicy z pelnymi statystykami i co najmniej MIN_MINUT_PROGNOZY minutami w obu sezonach) i laczone
+# z wartosciami poczatkowymi; te maja duza wage, bo starsze migawki bywaja liczone innym modelem.
+MIN_MINUT_PROGNOZY = 900
+B_POCZATKOWE = 0.7               # typowa korelacja wyniku rok do roku
+B_ZAKRES = (0.5, 1.0)
+K_POCZATKOWE = 100               # sila wartosci poczatkowych (w liczbie par)
+K_KRZYWEJ = 50                   # to samo dla krzywej wieku (w liczbie par w danym wieku)
+MAKS_RESZTY = 15                 # skrajne zmiany (kontuzja, zmiana roli) obcinane przy liczeniu krzywej
+MAKS_ODCHYLENIA_KRZYWEJ = 2.0     # dane przesuwaja krzywa poczatkowa najwyzej o tyle (jeden sezon historii to malo)
+# zmiana SCORE w ciagu roku w danym wieku (punkty skali T, wzgledem calej puli): mlodzi rosna, po ~27 spadek
+KRZYWA_POCZATKOWA = {16: 4.0, 19: 4.0, 21: 3.0, 23: 2.0, 25: 1.0, 27: 0.0, 29: -0.5, 31: -1.5, 33: -3.0, 40: -3.0}
+
+
+def krzywa_poczatkowa(wiek):
+    wieki, zmiany = zip(*sorted(KRZYWA_POCZATKOWA.items()))
+    return float(np.interp(wiek, wieki, zmiany))
+
+
+def _bez_kandydatow(df):
+    return ~df['Kandydat'].fillna(False).astype(bool) if 'Kandydat' in df.columns else pd.Series(True, index=df.index)
+
+
+def model_prognozy(df, korekta=None, min_minut=MIN_MINUT_PROGNOZY):
+    """
+    -> {"srednia", "b", "krzywa": {wiek: zmiana}, "pary"}. `korekta` - korekta ligowa w SCORE (odejmowana
+    przed regresja). Pary: wynik za gre w poprzednim sezonie (SCORE_poprzedni) i teraz na tych samych cechach
+    (SCORE_poprzedni + Δ SCORE), minuty w obu sezonach.
+    """
+    korekta = pd.Series(0.0, index=df.index) if korekta is None else korekta.reindex(df.index).fillna(0.0)
+    gra = df['SCORE'] - korekta
+    minuty = pd.to_numeric(df['Minuty'], errors='coerce') if 'Minuty' in df.columns else pd.Series(np.nan, index=df.index)
+    pelni = _bez_kandydatow(df) & (minuty >= min_minut)
+    if 'Statystyki_niepełne' in df.columns:
+        pelni &= ~df['Statystyki_niepełne'].fillna(False).astype(bool)
+    srednia = float(gra[pelni].mean()) if gra[pelni].notna().any() else float(gra.mean()) if gra.notna().any() else 50.0
+    pary = pd.DataFrame(columns=['wtedy', 'teraz', 'wiek'])
+    if {'SCORE_poprzedni', 'Δ SCORE', 'Δ minut', 'Wiek'} <= set(df.columns):
+        wtedy_minuty = minuty - pd.to_numeric(df['Δ minut'], errors='coerce')
+        ok = pelni & df['SCORE_poprzedni'].notna() & df['Δ SCORE'].notna() & (wtedy_minuty >= min_minut)
+        wtedy = df.loc[ok, 'SCORE_poprzedni'] - korekta[ok]
+        pary = pd.DataFrame({'wtedy': wtedy, 'teraz': wtedy + df.loc[ok, 'Δ SCORE'],
+                             'wiek': pd.to_numeric(df.loc[ok, 'Wiek'], errors='coerce')}).astype(float).dropna()
+    n = len(pary)
+    b = B_POCZATKOWE
+    if n >= 10 and pary['wtedy'].var() > 0:
+        b_dane = float(np.clip(pary['wtedy'].cov(pary['teraz']) / pary['wtedy'].var(), *B_ZAKRES))
+        b = (n * b_dane + K_POCZATKOWE * B_POCZATKOWE) / (n + K_POCZATKOWE)
+    if n:
+        # zmiana ponad to, co wynika z regresji do sredniej, wedlug wieku (wiek teraz = koniec zmiany)
+        oczekiwane = pary['teraz'].mean() + b * (pary['wtedy'] - pary['wtedy'].mean())
+        # srednia reszt jest zerowa w calej probie, wiec krzywa pokazuje zmiane wzgledem calej puli
+        pary = pary.assign(reszta=(pary['teraz'] - oczekiwane).clip(-MAKS_RESZTY, MAKS_RESZTY), wiek=pary['wiek'].round())
+    krzywa = {}
+    for wiek in range(15, 41):
+        okno = pary[(pary['wiek'] - wiek).abs() <= 1] if n else pary
+        ile = len(okno)
+        dane = float(okno['reszta'].mean()) if ile else 0.0
+        poczatkowa = krzywa_poczatkowa(wiek)
+        przesuniecie = ile * (dane - poczatkowa) / (ile + K_KRZYWEJ) if ile else 0.0
+        krzywa[wiek] = poczatkowa + float(np.clip(przesuniecie, -MAKS_ODCHYLENIA_KRZYWEJ, MAKS_ODCHYLENIA_KRZYWEJ))
+    return {"srednia": srednia, "b": b, "krzywa": krzywa, "pary": n}
+
+
+def prognoza(df, korekta=None, min_minut=MIN_MINUT_PROGNOZY):
+    """
+    Kopia puli z kolumnami 'Prognoza SCORE' (za rok), 'Prognoza_wiek' (wplyw wieku) i 'Prognoza_regresja'
+    (powrot wyniku za gre w strone sredniej). Opis modelu w df.attrs["prognoza"].
+    """
+    wynik = df.copy()
+    if 'SCORE' not in wynik.columns or 'Wiek' not in wynik.columns:
+        return wynik
+    korekta = pd.Series(0.0, index=df.index) if korekta is None else korekta.reindex(df.index).fillna(0.0)
+    model = model_prognozy(df, korekta, min_minut)
+    wiek = pd.to_numeric(wynik['Wiek'], errors='coerce')
+    krzywa = model["krzywa"]
+    zmiana_wieku = (wiek + 1).round().clip(15, 40).map(lambda w: krzywa.get(int(w)) if pd.notna(w) else np.nan)
+    regresja = (model["b"] - 1.0) * (wynik['SCORE'] - korekta - model["srednia"])
+    wynik['Prognoza_wiek'] = zmiana_wieku.astype(float)
+    wynik['Prognoza_regresja'] = regresja
+    wynik['Prognoza SCORE'] = wynik['SCORE'] + regresja + wynik['Prognoza_wiek']
+    wynik.attrs["prognoza"] = {"b": round(model["b"], 3), "pary": model["pary"], "srednia": round(model["srednia"], 1)}
+    return wynik
