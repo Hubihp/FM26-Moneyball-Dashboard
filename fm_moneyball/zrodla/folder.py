@@ -1,5 +1,5 @@
 """
-Folder zapisow FM26: domyslne lokalizacje, lista zapisow od najnowszego, bezpieczna kopia.
+Folder zapisow FM27 i FM26: domyslne lokalizacje, lista zapisow od najnowszego, bezpieczna kopia.
 
 "Aktualnie zaladowany" zapis to w praktyce plik .fm zmodyfikowany najpozniej - gra zapisuje
 go przy kazdym zapisie recznym i autozapisie. Gra nie udostepnia innej, oficjalnej informacji
@@ -13,8 +13,10 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-PODFOLDER_GRY = Path("Sports Interactive") / "Football Manager 26" / "games"
-STEAM_APP_ID = "3551340"
+# najpierw FM27, potem FM26 - pierwszy istniejacy folder jest domyslny
+PODFOLDERY_GRY = [Path("Sports Interactive") / f"Football Manager {wersja}" / "games" for wersja in (27, 26)]
+PODFOLDER_GRY = PODFOLDERY_GRY[-1]          # FM26 (zgodnosc wstecz)
+STEAM_APP_ID = "3551340"                     # FM26; identyfikator FM27 w Steam nie jest jeszcze znany
 
 
 @dataclass(frozen=True)
@@ -34,20 +36,21 @@ def kandydaci_folderow(home=None, platforma=None, srodowisko=None):
     platforma = platforma or sys.platform
     srodowisko = os.environ if srodowisko is None else srodowisko
     kandydaci = []
-    if platforma.startswith("win"):
-        profil = Path(srodowisko.get("USERPROFILE", home))
-        onedrive = srodowisko.get("OneDrive") or srodowisko.get("OneDriveConsumer")
-        if onedrive:
-            kandydaci += [Path(onedrive) / "Documents" / PODFOLDER_GRY, Path(onedrive) / "Dokumenty" / PODFOLDER_GRY]
-        kandydaci += [profil / "Documents" / PODFOLDER_GRY, profil / "Dokumenty" / PODFOLDER_GRY]
-    elif platforma == "darwin":
-        kandydaci.append(home / "Library" / "Application Support" / PODFOLDER_GRY)
-    else:
-        # Linux / Steam Deck (Proton)
-        kompat = (home / ".local" / "share" / "Steam" / "steamapps" / "compatdata" / STEAM_APP_ID
-                  / "pfx" / "drive_c" / "users" / "steamuser")
-        kandydaci += [kompat / "Documents" / PODFOLDER_GRY, kompat / "My Documents" / PODFOLDER_GRY,
-                      home / ".local" / "share" / PODFOLDER_GRY]
+    for podfolder in PODFOLDERY_GRY:
+        if platforma.startswith("win"):
+            profil = Path(srodowisko.get("USERPROFILE", home))
+            onedrive = srodowisko.get("OneDrive") or srodowisko.get("OneDriveConsumer")
+            if onedrive:
+                kandydaci += [Path(onedrive) / "Documents" / podfolder, Path(onedrive) / "Dokumenty" / podfolder]
+            kandydaci += [profil / "Documents" / podfolder, profil / "Dokumenty" / podfolder]
+        elif platforma == "darwin":
+            kandydaci.append(home / "Library" / "Application Support" / podfolder)
+        else:
+            # Linux / Steam Deck (Proton)
+            kompat = (home / ".local" / "share" / "Steam" / "steamapps" / "compatdata" / STEAM_APP_ID
+                      / "pfx" / "drive_c" / "users" / "steamuser")
+            kandydaci += [kompat / "Documents" / podfolder, kompat / "My Documents" / podfolder,
+                          home / ".local" / "share" / podfolder]
     return kandydaci
 
 

@@ -43,10 +43,11 @@ def test_czy_stabilny(tmp_path):
 def test_kandydaci_folderow():
     win = folder.kandydaci_folderow(home="C:/Users/jan", platforma="win32",
                                     srodowisko={"USERPROFILE": "C:/Users/jan", "OneDrive": "C:/Users/jan/OneDrive"})
-    assert win[0] == Path("C:/Users/jan/OneDrive/Documents/Sports Interactive/Football Manager 26/games")
+    assert win[0] == Path("C:/Users/jan/OneDrive/Documents/Sports Interactive/Football Manager 27/games")
     assert Path("C:/Users/jan/Documents/Sports Interactive/Football Manager 26/games") in win
     mac = folder.kandydaci_folderow(home="/Users/jan", platforma="darwin", srodowisko={})
-    assert mac == [Path("/Users/jan/Library/Application Support/Sports Interactive/Football Manager 26/games")]
+    assert mac == [Path("/Users/jan/Library/Application Support/Sports Interactive/Football Manager 27/games"),
+                   Path("/Users/jan/Library/Application Support/Sports Interactive/Football Manager 26/games")]
     linux = folder.kandydaci_folderow(home="/home/deck", platforma="linux", srodowisko={})
     assert any("compatdata/3551340" in str(p) for p in linux)
 
@@ -55,3 +56,12 @@ def test_domyslny_folder_istniejacy(tmp_path):
     gry = tmp_path / "Library" / "Application Support" / folder.PODFOLDER_GRY
     gry.mkdir(parents=True)
     assert folder.domyslny_folder(home=tmp_path, platforma="darwin", srodowisko={}) == gry
+
+
+def test_folder_fm27_przed_fm26(tmp_path):
+    fm26 = tmp_path / "Library" / "Application Support" / folder.PODFOLDERY_GRY[1]
+    fm27 = tmp_path / "Library" / "Application Support" / folder.PODFOLDERY_GRY[0]
+    fm26.mkdir(parents=True)
+    assert folder.domyslny_folder(home=tmp_path, platforma="darwin", srodowisko={}) == fm26
+    fm27.mkdir(parents=True)
+    assert folder.domyslny_folder(home=tmp_path, platforma="darwin", srodowisko={}) == fm27

@@ -1,6 +1,6 @@
 # FM27 Dashboard
 
-Narzędzie do wyszukiwania zawodników w Football Manager 26 w stylu Moneyball. Liczy wynik (SCORE) na tle innych zawodników z tej samej pozycji, z korektą na małą liczbę minut i siłę ligi. Do tego porównanie na radarze, wyszukiwanie „sobowtóra” i wykresy wyniku względem ceny.
+Narzędzie do wyszukiwania zawodników w Football Manager 27 i 26 w stylu Moneyball. Zapisy FM27 czyta biblioteka fmsave od wersji 0.9; jej obsługa FM27 jest jeszcze wstępna (część pól niepotwierdzona), więc program pokazuje wtedy ostrzeżenie. Liczy wynik (SCORE) na tle innych zawodników z tej samej pozycji, z korektą na małą liczbę minut i siłę ligi. Do tego porównanie na radarze, wyszukiwanie „sobowtóra” i wykresy wyniku względem ceny.
 
 ## Uruchomienie
 

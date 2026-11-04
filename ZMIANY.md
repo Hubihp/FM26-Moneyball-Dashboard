@@ -3,6 +3,15 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 1.9.0
+
+- Obsługa zapisów FM27 (fmsave 0.9.3). Program szuka zapisów najpierw w folderze „Football Manager 27”,
+  potem „Football Manager 26”; kariery FM26 działają jak dotąd.
+- Obsługa FM27 w fmsave jest wstępna: część pól nie jest jeszcze potwierdzona, a nowsze wersje gry niż
+  zweryfikowana są czytane z ostrzeżeniem (krótki komunikat po polsku zamiast technicznego).
+- Kilku „wolnych agentów” z błędnie odczytanymi statystykami znika z puli FM26 (dokładniejszy odczyt klubów
+  w nowym fmsave).
+
 ## 1.8.0
 
 - Liga według drużyny, w której zawodnik grał: mnożnik ligi w SCORE to średnia mnożników lig ważona minutami.

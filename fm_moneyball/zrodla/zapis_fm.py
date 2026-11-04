@@ -1,5 +1,5 @@
 """
-Zrodlo: plik zapisu kariery FM26 (.fm), czytany biblioteka `fmsave`.
+Zrodlo: plik zapisu kariery FM27 albo FM26 (.fm), czytany biblioteka `fmsave`.
 
 Plik .fm to kontener z sekcjami skompresowanymi Zstandardem (bez szyfrowania); fmsave
 rozpakowuje go i dekoduje rekordy gry. Z jednego zapisu powstaja od razu ramki dla
@@ -956,9 +956,13 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
             except Exception as e:   # historia kontuzji jest dodatkiem - jej brak nie blokuje reszty
                 ostrzezenia.append(f"Nie udało się odczytać historii kontuzji ({e}).")
                 kontuzje = {}
+    if str(info.build).startswith("27."):
+        ostrzezenia.append("Zapis FM27: obsługa tej wersji gry w bibliotece fmsave jest wstępna - część pól nie "
+                           "jest jeszcze potwierdzona, więc pojedyncze statystyki mogą być błędne.")
     for w in zlapane:
         if issubclass(w.category, fmsave.UnknownBuildWarning):
-            ostrzezenia.append(f"Nieznana wersja gry - fmsave może czytać dane błędnie: {w.message}")
+            ostrzezenia.append(f"Wersja gry {info.build} nie jest jeszcze zweryfikowana w fmsave {fmsave.__version__} - "
+                               "dane mogą być odczytane błędnie. Sprawdź aktualizację programu.")
 
     etap(5)
     moje = [{"uid": m.club_uid, "nazwa": m.club_name} for m in zarzadzane]
