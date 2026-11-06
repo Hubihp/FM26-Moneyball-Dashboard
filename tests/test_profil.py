@@ -16,7 +16,7 @@ def _druzyny():
     return {
         1: {**baza, "nazwa": "Moj FC", "goals": 30, "fouls_made": 150, "distance_km": 1100},
         2: {**baza, "nazwa": "Drugi"},
-        3: {**baza, "nazwa": "Trzeci", "goals": 10, "fouls_made": 80, "distance_km": 1300},
+        3: {**baza, "nazwa": "Trzeci", "goals": 10, "fouls_made": 80, "distance_km": 1300, "passes_completed": 4000},
     }
 
 
@@ -86,6 +86,16 @@ def test_zmiany_spadki_i_wzrosty():
     assert z["oceny_wzrosty"] == []                                    # zawodnik 2: za malo minut teraz
 
 
+def test_wskaznik_bez_roznic_pominiety():
+    """Wszyscy z ta sama wartoscia (np. 0 z pola, ktorego zapis nie podaje): bez miejsca i mocnych stron."""
+    druzyny = {u: {**d, "fouls_made": 0} for u, d in _druzyny().items()}
+    t = profil.tabela_profilu(druzyny, [1, 2, 3])
+    sekcje = profil.porownanie(t, 1)
+    nazwy = {m["nazwa"] for lista in sekcje.values() for m in lista}
+    assert "Faule na mecz" not in nazwy and "Dystans na mecz (km)" in nazwy
+    assert all(m["nazwa"] != "Faule na mecz" for m in profil.podsumowanie(sekcje, 10)["mocne"])
+
+
 def test_sumy_druzyn_z_wierszy_zapisu():
     def w(gracz, klub, slot, minuty, gole, ocena=7.0, mecze=10):
         return NS(kind="league", player_uid=gracz, club_uid=klub, club_name=f"K{klub}", team_slot=slot,
@@ -96,6 +106,8 @@ def test_sumy_druzyn_z_wierszy_zapisu():
     assert d[10]["goals"] == 3 and d[10]["minutes"] == 1350          # bez rezerw (slot 1) i pucharu
     assert d[10]["sklad"] == {1: 900.0, 2: 450.0} and d[20]["sklad"] == {1: 300.0}
     assert d[10]["ocena"] == pytest.approx((7.0 * 10 + 6.0 * 5) / 15)
+    # pola, ktorych zapis nie podaje wcale (FM27: pressing) - brak danych, a nie 0
+    assert d[10]["pressures_completed"] is None and d[10]["passes_attempted"] is None
 
     def tab(comp, kluby):
         return NS(competition_id=comp, rows=[NS(club_uid=k, club_name=f"K{k}", position=i + 1, played=30, won=1,

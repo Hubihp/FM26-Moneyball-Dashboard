@@ -135,7 +135,8 @@ def porownanie(profil, moj_uid):
         return sekcje
     for sekcja, nazwa, _, wyzej, fmt, opis in METRYKI:
         wartosci = profil[nazwa].dropna()
-        if moj_uid not in wartosci.index or len(wartosci) < 2:
+        # wszyscy z ta sama wartoscia (np. pole, ktorego zapis nie podaje) - nie ma czego rangowac
+        if moj_uid not in wartosci.index or len(wartosci) < 2 or wartosci.nunique() < 2:
             continue
         miejsca = wartosci.rank(ascending=not wyzej, method='min')
         sekcje.setdefault(sekcja, []).append({

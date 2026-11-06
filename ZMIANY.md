@@ -3,6 +3,14 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 1.9.1
+
+- Ostrzeżenia na górze programu można zamknąć przyciskiem „x”. Zamknięte zostają zamknięte także po
+  ponownym uruchomieniu; wracają tylko, gdy zmieni się ich treść (np. inna wersja gry).
+- fmsave 0.10.0: pełniejsza obsługa zapisów FM27.
+- Profil drużyny: wskaźnik, którego zapis nie podaje (w FM27 pressing) albo w którym wszystkie kluby mają tę
+  samą wartość, nie dostaje już miejsca w lidze i nie trafia do mocnych ani słabych stron.
+
 ## 1.9.0
 
 - Obsługa zapisów FM27 (fmsave 0.9.3). Program szuka zapisów najpierw w folderze „Football Manager 27”,

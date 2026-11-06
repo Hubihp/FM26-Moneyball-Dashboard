@@ -281,6 +281,7 @@ def sumuj_druzyny(wiersze, rodzaj):
     sumy = defaultdict(lambda: defaultdict(float))
     sklady = defaultdict(lambda: defaultdict(float))
     nazwy = {}
+    obecne = set()        # pola, ktore zapis w ogole podaje (np. FM27 nie ma pressingu)
     for w in wiersze:
         if str(getattr(w, "kind", "")) != rodzaj or w.club_uid is None or (getattr(w, "team_slot", 0) or 0) != 0:
             continue
@@ -292,13 +293,15 @@ def sumuj_druzyny(wiersze, rodzaj):
             wartosc = getattr(w, pole, None)
             if wartosc is not None:
                 s[pole] += float(wartosc)
+                obecne.add(pole)
         ocena, mecze = getattr(w, "average_rating", None), getattr(w, "rated_appearances", None)
         if ocena is not None and mecze:
             s["_ocena_suma"] += float(ocena) * mecze
             s["_ocena_mecze"] += mecze
     wynik = {}
     for uid, s in sumy.items():
-        d = {p: s.get(p, 0.0) for p in POLA_DRUZYNY}
+        # pole nieobecne w calym zapisie = brak danych (a nie 0 u kazdego klubu)
+        d = {p: s.get(p, 0.0) if p in obecne else None for p in POLA_DRUZYNY}
         d["nazwa"] = nazwy.get(uid)
         d["ocena"] = s["_ocena_suma"] / s["_ocena_mecze"] if s.get("_ocena_mecze") else None
         d["sklad"] = dict(sklady[uid])

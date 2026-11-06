@@ -106,6 +106,8 @@ export default function App() {
   // skurczenie przy malej probie: ukryte w panelu, zawsze wartosc domyslna (zapamietana inna jest pomijana)
   const ustawienia = useMemo(() => ({ ...ustawieniaZapisane, k_baza: K_BAZA }), [ustawieniaZapisane]);
   const [wagiWlasne, setWagiWlasne] = usePamiec<Record<string, Record<string, number>>>('fm-wagi', {});
+  // zamkniete ostrzezenia (po tresci) - wracaja tylko, gdy tresc sie zmieni
+  const [ukryteOstrzezenia, setUkryteOstrzezenia] = usePamiec<string[]>('fm-ukryte-ostrzezenia', []);
   // jednorazowa migracja wlasnych wag dawnych pozycji na nowe (np. Skrzydlowy -> LS, PS, LP, PP)
   useEffect(() => {
     const stare = Object.keys(wagiWlasne).filter((p) => p in STARE_POZYCJE);
@@ -303,7 +305,16 @@ export default function App() {
       <AppShell.Main style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
         <PasekSystemu />
         {s?.status === 'blad' && <Alert color="red" m="md" title="Problem z danymi">{s.komunikat}</Alert>}
-        {(s?.meta.ostrzezenia ?? []).map((o) => <Alert key={o} color="yellow" mx="md" mt="xs">{o}</Alert>)}
+        {(s?.meta.ostrzezenia ?? []).filter((o) => !ukryteOstrzezenia.includes(o)).map((o) => (
+          <Alert key={o} color="yellow" mx="md" mt="xs" withCloseButton closeButtonLabel="Zamknij ostrzeżenie"
+            onClose={() => {
+              const obecne = s?.meta.ostrzezenia ?? [];
+              // tylko ostrzezenia, ktore wciaz wystepuja - lista w pamieci nie rosnie w nieskonczonosc
+              setUkryteOstrzezenia([...ukryteOstrzezenia.filter((u) => obecne.includes(u)), o]);
+            }}>
+            {o}
+          </Alert>
+        ))}
 
         {!gotowe ? (
           <Center style={{ flex: 1 }}>
