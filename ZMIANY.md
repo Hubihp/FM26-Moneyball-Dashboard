@@ -3,6 +3,12 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 1.9.2
+
+- fmsave 0.12.1. Sprawdzone na zapisie FM27 w wersji poprawkowej 27.0.1: dane identyczne jak z poprzednim
+  fmsave. Ta wersja gry nie jest jeszcze zweryfikowana w fmsave, więc ostrzeżenie zostaje (pokaże się raz
+  ponownie, bo zmieniła się jego treść).
+
 ## 1.9.1
 
 - Ostrzeżenia na górze programu można zamknąć przyciskiem „x”. Zamknięte zostają zamknięte także po
