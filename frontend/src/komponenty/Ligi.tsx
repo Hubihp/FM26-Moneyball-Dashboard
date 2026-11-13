@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { api, type Kraj, type Liga, type Ligi as DaneLig } from '../api';
+import { SZEROKOSC } from '../wyglad';
 
 function WierszLigi({ liga, dane }: { liga: Liga; dane: DaneLig }) {
   const klient = useQueryClient();
@@ -30,24 +31,29 @@ function WierszLigi({ liga, dane }: { liga: Liga; dane: DaneLig }) {
   return (
     <Table.Tr>
       <Table.Td>
-        <Text size="sm" fw={600}>{liga.domyslna}</Text>
-        <Text size="xs" c="dimmed">klucz {liga.klucz ?? '–'}</Text>
+        <Text size="sm" fw={600}>{liga.nazwa ?? liga.domyslna}</Text>
+        <Text size="xs" c="dimmed">
+          {liga.nazwa_auto ? 'nazwa automatyczna · ' : ''}nr {liga.klucz ?? '–'} · {liga.liczba} klubów
+        </Text>
       </Table.Td>
-      <Table.Td>{liga.liczba}</Table.Td>
       <Table.Td><Text size="xs">{liga.kluby.join(', ')}</Text></Table.Td>
-      <Table.Td miw={220}>
-        <Autocomplete size="xs" placeholder="Nazwa z gry" data={dane.znane_nazwy} value={nazwa} limit={30}
-          onChange={(v) => {
-            setNazwa(v);
-            if (v in dane.mnozniki) setMnoznik(dane.mnozniki[v]);
-          }} />
+      <Table.Td>
+        <Text size="sm" fw={600}>{liga.mnoznik_auto?.toFixed(3).replace('.', ',') ?? '–'}</Text>
+        <Text size="xs" c="dimmed">
+          {liga.zrodlo_mnoznika === 'transfery' ? 'z transferów' : 'z reputacji'}
+          {liga.reputacja ? ` · rep. ${Math.round(liga.reputacja)}` : ''}
+        </Text>
       </Table.Td>
-      <Table.Td w={120}>
-        <NumberInput size="xs" min={0.3} max={1.2} step={0.01} decimalScale={3} value={mnoznik}
-          placeholder={String(dane.mnoznik_nieznanej)} onChange={(v) => setMnoznik(v === '' ? '' : Number(v))} />
+      <Table.Td miw={200}>
+        <Autocomplete placeholder={liga.nazwa ?? 'Nazwa z gry'} data={dane.znane_nazwy} value={nazwa} limit={30}
+          onChange={setNazwa} />
+      </Table.Td>
+      <Table.Td w={130}>
+        <NumberInput min={0.3} max={1.2} step={0.01} decimalScale={3} value={mnoznik}
+          placeholder="auto" onChange={(v) => setMnoznik(v === '' ? '' : Number(v))} />
       </Table.Td>
       <Table.Td>
-        <Button size="xs" onClick={zapisz} loading={zapisuje} disabled={!zmieniona || !nazwa.trim() || liga.klucz === null}>
+        <Button onClick={zapisz} loading={zapisuje} disabled={!zmieniona || !nazwa.trim() || liga.klucz === null}>
           Zapisz
         </Button>
         {blad && <Text size="xs" c="red">{blad}</Text>}
@@ -55,6 +61,10 @@ function WierszLigi({ liga, dane }: { liga: Liga; dane: DaneLig }) {
     </Table.Tr>
   );
 }
+
+const ZRODLA_KRAJU: Record<string, string> = {
+  baza: ' · z bazy gry', liga: ' · z ligi', kluby: ' · z klubów krajowych', 'ręcznie': ' · Twoja nazwa',
+};
 
 function WierszKraju({ kraj }: { kraj: Kraj }) {
   const klient = useQueryClient();
@@ -76,7 +86,7 @@ function WierszKraju({ kraj }: { kraj: Kraj }) {
         <Text size="sm" fw={600}>{kraj.nazwa ?? `Kraj #${kraj.id}`}</Text>
         <Text size="xs" c="dimmed">
           {kraj.id !== null ? `id ${kraj.id}` : ''}
-          {kraj.zrodlo === 'liga' ? ' · nazwa z ligi' : kraj.zrodlo === 'kluby' ? ' · nazwa z klubów krajowych' : ''}
+          {ZRODLA_KRAJU[kraj.zrodlo ?? ''] ?? ''}
         </Text>
       </Table.Td>
       <Table.Td>{kraj.liczba}</Table.Td>
@@ -84,11 +94,11 @@ function WierszKraju({ kraj }: { kraj: Kraj }) {
       {kraj.id !== null && (
         <>
           <Table.Td miw={200}>
-            <TextInput size="xs" placeholder={kraj.nazwa ?? 'Nazwa kraju'} value={nazwa}
+            <TextInput placeholder={kraj.nazwa ?? 'Nazwa kraju'} value={nazwa}
               onChange={(e) => setNazwa(e.currentTarget.value)} />
           </Table.Td>
           <Table.Td>
-            <Button size="xs" onClick={zapisz} loading={zapisuje} disabled={nazwa.trim() === (kraj.reczna ? kraj.nazwa ?? '' : '')}>
+            <Button onClick={zapisz} loading={zapisuje} disabled={nazwa.trim() === (kraj.reczna ? kraj.nazwa ?? '' : '')}>
               Zapisz
             </Button>
           </Table.Td>
@@ -113,7 +123,7 @@ function PokazWiecej({ rozwiniete, ukryte, przelacz, wszystkich }: {
 }) {
   if (!rozwiniete && ukryte === 0) return null;
   return (
-    <Button variant="subtle" size="xs" onClick={przelacz} style={{ alignSelf: 'flex-start' }}>
+    <Button variant="subtle" onClick={przelacz} style={{ alignSelf: 'flex-start' }}>
       {rozwiniete ? 'Pokaż mniej' : `Pokaż więcej (${ukryte} z ${wszystkich})`}
     </Button>
   );
@@ -139,10 +149,10 @@ function MnoznikRezerw({ dane }: { dane: DaneLig }) {
   };
   return (
     <Group align="end" gap="xs">
-      <NumberInput size="xs" w={260} label="Mnożnik rezerw, drużyn młodzieżowych i innych rozgrywek" min={0.3} max={1.2}
-        step={0.01} decimalScale={3} value={mnoznik} placeholder={`${dane.mnoznik_nieznanej} (jak liga nieznana)`}
+      <NumberInput w={SZEROKOSC.szeroka} label="Mnożnik rezerw, drużyn młodzieżowych i innych rozgrywek" min={0.3} max={1.2}
+        step={0.01} decimalScale={3} value={mnoznik} placeholder={`auto: ${dane.mnoznik_rezerw_auto}`}
         onChange={(v) => setMnoznik(v === '' ? '' : Number(v))} />
-      <Button size="xs" onClick={zapisz} loading={zapisuje}
+      <Button onClick={zapisz} loading={zapisuje}
         disabled={(mnoznik === '' ? null : mnoznik) === dane.mnoznik_rezerw}>Zapisz</Button>
       {blad && <Text size="xs" c="red">{blad}</Text>}
     </Group>
@@ -165,30 +175,29 @@ function SekcjaLig({ wersja }: { wersja: number }) {
       </Stack>
     );
   }
-  const bezNazwy = dane.ligi.filter((l) => !l.nazwa).length;
-  const posortowane = [...dane.ligi].sort((a, b) => b.liczba - a.liczba);
-  const { widoczne, ukryte } = zwin(posortowane, (l) => !!l.nazwa, rozwiniete);
+  const posortowane = [...dane.ligi].sort((a, b) => (b.mnoznik_auto ?? 0) - (a.mnoznik_auto ?? 0));
+  const { widoczne, ukryte } = zwin(posortowane, () => true, rozwiniete);
 
   return (
     <Stack>
       <Group gap="xs">
         {naglowek}
-        <Badge color={bezNazwy ? 'yellow' : 'teal'} variant="light">bez nazwy: {bezNazwy}</Badge>
         <Badge color="gray" variant="light">wszystkich: {dane.ligi.length}</Badge>
       </Group>
       <Text size="sm" c="dimmed">
-        Zapis gry nie zawiera nazw lig - tylko numery rozgrywek. Nazwę sprawdzisz w grze, otwierając jeden z klubów z listy.
-        Liga bez nazwy dostaje najniższy mnożnik ({dane.mnoznik_nieznanej}). Mnożnik to siła ligi (Premier League ≈ 0,92,
-        Ekstraklasa ≈ 0,80); dla nazw z podpowiedzi uzupełnia się sam. Zmiany zapisują się na stałe.
-        Mnożnik w SCORE to średnia mnożników lig, w których zawodnik grał w sezonie, ważona minutami - minuty w
-        rezerwach, drużynach młodzieżowych i ligach niewykrytych liczą się z mnożnikiem poniżej.
+        Nazwy i mnożniki lig ustawiają się same - nic nie musisz wpisywać. Nazwy pochodzą z tabeli numerów rozgrywek
+        (zapis gry podaje tylko numer); liga spoza tabeli dostaje nazwę z kraju swoich klubów. Mnożnik (siła ligi) jest
+        liczony z danych: z tego, jak zmienia się gra zawodników po zmianie ligi (ligi z wieloma transferami), i z
+        reputacji klubów ligi odczytanej z zapisu (pozostałe). W SCORE liczy się średnia mnożników lig, w których
+        zawodnik grał, ważona minutami. Własną nazwę lub mnożnik możesz wpisać opcjonalnie - puste pole przywraca wartość
+        automatyczną.
       </Text>
       <MnoznikRezerw key={String(dane.mnoznik_rezerw)} dane={dane} />
       <Table striped highlightOnHover>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>Rozgrywki</Table.Th><Table.Th>Kluby</Table.Th><Table.Th>Przykładowe kluby</Table.Th>
-            <Table.Th>Nazwa</Table.Th><Table.Th>Mnożnik</Table.Th><Table.Th />
+            <Table.Th>Liga</Table.Th><Table.Th>Przykładowe kluby</Table.Th><Table.Th>Mnożnik</Table.Th>
+            <Table.Th>Własna nazwa</Table.Th><Table.Th>Własny mnożnik</Table.Th><Table.Th />
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -211,7 +220,7 @@ function SekcjaKrajow({ wersja }: { wersja: number }) {
   const wszystkie = kraje.data.kraje;
   const edycja = wszystkie.some((k) => k.id !== null);
   const bezNazwy = wszystkie.filter((k) => !k.nazwa).length;
-  const posortowane = [...wszystkie].sort((a, b) => b.liczba - a.liczba);
+  const posortowane = [...wszystkie].sort((a, b) => b.liczba - a.liczba);   // kraje bez nazwy i tak na gorze
   const { widoczne, ukryte } = zwin(posortowane, (k) => !!k.nazwa, rozwiniete);
   return (
     <Stack>
@@ -222,9 +231,8 @@ function SekcjaKrajow({ wersja }: { wersja: number }) {
       </Group>
       {edycja && (
         <Text size="sm" c="dimmed">
-          Narodowości zawodników. Zapis nie zawiera nazw krajów - aplikacja nadaje je sama: z nazwanych lig (zawodnicy
-          Ekstraklasy → Polska) i ze składów typowo krajowych klubów (np. Hibernian, Aberdeen → Szkocja). Złą albo brakującą
-          nazwę możesz tu poprawić; pusta nazwa przywraca nazwę automatyczną.
+          Narodowości zawodników nadawane automatycznie: zapis podaje stały numer kraju w bazie gry, a program ma tabelę
+          nazw dla wszystkich krajów z zawodnikami. Nazwę możesz opcjonalnie zmienić; pusta przywraca automatyczną.
         </Text>
       )}
       <Table striped highlightOnHover>

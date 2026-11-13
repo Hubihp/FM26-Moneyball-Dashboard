@@ -11,6 +11,7 @@ po zmianie wag historia przelicza sie sama.
 Rozwoj = porownanie z ostatnia migawka z poprzedniego sezonu (sezon od 1 lipca). Wskazniki licza
 sie tylko dla zawodnikow z co najmniej MIN_MINUT minutami w obu sezonach.
 """
+import json
 import re
 import shutil
 from datetime import date
@@ -192,14 +193,17 @@ def dolicz_rozwoj(teraz, wtedy, min_minut=MIN_MINUT, wymagaj_minut=False, teraz_
 # (zawodnicy z pelnymi statystykami i co najmniej MIN_MINUT_PROGNOZY minutami w obu sezonach) i laczone
 # z wartosciami poczatkowymi; te maja duza wage, bo starsze migawki bywaja liczone innym modelem.
 MIN_MINUT_PROGNOZY = 900
-B_POCZATKOWE = 0.7               # typowa korelacja wyniku rok do roku
+# Wartosci poczatkowe z danych: dwa sezony kariery FM27 (3253 zawodnikow z >= 900 min w tej samej lidze w obu
+# sezonach): nachylenie wyniku za gre rok do roku 0,55, zmiana z wiekiem wzgledem calej puli od +1,6 do -1 pkt.
+B_POCZATKOWE = 0.55              # stabilnosc wyniku za gre rok do roku
 B_ZAKRES = (0.5, 1.0)
 K_POCZATKOWE = 100               # sila wartosci poczatkowych (w liczbie par)
 K_KRZYWEJ = 50                   # to samo dla krzywej wieku (w liczbie par w danym wieku)
 MAKS_RESZTY = 15                 # skrajne zmiany (kontuzja, zmiana roli) obcinane przy liczeniu krzywej
 MAKS_ODCHYLENIA_KRZYWEJ = 2.0     # dane przesuwaja krzywa poczatkowa najwyzej o tyle (jeden sezon historii to malo)
 # zmiana SCORE w ciagu roku w danym wieku (punkty skali T, wzgledem calej puli): mlodzi rosna, po ~27 spadek
-KRZYWA_POCZATKOWA = {16: 4.0, 19: 4.0, 21: 3.0, 23: 2.0, 25: 1.0, 27: 0.0, 29: -0.5, 31: -1.5, 33: -3.0, 40: -3.0}
+KRZYWA_POCZATKOWA = {16: 2.0, 19: 1.8, 21: 1.0, 23: 0.6, 25: 0.4, 27: -0.1, 29: -0.1, 31: -0.4, 33: -0.9, 35: -1.2,
+                     40: -1.5}
 
 
 def krzywa_poczatkowa(wiek):
@@ -271,3 +275,50 @@ def prognoza(df, korekta=None, min_minut=MIN_MINUT_PROGNOZY):
     wynik['Prognoza SCORE'] = wynik['SCORE'] + regresja + wynik['Prognoza_wiek']
     wynik.attrs["prognoza"] = {"b": round(model["b"], 3), "pary": model["pary"], "srednia": round(model["srednia"], 1)}
     return wynik
+
+
+# =============================================================================
+# MIGAWKI ZE STARSZYCH ZAPISOW FOLDERU
+# =============================================================================
+MAKS_MIGAWEK_Z_FOLDERU = 24      # najwyzej tyle miesiecy wstecz na jedno przejrzenie folderu
+PLIK_PRZEJRZANYCH = ".z_folderu.json"
+
+
+def klucz_pliku(plik):
+    """Tozsamosc pliku zapisu (sciezka, rozmiar, czas zmiany) - zmieniony plik jest przegladany ponownie."""
+    return f"{plik.sciezka}|{plik.rozmiar}|{int(plik.mtime)}"
+
+
+def przejrzane(katalog):
+    """{klucz pliku: wynik} - zapisy folderu juz przejrzane dla tej kariery (ok / inna kariera / blad)."""
+    try:
+        return json.loads((Path(katalog) / PLIK_PRZEJRZANYCH).read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def zapisz_przejrzane(katalog, wpisy):
+    Path(katalog).mkdir(parents=True, exist_ok=True)
+    (Path(katalog) / PLIK_PRZEJRZANYCH).write_text(json.dumps(wpisy, ensure_ascii=False), encoding="utf-8")
+
+
+def do_uzupelnienia(zapisy, katalog, data_gry, maks=MAKS_MIGAWEK_Z_FOLDERU):
+    """
+    [(plik, data w grze)] zapisow folderu -> zapisy do odczytu, od najnowszego: po jednym na miesiac (najpozniejsza
+    data w miesiacu), tylko miesiace sprzed biezacego, bez migawki w katalogu i bez wczesniejszego przejrzenia.
+    """
+    if data_gry is None:
+        return []
+    biezacy = (data_gry.year, data_gry.month)
+    sa = {(d.year, d.month) for _, d in migawki(katalog)}
+    juz = przejrzane(katalog) if katalog is not None else {}
+    wg_miesiaca = {}
+    for plik, dzien in zapisy:
+        if dzien is None:
+            continue
+        miesiac = (dzien.year, dzien.month)
+        if miesiac >= biezacy or miesiac in sa or klucz_pliku(plik) in juz:
+            continue
+        if miesiac not in wg_miesiaca or dzien > wg_miesiaca[miesiac][1]:
+            wg_miesiaca[miesiac] = (plik, dzien)
+    return sorted(wg_miesiaca.values(), key=lambda x: x[1], reverse=True)[:maks]

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import type { Kolumna, ModelWyceny, Wiersz } from '../api';
 import { eur } from '../format';
 import Wykres from './Wykres';
+import { SZEROKOSC } from '../wyglad';
 
 type Props = {
   wiersze: Wiersz[];
@@ -103,9 +104,9 @@ export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naW
       <div>
         <Group justify="space-between">
           <Title order={5}>Wynik vs {os === 'Koszt' ? 'koszt' : 'wartość'} (najlepsi wg SCORE)</Title>
-          <SegmentedControl size="xs" value={os} onChange={(v) => setOs(v as typeof os)}
+          <SegmentedControl value={os} onChange={(v) => setOs(v as typeof os)}
             data={[{ value: 'Koszt', label: 'Koszt (cena + 3 lata pensji)' }, { value: 'Wartość_Numeryczna', label: 'Wartość' }]} />
-          <NumberInput size="xs" w={140} min={10} max={500} step={10} value={ile} onChange={(v) => setIle(Number(v) || 60)}
+          <NumberInput w={SZEROKOSC.waska} min={10} max={500} step={10} value={ile} onChange={(v) => setIle(Number(v) || 60)}
             label="Liczba zawodników" />
         </Group>
         <Text size="xs" c="dimmed">

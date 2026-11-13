@@ -2,7 +2,8 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from fm_moneyball.kraje import podsumuj_kraje, zapisz_nazwe_kraju
-from fm_moneyball.ligi import wszystkie_mnozniki, zapisz_mnoznik
+from fm_moneyball.ligi import (KOREKTA_REZERW, mnoznik_z_korekty, wczytaj_mnozniki_uzytkownika, wszystkie_mnozniki,
+                               zapisz_mnoznik)
 from fm_moneyball.schemat import REZERWY
 from fm_moneyball.serwer.modele import KrajModel, LigaModel
 from fm_moneyball.stale import MNOZNIK_NIEZNANEJ_LIGI, MNOZNIKI_LIG
@@ -16,16 +17,19 @@ def utworz(stan):
     @router.get("/ligi")
     def ligi():
         mnozniki = wszystkie_mnozniki(stan.plik_mnoznikow)
+        reczne = wczytaj_mnozniki_uzytkownika(stan.plik_mnoznikow)
         wynik = []
         for liga in stan.ligi:
             nazwa = liga.get("nazwa")
-            wynik.append({**liga, "mnoznik": mnozniki.get(nazwa) if nazwa else None})
-        return {"ligi": sorted(wynik, key=lambda l: (l["nazwa"] is not None, -l["liczba"])),
+            # "mnoznik" - wpisany recznie (pierwszenstwo), "mnoznik_auto" - z danych o transferach i reputacji ligi
+            wynik.append({**liga, "mnoznik": reczne.get(nazwa) if nazwa else None})
+        return {"ligi": sorted(wynik, key=lambda l: -l["liczba"]),
                 "znane_nazwy": sorted(set(MNOZNIKI_LIG) | set(mnozniki)),
                 "mnozniki": mnozniki,
                 "mnoznik_nieznanej": MNOZNIK_NIEZNANEJ_LIGI,
                 # minuty w rezerwach, druzynach mlodziezowych i ligach niewykrytych (mnoznik wazony minutami)
-                "mnoznik_rezerw": mnozniki.get(REZERWY), "nazwa_rezerw": REZERWY}
+                "mnoznik_rezerw": mnozniki.get(REZERWY), "nazwa_rezerw": REZERWY,
+                "mnoznik_rezerw_auto": round(mnoznik_z_korekty(KOREKTA_REZERW), 3)}
 
     @router.put("/ligi/{klucz}")
     def zmien_lige(klucz: int, z: LigaModel):
@@ -34,7 +38,8 @@ def utworz(stan):
         nazwa = (z.nazwa or "").strip()
         if nazwa:
             zapisz_nazwy_rozgrywek({klucz: nazwa}, stan.plik_nazw)
-            if z.mnoznik is not None and wszystkie_mnozniki(stan.plik_mnoznikow).get(nazwa) != z.mnoznik:
+            # reczny mnoznik nadpisuje automatyczny; puste pole wraca do automatycznego
+            if wczytaj_mnozniki_uzytkownika(stan.plik_mnoznikow).get(nazwa) != z.mnoznik:
                 zapisz_mnoznik(nazwa, z.mnoznik, stan.plik_mnoznikow)
         stan.zastosuj_ligi()
         return ligi()

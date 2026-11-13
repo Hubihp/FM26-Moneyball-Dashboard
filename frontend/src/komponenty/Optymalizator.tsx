@@ -6,6 +6,7 @@ import { api, type PozycjaKadry, type Stan, type Wiersz, type WyborOptymalizator
 import { eur, formatuj } from '../format';
 import { kluczZawodnika, usePamiec } from '../pamiec';
 import { PrzyciskGwiazdki } from './Gwiazdka';
+import { SZEROKOSC } from '../wyglad';
 
 type Props = {
   zapytanie: ZapytanieKadry;
@@ -82,9 +83,9 @@ export default function Optymalizator({ zapytanie, wersja, pozycje, otworz, ulub
         z gry (wolny agent: 0 €), pensja - obecna tygodniowa; klub zwykle żąda więcej, a zawodnik może chcieć podwyżki.
       </Text>
       <Group align="end" gap="sm">
-        <NumberInput label="Budżet transferowy (mln €)" w={190} min={0} step={5} decimalScale={1} value={budzetMln}
+        <NumberInput label="Budżet transferowy (mln €)" w={SZEROKOSC.srednia} min={0} step={5} decimalScale={1} value={budzetMln}
           onChange={(v) => setBudzetWlasny(Number(v) || 0)} />
-        <NumberInput label="Pensje nowych (tys. € / tydz.)" w={210} min={0} step={10} value={placTys}
+        <NumberInput label="Pensje nowych (tys. € / tydz.)" w={SZEROKOSC.srednia} min={0} step={10} value={placTys}
           onChange={(v) => setPlacWlasne(Number(v) || 0)} />
         <MultiSelect label="Pozycje do wzmocnienia" w={420} data={pozycje} value={pozycjeWybrane}
           onChange={setWybrane} maxValues={8} placeholder="Wybierz pozycje" />
@@ -100,7 +101,7 @@ export default function Optymalizator({ zapytanie, wersja, pozycje, otworz, ulub
             {budzetWlasny !== null || placWlasne !== null ? ' Używasz własnych kwot.' : ''}
           </Text>
           {(budzetWlasny !== null || placWlasne !== null) && (
-            <Button size="compact-xs" variant="light" onClick={() => { setBudzetWlasny(null); setPlacWlasne(null); }}>
+            <Button variant="light" onClick={() => { setBudzetWlasny(null); setPlacWlasne(null); }}>
               Wartości z gry
             </Button>
           )}

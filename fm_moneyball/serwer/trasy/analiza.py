@@ -1,14 +1,16 @@
 """Trasy: analiza pozycji - meta pozycji, ranking, radar, podobni, moja kadra, lista zyczen."""
+import json
+import time
+
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, HTTPException
-
-import time
+from fastapi import APIRouter, HTTPException, Response
+from fastapi.encoders import jsonable_encoder
 
 from fm_moneyball import analiza, historia, optymalizator, profil
 from fm_moneyball.serwer.modele import HistoriaModel, HistoriaWieluModel, NastepcaModel, PorownanieZMoimModel, KadraModel, ListaZyczenModel, OptymalizatorModel, PodobniModel, RadarModel, RankingModel, SprzedajDrogoModel, ZawodnikModel
 from fm_moneyball.serwer.obliczenia import kandydat, wynik_na_wspolnych_cechach
-from fm_moneyball.stale import POZYCJE, ROLE_POZYCJI
+from fm_moneyball.stale import MERYTORYKA_WAG, POZYCJE, ROLE_POZYCJI
 
 
 def utworz(stan, obl):
@@ -28,8 +30,12 @@ def utworz(stan, obl):
                            if 'Zarobki_Numeryczne' in df.columns and df['Zarobki_Numeryczne'].notna().any() else None),
             "minuty_max": int(df['Minuty'].max()) if 'Minuty' in df.columns and df['Minuty'].notna().any() else None,
             "wagi_domyslne": analiza.wagi_domyslne(pozycja, df),
+            # cechy z wag domyslnych, ktorych zapis nie podaje (np. pressing w FM27) - pominiete w SCORE
+            "statystyki_niedostepne": [c for c in MERYTORYKA_WAG.get(pozycja, {}) if not analiza.dostepna(df, c)],
+            # domyslny prog minut zalezny od momentu sezonu (stale 1000 min w trakcie sezonu ukrywalo wiekszosc)
+            "min_minut_auto": analiza.prog_minut_auto(df),
             # presety rol (gotowe wagi): tylko cechy obecne w danych, jak wagi domyslne
-            "role": [{"nazwa": n, "opis": o, "wagi": {c: w for c, w in wagi.items() if c in df.columns}}
+            "role": [{"nazwa": n, "opis": o, "wagi": {c: w for c, w in wagi.items() if analiza.dostepna(df, c)}}
                      for n, o, wagi in ROLE_POZYCJI[pozycja]],
             "ma_kontrakty": bool(df['Wygasa_Data'].notna().any()),
             "okazje": list(analiza.OKAZJE),
@@ -41,12 +47,18 @@ def utworz(stan, obl):
 
     @router.post("/ranking")
     def ranking(z: RankingModel):
+        return obl.zapamietane("ranking", z.model_dump_json(), lambda: _ranking(z))
+
+    def _ranking(z):
+        """
+        Odpowiedz skladana jako gotowy tekst JSON: tysiace wierszy koduje pandas (to_json), a nie FastAPI -
+        ok. 0,3 s mniej przy kazdej zmianie filtrow.
+        """
         policzona, widoczni, pominiete, model_wyceny, ukryci_moi = obl.wynik_i_filtr(z)
         kolumny = analiza.kolumny_tabeli(z.pozycja, policzona)
-        return {
+        reszta = jsonable_encoder({
             "pozycja": z.pozycja,
             "kolumny": kolumny,
-            "wiersze": analiza.do_json(widoczni, analiza.pola_wiersza(z.pozycja, policzona)),
             # liczby zawodnikow pozycji; kandydaci z innych pozycji osobno
             "liczba": int((~kandydat(widoczni)).sum()), "liczba_wszystkich": int((~kandydat(policzona)).sum()),
             "liczba_kandydatow": int(kandydat(widoczni).sum()),
@@ -55,7 +67,10 @@ def utworz(stan, obl):
             "model_wyceny": model_wyceny,
             "model_prognozy": policzona.attrs.get("prognoza"),
             "liczba_ukrytych_mojego_klubu": int(ukryci_moi),
-        }
+        })
+        wiersze = analiza.do_json_tekst(widoczni, analiza.pola_wiersza(z.pozycja, policzona))
+        tekst = json.dumps(reszta, ensure_ascii=False, allow_nan=False)
+        return Response(tekst[:-1] + ',"wiersze":' + wiersze + '}', media_type="application/json")
 
     @router.post("/historia")
     def historia_zawodnika(z: HistoriaModel):
@@ -132,6 +147,9 @@ def utworz(stan, obl):
 
     @router.post("/moja-kadra")
     def kadra(z: KadraModel):
+        return obl.zapamietane("moja-kadra", z.model_dump_json(), lambda: _kadra(z))
+
+    def _kadra(z):
         meta = stan.migawka()["meta"]
         uid = meta.get("moj_klub_uid")
         if uid is None:
@@ -159,6 +177,9 @@ def utworz(stan, obl):
 
     @router.post("/sprzedaj-drogo")
     def sprzedaj_drogo(z: SprzedajDrogoModel):
+        return obl.zapamietane("sprzedaj-drogo", z.model_dump_json(), lambda: _sprzedaj_drogo(z))
+
+    def _sprzedaj_drogo(z):
         uid = _moj_klub()
         wynik = []
         for pozycja in POZYCJE:
@@ -222,6 +243,9 @@ def utworz(stan, obl):
 
     @router.post("/sklad")
     def sklad(z: KadraModel):
+        return obl.zapamietane("sklad", z.model_dump_json(), lambda: _sklad(z))
+
+    def _sklad(z):
         """
         Moi zawodnicy do tablicy taktycznej: SCORE na kazdej pozycji, na ktorej sa w puli, i ocena
         pozycji z gry (1-20) na wszystkich 14 pozycjach.
@@ -234,6 +258,8 @@ def utworz(stan, obl):
             policzona, _, _ = obl.policz(pozycja, z.wagi.get(pozycja), z.ignoruj_mnoznik, z.k_baza)
             for _, r in analiza.moi_zawodnicy(policzona, uid, z.tylko_pierwsza).iterrows():
                 klucz = r['UID'] if 'UID' in r.index and pd.notna(r['UID']) else r['ID']
+                if isinstance(klucz, float) and klucz.is_integer():
+                    klucz = int(klucz)   # uid z kolumny z brakami przychodzi jako float - klucz jak w taktyce z gry
                 z_ = zawodnicy.setdefault(klucz, {
                     "klucz": str(klucz), "ID": r['ID'], "Piłkarz": r['Piłkarz'],
                     "Wiek": None if pd.isna(r.get('Wiek')) else int(r['Wiek']),
@@ -249,8 +275,22 @@ def utworz(stan, obl):
         lista = sorted(zawodnicy.values(), key=lambda x: -max(x["score"].values(), default=0))
         return {"zawodnicy": lista, "pozycje": POZYCJE}
 
+    @router.get("/taktyka-z-gry")
+    def taktyka_z_gry():
+        """Taktyki pierwszej druzyny mojego klubu odczytane z zapisu (formacja, mentalnosc, XI, rezerwowi)."""
+        uid = _moj_klub()
+        taktyki = stan.taktyki.get(uid) or stan.taktyki.get(str(uid)) or []
+        return {"taktyki": taktyki,
+                "uwaga": "Role i instrukcje gra zapisuje w formie, której biblioteka fmsave jeszcze nie odczytuje - "
+                         "tablica pokazuje formację, mentalność i wybranych zawodników."}
+
     @router.post("/profil-druzyny")
     def profil_druzyny(z: KadraModel):
+        # oceny poprzedniego sezonu dochodza w tle - ich status jest czescia klucza pamieci
+        return obl.zapamietane("profil-druzyny", z.model_dump_json() + stan.oceny_status,
+                               lambda: _profil_druzyny(z))
+
+    def _profil_druzyny(z):
         """Moja druzyna na tle ligi: statystyki zespolowe, atletyzm skladu, zmiany wzgledem poprzedniego sezonu."""
         uid = _moj_klub()
         wszyscy = stan.wszyscy_zawodnicy()

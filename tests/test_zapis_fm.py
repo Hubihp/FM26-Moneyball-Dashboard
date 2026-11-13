@@ -335,12 +335,11 @@ def test_domyslna_mapa_nazw_pasuje_do_mnoznikow():
     from fm_moneyball.stale import MNOZNIKI_LIG
     from fm_moneyball.zrodla.zapis_fm import PLIK_NAZW_ROZGRYWEK
     mapa = wczytaj_nazwy_rozgrywek(PLIK_NAZW_ROZGRYWEK, domyslny=PLIK_NAZW_ROZGRYWEK)
-    # jedna liga moze miec kilka id (np. dwie fazy ligi argentynskiej), ale kazda nazwa musi miec mnoznik;
-    # wyjatek: brazylijskie ligi bez nazwy w grze (nazwa zastepcza, mnoznik nieznanej ligi)
-    assert mapa and all(nazwa in MNOZNIKI_LIG or nazwa.startswith("Liga brazylijska (nieznana) #")
-                        for nazwa in mapa.values())
+    # jedna liga moze miec kilka id (np. dwie fazy ligi argentynskiej); nazwy zastepcze juz nie wystepuja
+    assert mapa and not any("nieznana" in nazwa for nazwa in mapa.values())
     assert mapa[76] == mapa[77] == "Primera A" and mapa[66029602] == "K League 2"
-    assert mapa[309684] == mapa[102426] == "Brasileirão Série C" and mapa[313220].endswith("#313220")
+    assert mapa[309684] == mapa[102426] == "Brasileirão Série C" and mapa[313220] == "Campeonato Paraense"
+    assert mapa[7920263] == "Saudi Pro League"
 
 
 # --- liga z terminarza ---------------------------------------------------------------------------
@@ -469,11 +468,12 @@ def test_policz_kontuzje_i_podsumowanie_lig():
                NS(kind="typed", player_uid=1, date=date(2031, 9, 1)),       # inny magazyn
                NS(kind="history", player_uid=2, date=date(2032, 1, 1))]
     assert policz_kontuzje(rekordy, DZIS) == {1: 1, 2: 1}
-    kluby = [NS(uid=i, name=f"Klub {i}", nation_id=n) for i, n in ((1, 7), (2, 7), (3, None))]
+    kluby = [NS(uid=i, name=f"Klub {i}", nation_id=n, reputation=r) for i, n, r in ((1, 7, 6000), (2, 7, 4000), (3, None, None))]
     liga_klubu = {1: Liga(5, 50, "Liga A"), 2: Liga(5, 50, "Liga A"), 3: Liga(6, None, None)}
     ligi = podsumuj_ligi(liga_klubu, kluby)
     assert ligi[0] == {"klucz": 50, "domyslna": "Rozgrywki #50", "nazwa": "Liga A", "liczba": 2,
-                       "kluby": ["Klub 1", "Klub 2"], "kraj": 7}
+                       "kluby": ["Klub 1", "Klub 2"], "kraj": 7, "reputacja": 6000.0}
+    assert ligi[1]["reputacja"] is None                  # liga bez reputacji klubow - korekta jak rezerwy
     assert ligi[1]["kraj"] is None
     # kraj ligi z narodowosci zawodnikow (inna numeracja niz kraj klubu) - wygrywa, gdy ma >= 35%
     from fm_moneyball.kraje import narodowosci_lig
@@ -511,3 +511,57 @@ def test_mnoznik_wazony_minutami_druzyn_gry():
                          {10: _liga()}, OpcjeZapisu(kurs_waluty=1.0))["Napastnik"]
     w = ustaw_ligi(jeden, {1: "Ekstraklasa"}, {"Ekstraklasa": 0.8}).iloc[0]
     assert w["Mnożnik_Ligi"] == pytest.approx(0.8) and w["Ligi_gry"] is None and w["Udział_poza_ligą_klubu"] == 0
+
+
+def test_tylko_fm27_i_komunikaty_bledow():
+    from fm_moneyball.zrodla.zapis_fm import ZapisNieobslugiwany, komunikat_bledu, menedzer_z_zapisu
+
+    class NotAFmSaveError(Exception):
+        pass
+    assert "nie jest zapisem Football Managera" in komunikat_bledu(NotAFmSaveError("x"))
+    assert "zablokowany" in komunikat_bledu(PermissionError("x"))
+    assert komunikat_bledu(ZapisNieobslugiwany("To zapis FM26 - ...")) == "To zapis FM26 - ..."
+    assert "dzienniku" in komunikat_bledu(ValueError("techniczny opis"))      # bez angielskich szczegolow
+    # menedzer: imie i nazwisko z rekordu personelu, zapasowo nazwa z klubu
+    zapis = NS(staff=lambda: [NS(uid=7, first_name="Jan", last_name="Kowalski", common_name=None, name="J. Kowalski")])
+    assert menedzer_z_zapisu(zapis, [NS(manager_staff_uid=7, manager_name="Janek")]) == "Jan Kowalski"
+    assert menedzer_z_zapisu(zapis, [NS(manager_staff_uid=8, manager_name="Janek")]) == "Janek"
+    assert menedzer_z_zapisu(zapis, []) is None
+
+
+def test_zapis_fm26_odrzucony(monkeypatch, tmp_path):
+    from contextlib import contextmanager
+
+    from fm_moneyball.zrodla.zapis_fm import ZapisNieobslugiwany, wczytaj_zapis
+
+    @contextmanager
+    def atrapa(sciezka):
+        yield NS(info=NS(build="26.3.2+2329565", game_date=date(2032, 3, 24), save_name="x"))
+    monkeypatch.setattr(fmsave, "open", atrapa)
+    with pytest.raises(ZapisNieobslugiwany, match="FM26"):
+        wczytaj_zapis(tmp_path / "kariera.fm", nazwy={})
+
+
+def test_korekta_ligi_z_reputacji_i_transferow():
+    from fm_moneyball.ligi import (KOREKTA_MIN, korekta_ligi, korekta_z_reputacji, mnoznik_z_korekty,
+                                   wczytaj_korekty)
+    wartosci = [korekta_z_reputacji(r) for r in range(500, 9000, 250)]
+    assert all(b >= a for a, b in zip(wartosci, wartosci[1:]))           # monotonicznie: mocniejsza liga - mniejsza kara
+    assert min(wartosci) == KOREKTA_MIN and -5 < korekta_z_reputacji(7500) < -3
+    korekty = wczytaj_korekty()
+    assert korekty[11][1] >= 30 and korekty[32][0] > korekty[12][0]      # Serie A mocniejsza niz Championship
+    k, zrodlo = korekta_ligi(11, 7500, korekty)
+    assert zrodlo == "transfery" and abs(k - korekty[11][0]) < 1.5          # duzo transferow - glownie dane
+    k, zrodlo = korekta_ligi(999, 3000, korekty)
+    assert zrodlo == "reputacja" and k == korekta_z_reputacji(3000)
+    assert mnoznik_z_korekty(-20) == 0.6
+
+
+def test_mnozniki_wg_klucza_i_reczne():
+    from fm_moneyball.schemat import ustaw_ligi
+    df = pd.DataFrame({"Liga_klucz": [11, 99, 11], "Liga_domyslna": ["Rozgrywki #11", "Rozgrywki #99", "x"],
+                       "Liga": ["a", "b", "c"]})
+    w = ustaw_ligi(df, {11: "Premier League"}, {}, mnoznik_nieznanej=0.6, mnozniki_klucz={11: 0.92})
+    assert list(w["Mnożnik_Ligi"]) == [0.92, 0.6, 0.92] and list(w["Liga_bez_mnoznika"]) == [False, True, False]
+    w = ustaw_ligi(df, {11: "Premier League"}, {"Premier League": 0.8}, mnoznik_nieznanej=0.6, mnozniki_klucz={11: 0.92})
+    assert w["Mnożnik_Ligi"].iloc[0] == 0.8                              # reczny mnoznik uzytkownika wygrywa

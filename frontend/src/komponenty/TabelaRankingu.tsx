@@ -123,6 +123,8 @@ function Pasek({ value }: { value: number | null }) {
 const czyMoj = (w: Wiersz | undefined, uid: number | null | undefined) =>
   uid !== null && uid !== undefined && w?.['Klub_UID'] === uid;
 
+const MALA_PROBA_MINUT = 900;
+
 export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, zaznaczeni, naZaznaczenie, ulubione,
   przelaczUlubione, kluczUkladu }: Props) {
   const siatka = useRef<AgGridReact<Wiersz>>(null);
@@ -225,6 +227,15 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         if (k.pole === 'Wycena wg wyniku') {
           def.headerTooltip = 'Cena typowa dla zawodnika z takim wynikiem, wiekiem i kontraktem (model w obrębie pozycji).';
         }
+        if (k.pole === 'Minuty') {
+          // mala proba: SCORE bez zmian, ale mniej pewny (pomaranczowo, z podpowiedzia)
+          Object.assign(def, {
+            cellStyle: (p: { value: number | null }) => (typeof p.value === 'number' && p.value < MALA_PROBA_MINUT
+              ? { color: '#fd7e14' } : null),
+            tooltipValueGetter: (p: { value: number | null }) => (typeof p.value === 'number' && p.value < MALA_PROBA_MINUT
+              ? `Mała próba (poniżej ${MALA_PROBA_MINUT} minut) - SCORE mniej pewny` : null),
+          });
+        }
         if (k.pole === 'Kraj') {
           def.width = 140;
         }
@@ -322,7 +333,7 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
       <Group gap="xs" justify="flex-end">
         <Popover position="bottom-end" shadow="md" withArrow>
           <Popover.Target>
-            <Button size="compact-xs" variant="subtle">
+            <Button variant="subtle">
               Kolumny{ukryte.length ? ` (ukryte: ${ukryte.length})` : ''}
             </Button>
           </Popover.Target>
@@ -330,7 +341,7 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
             <ScrollArea.Autosize mah={360} type="auto">
               <Stack gap={4}>
                 {kolumny.filter((k) => k.pole !== 'Piłkarz').map((k) => (
-                  <Checkbox key={k.pole} size="xs" label={k.naglowek} checked={!ukryte.includes(k.pole)}
+                  <Checkbox key={k.pole} label={k.naglowek} checked={!ukryte.includes(k.pole)}
                     onChange={(e) => przelaczKolumne(k.pole, e.currentTarget.checked)} />
                 ))}
               </Stack>
@@ -338,7 +349,7 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
           </Popover.Dropdown>
         </Popover>
         {kluczUkladu && (
-          <Button size="compact-xs" variant="subtle" color="gray" onClick={przywrocUklad}
+          <Button variant="subtle" color="gray" onClick={przywrocUklad}
             title="Domyślne sortowanie, kolejność, szerokości i widoczność kolumn">
             Przywróć układ
           </Button>

@@ -95,17 +95,20 @@ def test_kraje_z_klubow_kotwic():
     assert 50 not in wynik and 51 not in wynik
 
 
-def test_domyslna_mapa_krajow():
+def test_tabela_krajow_wg_numeru_bazy():
+    """Wbudowana tabela database_id -> nazwa: unikalne numery i nazwy; mapowanie przez nations() z zapisu."""
     import csv
 
-    from fm_moneyball.kraje import PLIK_KRAJOW
-    with open(PLIK_KRAJOW, encoding="utf-8") as plik:
+    from fm_moneyball.kraje import PLIK_KRAJOW_BAZA, nazwy_z_bazy
+    with open(PLIK_KRAJOW_BAZA, encoding="utf-8") as plik:
         wiersze = list(csv.reader(plik))[1:]
     ids = [int(w[0]) for w in wiersze]
     nazwy = [w[1].strip() for w in wiersze]
-    assert len(ids) == len(set(ids)) and all(nazwy) and len(nazwy) == len(set(nazwy))
+    assert len(ids) == len(set(ids)) and all(nazwy) and len(nazwy) == len(set(nazwy)) and len(ids) > 200
     mapa = dict(zip(ids, nazwy))
-    assert mapa[33] == "Nigeria" and mapa[173] == "Turcja" and mapa[176] == "Serbia" and mapa[207] == "Montserrat"
+    assert mapa[765] == "Anglia" and mapa[776] == "Włochy" and mapa[1649] != "Paragwaj"
+    # lokalne numery zapisu (FM27: 139 = Anglia, 187 = Argentyna, 193 = Paragwaj) przez numery bazy
+    assert nazwy_z_bazy({139: 765, 150: 776, 999: 123456789}) == {139: "Anglia", 150: "Włochy"}
 
 
 def test_pliki_danych_sa_w_repozytorium():
@@ -122,3 +125,9 @@ def test_pliki_danych_sa_w_repozytorium():
         wynik = subprocess.run(["git", "ls-files", "--error-unmatch", str(plik.relative_to(katalog))],
                                cwd=katalog, capture_output=True)
         assert wynik.returncode == 0, f"{plik.name} nie jest w repozytorium (sprawdz .gitignore)"
+
+
+def test_nazwa_automatyczna_ligi():
+    from fm_moneyball.kraje import nazwa_auto_ligi
+    assert nazwa_auto_ligi("Hiszpania", 7) == "Liga: Hiszpania (7 klubów)"
+    assert nazwa_auto_ligi(None, 2) == "Liga międzynarodowa (2 kluby)" and nazwa_auto_ligi("X", 22).endswith("(22 kluby)")

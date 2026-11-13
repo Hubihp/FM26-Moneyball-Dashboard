@@ -216,3 +216,22 @@ body {
   background: rgba(134, 142, 150, 0.35);
   vertical-align: middle;
 }
+
+/* plakietka powiekszenia interfejsu (Ctrl + kolko) */
+.plakietka-skali {
+  position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 3000;
+  padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  background: var(--mantine-color-dark-5); color: var(--mantine-color-gray-0);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4); pointer-events: none;
+}
+
+/* Powiekszenie interfejsu (CSS zoom na <html>, powiekszenie.ts): vh/dvh skaluja sie razem z zoomem, wiec
+   wysokosci liczone od ekranu dziela przez --skala - inaczej przy 120% strona wychodzi poza okno */
+:root { --skala: 1; }
+.mantine-AppShell-main { min-height: calc(100dvh / var(--skala)); }
+.mantine-AppShell-navbar {
+  height: calc(100dvh / var(--skala) - var(--app-shell-header-offset, 0rem) - var(--app-shell-footer-offset, 0rem));
+}
+.mantine-Modal-content {
+  max-height: var(--modal-content-max-height, calc((100dvh - var(--modal-y-offset) * 2) / var(--skala)));
+}

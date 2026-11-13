@@ -64,7 +64,7 @@ def _ustaw_lige(df, liga_surowa, mnozniki, mnoznik_nieznanej=MNOZNIK_NIEZNANEJ_L
 REZERWY = "Rezerwy i inne rozgrywki"     # nazwa w mnozniki_lig.csv - wlasny mnoznik rozgrywek rezerw
 
 
-def ustaw_ligi(df, nazwy, mnozniki=None, mnoznik_nieznanej=MNOZNIK_NIEZNANEJ_LIGI):
+def ustaw_ligi(df, nazwy, mnozniki=None, mnoznik_nieznanej=MNOZNIK_NIEZNANEJ_LIGI, mnozniki_klucz=None):
     """
     Nazwy i mnozniki lig nakladane PO wczytaniu zapisu (bez ponownego parsowania): ramka z zapisu
     ma 'Liga_klucz' (id rozgrywek albo -kraj) i 'Liga_domyslna' ("Rozgrywki #id"). Ramki bez
@@ -72,6 +72,8 @@ def ustaw_ligi(df, nazwy, mnozniki=None, mnoznik_nieznanej=MNOZNIK_NIEZNANEJ_LIG
     Mnoznik wyniku to srednia mnoznikow lig, w ktorych zawodnik gral, wazona minutami ('Minuty_lig'):
     minuty w rezerwach, druzynach mlodziezowych i ligach niewykrytych licza sie z mnoznikiem REZERWY
     (domyslnie jak liga nieznana). Kolumna 'Liga' (i filtry) zostaje wedlug klubu.
+    mnozniki_klucz: {id ligi: mnoznik} z korekty ligowej (reputacja + transfery, fm_moneyball/ligi.py);
+    wtedy `mnozniki` to tylko reczne mnozniki uzytkownika (po nazwie), ktore maja pierwszenstwo.
     """
     if 'Liga_klucz' not in df.columns:
         return df
@@ -80,10 +82,16 @@ def ustaw_ligi(df, nazwy, mnozniki=None, mnoznik_nieznanej=MNOZNIK_NIEZNANEJ_LIG
     surowa = df['Liga_klucz'].map(lambda k: nazwy.get(int(k)) if pd.notna(k) else None)
     surowa = surowa.where(surowa.notna(), df['Liga_domyslna'])
     _ustaw_lige(df, surowa, mnozniki, mnoznik_nieznanej)
+    if mnozniki_klucz is not None:
+        klucze = df['Liga_klucz'].map(lambda k: int(k) if pd.notna(k) else None)
+        reczne = surowa.map(mnozniki)
+        auto = klucze.map(lambda k: mnozniki_klucz.get(k) if k is not None else None)
+        df['Mnożnik_Ligi'] = reczne.fillna(auto).fillna(mnoznik_nieznanej).astype(float)
+        df['Liga_bez_mnoznika'] = reczne.isna() & auto.isna()
     df['Mnożnik_ligi_klubu'] = df['Mnożnik_Ligi']
     if 'Minuty_lig' in df.columns:
         mnoznik_rezerw = float(mnozniki.get(REZERWY, mnoznik_nieznanej))
-        wyniki = [_liga_gry(w, nazwy, mnozniki, mnoznik_nieznanej, mnoznik_rezerw, k)
+        wyniki = [_liga_gry(w, nazwy, mnozniki, mnoznik_nieznanej, mnoznik_rezerw, k, mnozniki_klucz)
                   for w, k in zip(df['Minuty_lig'], df['Liga_klucz'])]
         mnoznik = pd.Series([w[0] for w in wyniki], index=df.index, dtype=float)
         df['Mnożnik_Ligi'] = mnoznik.fillna(df['Mnożnik_Ligi'])
@@ -92,7 +100,7 @@ def ustaw_ligi(df, nazwy, mnozniki=None, mnoznik_nieznanej=MNOZNIK_NIEZNANEJ_LIG
     return df
 
 
-def _liga_gry(minuty_lig, nazwy, mnozniki, mnoznik_nieznanej, mnoznik_rezerw, klucz_klubu):
+def _liga_gry(minuty_lig, nazwy, mnozniki, mnoznik_nieznanej, mnoznik_rezerw, klucz_klubu, mnozniki_klucz=None):
     """JSON 'Minuty_lig' -> (mnoznik wazony minutami, udzial minut poza liga klubu, opis albo None)."""
     if not isinstance(minuty_lig, str) or not minuty_lig:
         return np.nan, np.nan, None
@@ -107,7 +115,10 @@ def _liga_gry(minuty_lig, nazwy, mnozniki, mnoznik_nieznanej, mnoznik_rezerw, kl
         else:
             surowa = nazwy.get(int(klucz)) or domyslna
             nazwa = MAPOWANIE_NAZW_LIG.get(surowa, surowa)
-            mnoznik = float(mnozniki.get(surowa, mnoznik_nieznanej))
+            mnoznik = mnozniki.get(surowa)
+            if mnoznik is None and mnozniki_klucz is not None:
+                mnoznik = mnozniki_klucz.get(int(klucz))
+            mnoznik = float(mnoznik_nieznanej if mnoznik is None else mnoznik)
         suma += mnoznik * minuty
         if klucz is None or pd.isna(klucz_klubu) or int(klucz) != int(klucz_klubu):
             poza += minuty

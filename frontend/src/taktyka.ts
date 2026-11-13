@@ -1,6 +1,6 @@
 // Tablica taktyczna: formacje (pozycje aplikacji na pionowym boisku) i ukladanie najlepszej XI.
 // Wspolrzedne w % boiska: x od lewej do prawej, y od gory (bramka rywala) do dolu (moja bramka).
-import type { ZawodnikSkladu } from './api';
+import type { TaktykaZGry, ZawodnikSkladu } from './api';
 
 export type Slot = { id: string; pozycja: string; x: number; y: number };
 export type Ustawienie = { formacja: string; sloty: Slot[]; przypisania: Record<string, string> };
@@ -43,6 +43,14 @@ export const FORMACJE = Object.keys(DEFINICJE);
 
 export function slotyFormacji(formacja: string): Slot[] {
   return (DEFINICJE[formacja] ?? DEFINICJE['4-3-3']).map(([pozycja, x, y], i) => ({ id: `s${i}`, pozycja, x, y }));
+}
+
+// Taktyka odczytana z zapisu gry -> ustawienie tablicy (wspolrzedne slotow z gry, zawodnicy po uid)
+export function zTaktykiGry(t: TaktykaZGry, znani: Set<string>): Ustawienie {
+  const sloty = t.sloty.map((s) => ({ id: `g${s.numer}`, pozycja: s.pozycja, x: s.x, y: s.y }));
+  const przypisania: Record<string, string> = {};
+  for (const s of t.sloty) if (s.uid && znani.has(s.uid)) przypisania[`g${s.numer}`] = s.uid;
+  return { formacja: t.formacja, sloty, przypisania };
 }
 
 // SCORE zawodnika na pozycji (gdy jest w jej puli) albo null

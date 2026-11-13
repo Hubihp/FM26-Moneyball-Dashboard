@@ -40,8 +40,9 @@ type Props = {
 
 export const PUSTE_FILTRY: Filtry = {
   ligi: [], nogi: [], kraje: [], wiek: null, cena: null, pensja: null, bez_ceny: true, szukaj: '', kontrakt_mies: null,
-  // domyslnie co najmniej 1000 minut (wiarygodniejsze statystyki /90); mozna zmienic w panelu
-  min_minut: 1000,
+  // domyslnie prog automatyczny wg ligi zawodnika (1/3 minut typowego podstawowego zawodnika jego ligi w tej
+  // chwili sezonu); staly prog 1000 min w trakcie sezonu ukrywal wiekszosc zawodnikow. Wlasna wartosc w panelu.
+  min_minut: null,
   bez_mojego_klubu: false, okazje: [], min_rozwoj: null, kandydaci: false,
   min_score_kandydata: 60, min_niedowartosciowanie: null, kandydaci_z: [],
 };
@@ -79,7 +80,7 @@ export default function PanelBoczny(p: Props) {
         <div>
           <Tooltip multiline w={300} withArrow position="right"
             label="Zawodnicy grający nominalnie na wybranych pozycjach, oceniani według kryteriów tej pozycji - kandydaci do przekwalifikowania w grze. Nie zmieniają wyników zawodników tej pozycji. Puste pole = wyłączone.">
-            <MultiSelect size="xs" label="Kandydaci z innych pozycji" placeholder="Wyłączone - wybierz pozycje" clearable
+            <MultiSelect label="Kandydaci z innych pozycji" placeholder="Wyłączone - wybierz pozycje" clearable
               data={p.pozycje.filter((x) => x !== p.pozycja && x !== 'Bramkarz')}
               value={filtry.kandydaci_z}
               onChange={(v) => setFiltry({ ...filtry, kandydaci_z: v, kandydaci: v.length > 0 })} />
@@ -110,7 +111,7 @@ export default function PanelBoczny(p: Props) {
             <RangeSlider min={0} max={100} step={0.5} label={null}
               value={[doSuwaka(cena[0] ?? 0, cenaMax), doSuwaka(cena[1] ?? cenaMax, cenaMax)]}
               onChange={([a, b]) => zmien('cena', a <= 0 && b >= 100 ? null : [zSuwaka(a, cenaMax), b >= 100 ? null : zSuwaka(b, cenaMax)])} />
-            <Switch mt={6} size="xs" label="Uwzględnij zawodników bez ceny" checked={filtry.bez_ceny}
+            <Switch mt={6} label="Uwzględnij zawodników bez ceny" checked={filtry.bez_ceny}
               onChange={(e) => zmien('bez_ceny', e.currentTarget.checked)} />
           </div>
         )}
@@ -163,8 +164,14 @@ export default function PanelBoczny(p: Props) {
           onChange={(v) => zmien('nogi', v)} />
 
         {meta?.minuty_max ? (
-          <NumberInput label="Minimum minut" min={0} step={90} value={filtry.min_minut}
-            onChange={(v) => zmien('min_minut', Number(v) || 0)} />
+          <NumberInput label="Minimum minut" min={0} step={90} value={filtry.min_minut ?? ''}
+            placeholder={`auto wg ligi (ok. ${meta.min_minut_auto})`}
+            description={filtry.min_minut === null ? 'automatycznie: 1/3 minut podstawowego zawodnika ligi' : undefined}
+            rightSectionWidth={56}
+            rightSection={filtry.min_minut !== null ? (
+              <Button variant="subtle" size="compact-xs" onClick={() => zmien('min_minut', null)}>auto</Button>
+            ) : null}
+            onChange={(v) => zmien('min_minut', v === '' ? null : Number(v) || 0)} />
         ) : null}
 
         {p.maMojKlub && (
@@ -172,7 +179,7 @@ export default function PanelBoczny(p: Props) {
             onChange={(e) => zmien('bez_mojego_klubu', e.currentTarget.checked)} />
         )}
 
-        <Button variant="subtle" size="xs" onClick={() => setFiltry(PUSTE_FILTRY)}>Wyczyść filtry</Button>
+        <Button variant="subtle" onClick={() => setFiltry(PUSTE_FILTRY)}>Wyczyść filtry</Button>
 
         <Accordion variant="separated" multiple defaultValue={[]}>
           <Accordion.Item value="wagi">
@@ -181,7 +188,7 @@ export default function PanelBoczny(p: Props) {
               <Stack gap="xs">
                 {role.length > 0 && (
                   <>
-                    <Select label="Rola (gotowe wagi)" size="xs" allowDeselect={false}
+                    <Select label="Rola (gotowe wagi)" allowDeselect={false}
                       data={role.map((r) => r.nazwa)} value={rola?.nazwa ?? null} placeholder="Własne wagi"
                       onChange={(nazwa) => {
                         const wybrana = role.find((r) => r.nazwa === nazwa);
@@ -195,7 +202,13 @@ export default function PanelBoczny(p: Props) {
                   </>
                 )}
                 <Text size="xs" c="dimmed">Ważność 0-100. Liczą się proporcje (wagi są normalizowane do sumy 1).</Text>
-                {Object.entries(p.wagi).map(([cecha, waga]) => (
+                {(meta?.statystyki_niedostepne ?? []).length > 0 && (
+                  <Text size="xs" c="dimmed">
+                    Niedostępne w zapisie gry (pominięte w SCORE): {meta!.statystyki_niedostepne.join(', ')}.
+                  </Text>
+                )}
+                {Object.entries(p.wagi).filter(([cecha]) => !(meta?.statystyki_niedostepne ?? []).includes(cecha))
+                  .map(([cecha, waga]) => (
                   <div key={cecha}>
                     <Group justify="space-between" gap={4}>
                       <Text size="xs" c={p.pominiete.includes(cecha) ? 'dimmed' : undefined}>{cecha}</Text>
@@ -205,7 +218,7 @@ export default function PanelBoczny(p: Props) {
                       onChange={(v) => p.setWagi({ ...p.wagi, [cecha]: v })} />
                   </div>
                 ))}
-                <Button variant="subtle" size="xs" onClick={() => p.setWagi(null)}>Przywróć domyślne wagi</Button>
+                <Button variant="subtle" onClick={() => p.setWagi(null)}>Przywróć domyślne wagi</Button>
               </Stack>
             </Accordion.Panel>
           </Accordion.Item>

@@ -17,7 +17,7 @@ type Props = {
 // Opis filtrow pozycji, ktore zawezaja wyszukiwanie nastepcy
 function opisFiltrow(z: ZapytanieRankingu) {
   const f = z.filtry;
-  const czesci = [`min. ${f.min_minut} minut`];
+  const czesci = [f.min_minut === null ? 'minuty: auto wg ligi' : `min. ${f.min_minut} minut`];
   if (f.wiek) czesci.push(`wiek ${f.wiek[0]}–${f.wiek[1]}`);
   if (f.cena) czesci.push(`cena ${eur(f.cena[0] ?? 0)} – ${f.cena[1] === null ? 'bez limitu' : eur(f.cena[1])}`);
   if (f.pensja) czesci.push(`pensja ${eur(f.pensja[0] ?? 0)} – ${f.pensja[1] === null ? 'bez limitu' : eur(f.pensja[1])} tyg.`);

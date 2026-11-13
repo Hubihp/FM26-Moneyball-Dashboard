@@ -39,7 +39,44 @@ class Obliczenia:
         self.stan = stan
         # klucz zawiera wersje danych, wiec po przeladowaniu zrodla stare wpisy nie sa uzywane
         self._policzone = OrderedDict()
+        self._odpowiedzi = OrderedDict()     # gotowe odpowiedzi tras po (wersja danych, trasa, parametry)
         self._blokada = threading.Lock()
+
+    MAKS_ODPOWIEDZI = 64
+
+    def zapamietane(self, trasa, parametry, policz):
+        """
+        Odpowiedz trasy z pamieci, gdy dane (wersja) i parametry sie nie zmienily - powrot na karte nie liczy
+        niczego od nowa. parametry: tekst (np. model zapytania w JSON).
+        """
+        klucz = (self.stan.wersja, trasa, parametry)
+        with self._blokada:
+            if klucz in self._odpowiedzi:
+                self._odpowiedzi.move_to_end(klucz)
+                return self._odpowiedzi[klucz]
+        wynik = policz()
+        with self._blokada:
+            self._odpowiedzi[klucz] = wynik
+            while len(self._odpowiedzi) > self.MAKS_ODPOWIEDZI:
+                self._odpowiedzi.popitem(last=False)
+        return wynik
+
+    def rozgrzej(self, wersja):
+        """
+        Po wczytaniu danych (watek w tle): SCORE wszystkich pozycji z domyslnymi ustawieniami, zeby pierwsze wejscie
+        w Ranking, Moja kadre czy Taktyke nie liczylo 14 pul od zera. Przerywa, gdy w miedzyczasie wczytano nowe dane.
+        """
+        domyslne = RankingModel(pozycja=POZYCJE[0])
+        for pozycja in POZYCJE:
+            if self.stan.wersja != wersja:
+                return
+            df = self.stan.pula(pozycja)
+            if df is None or df.empty:
+                continue
+            try:
+                self.policz(pozycja, None, domyslne.ignoruj_mnoznik, domyslne.k_baza)
+            except Exception:   # rozgrzewanie to tylko przyspieszenie - blad pokaze sie przy zwyklym zapytaniu
+                continue
 
     def pula(self, pozycja):
         if pozycja not in POZYCJE:

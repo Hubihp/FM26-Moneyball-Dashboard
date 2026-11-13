@@ -1,5 +1,5 @@
 """
-Folder zapisow FM27 i FM26: domyslne lokalizacje, lista zapisow od najnowszego, bezpieczna kopia.
+Folder zapisow FM27: domyslne lokalizacje, lista zapisow od najnowszego, bezpieczna kopia.
 
 "Aktualnie zaladowany" zapis to w praktyce plik .fm zmodyfikowany najpozniej - gra zapisuje
 go przy kazdym zapisie recznym i autozapisie. Gra nie udostepnia innej, oficjalnej informacji
@@ -13,10 +13,10 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-# najpierw FM27, potem FM26 - pierwszy istniejacy folder jest domyslny
-PODFOLDERY_GRY = [Path("Sports Interactive") / f"Football Manager {wersja}" / "games" for wersja in (27, 26)]
-PODFOLDER_GRY = PODFOLDERY_GRY[-1]          # FM26 (zgodnosc wstecz)
-STEAM_APP_ID = "3551340"                     # FM26; identyfikator FM27 w Steam nie jest jeszcze znany
+# program czyta tylko zapisy FM27
+PODFOLDER_GRY = Path("Sports Interactive") / "Football Manager 27" / "games"
+PODFOLDERY_GRY = [PODFOLDER_GRY]
+STEAM_APP_ID = "3551340"                     # identyfikator Steam (Proton) - z FM26; dla FM27 nieznany
 
 
 @dataclass(frozen=True)

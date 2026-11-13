@@ -25,14 +25,15 @@ import pandas as pd
 
 from fm_moneyball import historia
 from fm_moneyball.historia import KATALOG_HISTORII
-from fm_moneyball.kraje import PLIK_KRAJOW_UZYTKOWNIKA, nazwy_auto, wczytaj_nazwy_krajow
-from fm_moneyball.ligi import PLIK_MNOZNIKOW_UZYTKOWNIKA, wszystkie_mnozniki
+from fm_moneyball.kraje import PLIK_KRAJOW_UZYTKOWNIKA, nazwa_auto_ligi, nazwy_auto, wczytaj_nazwy_krajow
+from fm_moneyball.ligi import (KOREKTA_REZERW, PLIK_MNOZNIKOW_UZYTKOWNIKA, korekta_ligi, mnoznik_z_korekty,
+                               wczytaj_korekty, wczytaj_mnozniki_uzytkownika, wszystkie_mnozniki)
 from fm_moneyball.mapy import KATALOG_DOMOWY
 from fm_moneyball.schemat import ustaw_kraje, ustaw_ligi
 from fm_moneyball.stale import POZYCJE
 from fm_moneyball.zrodla import folder as folder_zapisow
 from fm_moneyball.zrodla.csv_fm import generuj_demo_csv, wczytaj_csv
-from fm_moneyball.zrodla.zapis_fm import (ETAPY_WCZYTYWANIA, PLIK_NAZW_UZYTKOWNIKA, OpcjeZapisu,
+from fm_moneyball.zrodla.zapis_fm import (ETAPY_WCZYTYWANIA, PLIK_NAZW_UZYTKOWNIKA, OpcjeZapisu, komunikat_bledu,
                                          wczytaj_nazwy_rozgrywek, wczytaj_zapis)
 
 log = logging.getLogger("fm_moneyball")
@@ -40,7 +41,7 @@ log = logging.getLogger("fm_moneyball")
 CO_ILE_SPRAWDZAC = 15        # sekundy miedzy sprawdzeniami folderu zapisow
 # 2: domyslnie zawodnik we wszystkich pulach, w ktorych jest naturalny (wczesniej tylko glowna)
 WERSJA_USTAWIEN = 2
-WERSJA_CACHE = 17            # zmiana formatu wyniku = nowy klucz cache (17: minuty wg lig druzyn gry)
+WERSJA_CACHE = 19            # zmiana formatu wyniku = nowy klucz cache (19: taktyka z gry)
 ILE_W_CACHE = 3
 DEMO_DATA_GRY = date(2027, 1, 15)
 
@@ -77,6 +78,51 @@ def _demo():
     return dane, meta
 
 
+def przygotuj_dane(surowe, ligi, kraje_auto, kraje_baza, plik_nazw, plik_mnoznikow, plik_krajow):
+    """
+    Surowe ramki zapisu -> ramki z nazwami lig, mnoznikami i krajami. Uzupelnia wpisy `ligi` (nazwa, mnoznik
+    automatyczny). Zwraca (dane, nazwy_krajow, zrodla_krajow). Wspolne dla biezacego zapisu i migawek historii
+    budowanych ze starszych zapisow folderu.
+    """
+    nazwy, mnozniki = wczytaj_nazwy_rozgrywek(plik_nazw), wszystkie_mnozniki(plik_mnoznikow)
+    for liga in ligi:
+        liga["nazwa"] = nazwy.get(liga["klucz"]) if liga["klucz"] is not None else None
+    # zrodla nazw krajow, od najslabszego: kluby-kotwice, kraj nazwanej ligi, nazwa reczna
+    zrodla = (("kluby", kraje_auto), ("liga", nazwy_auto(ligi)), ("baza", kraje_baza),
+              ("ręcznie", wczytaj_nazwy_krajow(plik_krajow)))
+    nazwy_krajow, zrodla_krajow = {}, {}
+    for zrodlo, mapa in zrodla:
+        nazwy_krajow.update(mapa)
+        zrodla_krajow.update(dict.fromkeys(mapa, zrodlo))
+    # liga bez nazwy w tabeli (np. nowa w kolejnej wersji gry): nazwa z kraju jej klubow, bez recznego wpisywania
+    nazwy = dict(nazwy)
+    for liga in ligi:
+        liga["nazwa_auto"] = False
+        if liga["nazwa"] is None and liga["klucz"] is not None:
+            kraj = nazwy_krajow.get(liga.get("kraj"))
+            liga["nazwa"] = nazwa_auto_ligi(kraj, liga.get("liczba"))
+            liga["nazwa_auto"] = True
+            nazwy[liga["klucz"]] = liga["nazwa"]
+    # korekta ligowa z danych: transfery (dane/korekty_lig.csv) + reputacja ligi z zapisu; reczne mnozniki
+    # uzytkownika (Ligi i kraje) maja pierwszenstwo
+    korekty = wczytaj_korekty()
+    mnozniki_klucz = {}
+    for liga in ligi:
+        korekta, zrodlo = korekta_ligi(liga["klucz"], liga.get("reputacja"), korekty)
+        liga["mnoznik_auto"] = round(mnoznik_z_korekty(korekta), 3)
+        liga["zrodlo_mnoznika"] = zrodlo
+        if liga["klucz"] is not None:
+            mnozniki_klucz[liga["klucz"]] = liga["mnoznik_auto"]
+    if ligi:   # zapis gry; CSV i demo - wbudowana tabela mnoznikow po nazwie
+        mnozniki = wczytaj_mnozniki_uzytkownika(plik_mnoznikow)
+        opcje_lig = {"mnoznik_nieznanej": mnoznik_z_korekty(KOREKTA_REZERW), "mnozniki_klucz": mnozniki_klucz}
+    else:
+        opcje_lig = {}
+    dane = {p: ustaw_kraje(ustaw_ligi(df, nazwy, mnozniki, **opcje_lig), nazwy_krajow)
+            for p, df in surowe.items()}
+    return dane, nazwy_krajow, zrodla_krajow
+
+
 class Stan:
     def __init__(self, plik_ustawien=KATALOG_DOMOWY / "ustawienia.json", sledzenie=True,
                  katalog_cache=KATALOG_DOMOWY / "cache", plik_nazw=PLIK_NAZW_UZYTKOWNIKA,
@@ -93,6 +139,12 @@ class Stan:
         self.nazwy_krajow = {}         # nation_id -> nazwa (reczne, z lig i z klubow-kotwic)
         self.zrodla_krajow = {}        # nation_id -> skad nazwa: ręcznie | liga | kluby
         self.kraje_auto = {}           # nation_id -> nazwa z klubow-kotwic (z odczytu zapisu)
+        self.kraje_baza = {}           # nation_id -> nazwa z tabeli po numerze bazy gry
+        self.taktyki = {}              # club_uid -> taktyki pierwszej druzyny odczytane z zapisu
+        self._watek_historii = None    # budowanie migawek ze starszych zapisow folderu
+        self._wszyscy = None           # (wersja, zawodnicy wszystkich pul) - pamiec wszyscy_zawodnicy()
+        self._watek_rozgrzewania = None
+        self.po_wczytaniu = []         # funkcje(wersja) wolane w tle po kazdej nowej wersji danych (rozgrzewanie)
         self.konfig = self._wczytaj_ustawienia()
         self.surowe = {}               # ramki prosto ze zrodla (przed nalozeniem nazw lig)
         self.dane = {}
@@ -159,13 +211,23 @@ class Stan:
             return self.dane.get(pozycja)
 
     def wszyscy_zawodnicy(self):
-        """Zawodnicy wszystkich pozycji bez powtorzen (zawodnik moze byc w kilku pulach) albo None."""
+        """
+        Zawodnicy wszystkich pozycji bez powtorzen (zawodnik moze byc w kilku pulach) albo None. Zapamietani do
+        zmiany wersji danych (laczenie 14 pul trwa ~1 s, a korzysta z niego kilka kart). Nie modyfikowac wyniku.
+        """
         with self._blokada:
+            wersja = self.wersja
+            if self._wszyscy is not None and self._wszyscy[0] == wersja:
+                return self._wszyscy[1]
             ramki = [df.assign(Pula=p) for p, df in self.dane.items() if not df.empty]
         if not ramki:
             return None
         wszyscy = pd.concat(ramki, ignore_index=True)
-        return wszyscy.drop_duplicates('UID' if 'UID' in wszyscy.columns else 'ID')
+        wszyscy = wszyscy.drop_duplicates('UID' if 'UID' in wszyscy.columns else 'ID')
+        with self._blokada:
+            if self.wersja == wersja:
+                self._wszyscy = (wersja, wszyscy)
+        return wszyscy
 
     def ustaw_zrodlo(self, typ, folder=None, plik=None, sledz=None, opcje=None, wczytaj_przy_starcie=None,
                      w_tle=True):
@@ -202,12 +264,14 @@ class Stan:
             self._zapisz_ustawienia()
             self._uzupelnij_moj_klub()
             self.wersja += 1
+        self._rozgrzej()
 
     def zastosuj_ligi(self):
         """Ponownie naklada nazwy i mnozniki lig na wczytane dane (po ich edycji)."""
         with self._blokada:
             self._zastosuj_ligi()
             self.wersja += 1
+        self._rozgrzej()
 
     def zatrzymaj(self):
         self._zatrzymaj.set()
@@ -290,7 +354,7 @@ class Stan:
                     gotowe = self._wczytaj_raz(pokolenie)
                 except Exception as e:
                     log.exception("Błąd wczytywania danych")
-                    self._ustaw(status="blad", komunikat=f"Nie udało się wczytać danych: {e}", etap=None)
+                    self._ustaw(status="blad", komunikat=komunikat_bledu(e), etap=None)
                     gotowe = True
                 if gotowe or pokolenie == self.pokolenie:
                     return
@@ -342,6 +406,7 @@ class Stan:
             "nazwa_zapisu": wynik.nazwa_zapisu, "plik": opis, "build": wynik.build,
             "data_gry": wynik.data_gry.isoformat() if wynik.data_gry else None,
             "menedzer": getattr(wynik, "menedzer", None),
+            "menedzer_nazwa": getattr(wynik, "menedzer_nazwa", None) or getattr(wynik, "menedzer", None),
             "moje_kluby": wynik.moje_kluby or ([{"uid": wynik.moj_klub_uid, "nazwa": wynik.moj_klub}]
                                                if wynik.moj_klub_uid is not None else []),
             "ostrzezenia": wynik.ostrzezenia, "liczniki": wynik.liczniki,
@@ -351,9 +416,11 @@ class Stan:
             "wczytano": datetime.now().isoformat(timespec="seconds"),
         }
         return self._zakoncz(pokolenie, klucz, wynik.dane, meta, wynik.ligi, sciezka_odczytu, wynik.kraje_auto,
-                             getattr(wynik, "druzyny", {}), getattr(wynik, "tabele", {}))
+                             getattr(wynik, "druzyny", {}), getattr(wynik, "tabele", {}),
+                             getattr(wynik, "kraje_baza", {}), getattr(wynik, "taktyki", {}))
 
-    def _zakoncz(self, pokolenie, klucz, dane, meta, ligi, sciezka_odczytu, kraje_auto, druzyny=None, tabele=None):
+    def _zakoncz(self, pokolenie, klucz, dane, meta, ligi, sciezka_odczytu, kraje_auto, druzyny=None, tabele=None,
+                 kraje_baza=None, taktyki=None):
         with self._blokada:
             if pokolenie != self.pokolenie:
                 return False
@@ -361,14 +428,35 @@ class Stan:
             self.druzyny, self.tabele = druzyny or {}, tabele or {}
             self.oceny_poprzednie, self.oceny_status = {}, "brak"
             self.kraje_auto = kraje_auto or {}
+            self.kraje_baza = kraje_baza or {}
+            self.taktyki = taktyki or {}
             self._sciezka_odczytu = sciezka_odczytu
             self._uzupelnij_moj_klub()
             self._zastosuj_ligi()
             self._zapisz_historie()
             self.status, self.komunikat, self.etap = "gotowe", "", None
             self.wersja += 1
+        self._rozgrzej()
         self._uruchom_oceny(pokolenie, klucz)
+        self._uruchom_historie_folderu(pokolenie)
         return True
+
+    def _rozgrzej(self):
+        """Funkcje `po_wczytaniu` (np. liczenie SCORE wszystkich pozycji) w tle dla biezacej wersji danych."""
+        if not self.po_wczytaniu:
+            return
+        wersja = self.wersja
+
+        def praca():
+            for funkcja in list(self.po_wczytaniu):
+                if self.wersja != wersja:
+                    return
+                try:
+                    funkcja(wersja)
+                except Exception as e:   # tylko przyspieszenie - bez wplywu na dzialanie
+                    log.warning("Rozgrzewanie obliczeń przerwane: %s", e)
+        self._watek_rozgrzewania = threading.Thread(target=praca, daemon=True, name="rozgrzewanie")
+        self._watek_rozgrzewania.start()
 
     # --- historia ocen z poprzedniego sezonu (w tle, po wczytaniu zapisu) -----------------------------
     def _uruchom_oceny(self, pokolenie, klucz):
@@ -410,12 +498,83 @@ class Stan:
         """Katalog historii biezacej kariery (tylko zapis gry, nie demo/CSV) albo None."""
         if self.meta.get("demo") or not self.meta.get("data_gry") or self.katalog_historii is None:
             return None
-        return historia.katalog_kariery(self.katalog_historii, self.meta.get("menedzer"))
+        # osobny katalog dla FM27 - historia nie miesza sie z dawnymi karierami FM26 tego samego menedzera
+        return historia.katalog_kariery(self.katalog_historii / "FM27", self.meta.get("menedzer"))
+
+    # --- migawki historii ze starszych zapisow folderu (w tle, raz na kazdy plik) ----------------------
+    def _uruchom_historie_folderu(self, pokolenie):
+        konfig, katalog = self.konfig, self.katalog_kariery()
+        if not self._sledzenie or konfig.typ != "folder" or not konfig.folder or katalog is None:
+            return
+        if self._watek_historii is not None and self._watek_historii.is_alive():
+            return
+        self._watek_historii = threading.Thread(
+            target=self._historia_z_folderu, daemon=True, name="historia-z-folderu",
+            args=(pokolenie, Path(konfig.folder), katalog, date.fromisoformat(self.meta["data_gry"]),
+                  self.meta.get("menedzer"), konfig.opcje_zapisu()))
+        self._watek_historii.start()
+
+    def _historia_z_folderu(self, pokolenie, folder, katalog, data_gry, menedzer, opcje):
+        """
+        Starsze zapisy folderu (po jednym na miesiac gry) -> migawki historii tej kariery, zeby Δ SCORE, wykresy
+        i prognoza mialy dane od razu, a nie dopiero po kolejnych wczytaniach. Zapis innej kariery (inny menedzer)
+        jest pomijany; przejrzane pliki sa zapamietane, wiec kazdy czyta sie najwyzej raz.
+        """
+        import warnings
+
+        import fmsave
+
+        zapisy = []
+        for plik in folder_zapisow.lista_zapisow(folder):
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    with fmsave.open(plik.sciezka) as zapis:     # sama data w grze - odczyt natychmiastowy
+                        zapisy.append((plik, zapis.info.game_date))
+            except Exception:
+                continue
+        lista = historia.do_uzupelnienia(zapisy, katalog, data_gry)
+        if not lista:
+            return
+        rozgrzewanie = self._watek_rozgrzewania
+        if rozgrzewanie is not None:
+            rozgrzewanie.join()      # najpierw obliczenia dla interfejsu, potem dlugi odczyt starszych zapisow
+        przejrzane, dodane = historia.przejrzane(katalog), 0
+        log.info("Historia z folderu: zapisy do odczytu: %d", len(lista))
+        for plik, dzien in lista:
+            if pokolenie != self.pokolenie:
+                break
+            try:
+                wynik = wczytaj_zapis(plik.sciezka, opcje)
+                if menedzer and wynik.menedzer != menedzer:
+                    przejrzane[historia.klucz_pliku(plik)] = "inna kariera"
+                    continue
+                dane, _, _ = przygotuj_dane(wynik.dane, wynik.ligi, wynik.kraje_auto, wynik.kraje_baza,
+                                            self.plik_nazw, self.plik_mnoznikow, self.plik_krajow)
+                if historia.zapisz_migawke(katalog, dane, wynik.data_gry) is not None:
+                    dodane += 1
+                przejrzane[historia.klucz_pliku(plik)] = "ok"
+            except Exception as e:   # dodatek - uszkodzony albo obcy zapis nie blokuje reszty
+                log.warning("Historia z folderu: pominięto %s (%s)", plik.nazwa, e)
+                przejrzane[historia.klucz_pliku(plik)] = "błąd"
+            finally:
+                try:
+                    historia.zapisz_przejrzane(katalog, przejrzane)
+                except OSError:
+                    pass
+        if dodane:
+            log.info("Historia z folderu: dodane migawki: %d", dodane)
+            with self._blokada:
+                if pokolenie == self.pokolenie:
+                    self.wersja += 1     # nowe migawki zmieniaja Δ SCORE i prognoze - interfejs odswieza dane
+            self._rozgrzej()
 
     def _zapisz_historie(self):
         # migawka do historii rozwoju; jej brak (np. brak miejsca na dysku) nie blokuje wczytania
         try:
-            historia.przenies_stare(self.katalog_historii, self.katalog_kariery())
+            if self.katalog_historii is None:
+                return
+            historia.przenies_stare(self.katalog_historii / "FM27", self.katalog_kariery())
             historia.zapisz_migawke(self.katalog_kariery(), self.dane, date.fromisoformat(self.meta["data_gry"]))
         except Exception as e:
             log.warning("Nie udało się zapisać migawki historii: %s", e)
@@ -428,15 +587,6 @@ class Stan:
         self.meta["budzet"] = (self.meta.get("budzety") or {}).get(str(wybrany["uid"])) if wybrany else None
 
     def _zastosuj_ligi(self):
-        nazwy, mnozniki = wczytaj_nazwy_rozgrywek(self.plik_nazw), wszystkie_mnozniki(self.plik_mnoznikow)
-        for liga in self.ligi:
-            liga["nazwa"] = nazwy.get(liga["klucz"]) if liga["klucz"] is not None else None
-        # zrodla nazw krajow, od najslabszego: kluby-kotwice, kraj nazwanej ligi, nazwa reczna
-        zrodla = (("kluby", self.kraje_auto), ("liga", nazwy_auto(self.ligi)),
-                  ("ręcznie", wczytaj_nazwy_krajow(self.plik_krajow)))
-        self.nazwy_krajow, self.zrodla_krajow = {}, {}
-        for zrodlo, mapa in zrodla:
-            self.nazwy_krajow.update(mapa)
-            self.zrodla_krajow.update(dict.fromkeys(mapa, zrodlo))
-        self.dane = {p: ustaw_kraje(ustaw_ligi(df, nazwy, mnozniki), self.nazwy_krajow)
-                     for p, df in self.surowe.items()}
+        self.dane, self.nazwy_krajow, self.zrodla_krajow = przygotuj_dane(
+            self.surowe, self.ligi, self.kraje_auto, self.kraje_baza, self.plik_nazw, self.plik_mnoznikow,
+            self.plik_krajow)

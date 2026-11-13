@@ -2,14 +2,16 @@ import { Alert, Badge, Button, Card, Group, Loader, Menu, ScrollArea, Select, St
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { api, type ZawodnikSkladu } from '../api';
+import { api, type TaktykaZGry, type ZawodnikSkladu } from '../api';
 import { formatuj, kolorWyniku } from '../format';
 import { usePamiec } from '../pamiec';
+import { skalaInterfejsu } from '../powiekszenie';
 import {
-  FORMACJE, SKROTY, najlepszaXI, naturalny, przypisz, slotyFormacji, wynikNa, zamienSloty, zmienFormacje,
+  FORMACJE, SKROTY, najlepszaXI, naturalny, przypisz, slotyFormacji, wynikNa, zamienSloty, zmienFormacje, zTaktykiGry,
   type Slot, type Ustawienie,
 } from '../taktyka';
 import type { Ustawienia } from './PanelBoczny';
+import { SZEROKOSC } from '../wyglad';
 
 type Props = {
   wersja: number;
@@ -31,6 +33,53 @@ type Przeciaganie = {
 const MAKS_PRZESUNIECIA_PLAKIETKI = { x: 40, y: 10 };   // kursor zawsze zostaje na plakietce z nazwiskiem
 const nazwisko = (z: ZawodnikSkladu) => z.Piłkarz.split(' ').slice(-1)[0];
 const najlepszyWynik = (z: ZawodnikSkladu) => Math.max(...Object.values(z.score), -Infinity);
+
+// Taktyka zapisana w grze: nazwa, mentalnosc, formacja z pilka i bez pilki, rezerwowi
+function PanelTaktykiGry({ taktyka, uwaga, blad, ladowanie, wgKlucza, naWczytaj }: {
+  taktyka: TaktykaZGry | undefined; uwaga: string | undefined; blad: Error | null; ladowanie: boolean;
+  wgKlucza: Record<string, ZawodnikSkladu>; naWczytaj: () => void;
+}) {
+  if (ladowanie) return null;
+  if (!taktyka) {
+    return (
+      <Text size="xs" c="dimmed">
+        {blad ? `Taktyka z gry niedostępna: ${blad.message}` : 'Zapis nie zawiera taktyki pierwszej drużyny (dostępna tylko przy wczytaniu zapisu kariery FM27).'}
+      </Text>
+    );
+  }
+  const pozaKadra = taktyka.sloty.filter((s) => s.uid && !wgKlucza[s.uid]).map((s) => s.nazwa ?? s.uid);
+  const zmiany = taktyka.sloty.filter((s) => s.pozycja_bez && s.pozycja_bez !== s.pozycja);
+  return (
+    <Card withBorder padding="sm">
+      <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
+        <Stack gap={4} style={{ minWidth: 0 }}>
+          <Text size="xs" c="dimmed">Taktyka w grze</Text>
+          <Text fw={600} truncate>{taktyka.nazwa}</Text>
+          <Group gap="xs">
+            <Badge variant="light">{taktyka.formacja}</Badge>
+            {taktyka.mentalnosc && <Badge variant="light" color="grape">mentalność: {taktyka.mentalnosc}</Badge>}
+            {taktyka.formacja_bez !== taktyka.formacja && <Badge variant="light" color="gray">bez piłki: {taktyka.formacja_bez}</Badge>}
+          </Group>
+        </Stack>
+        <Button variant="light" onClick={naWczytaj} style={{ flexShrink: 0 }}>Wczytaj taktykę z gry</Button>
+      </Group>
+      {zmiany.length > 0 && (
+        <Text size="xs" mt={6}>
+          Bez piłki: {zmiany.map((s) => `${s.nazwa ?? SKROTY[s.pozycja]} ${SKROTY[s.pozycja]} → ${SKROTY[s.pozycja_bez!] ?? s.pozycja_bez}`).join(', ')}
+        </Text>
+      )}
+      {taktyka.rezerwowi.length > 0 && (
+        <Text size="xs" mt={6} c="dimmed">
+          Rezerwowi (lista z gry): {taktyka.rezerwowi.map((r) => r.nazwa ?? wgKlucza[r.uid]?.Piłkarz ?? r.uid).join(', ')}
+        </Text>
+      )}
+      {pozaKadra.length > 0 && (
+        <Text size="xs" mt={6} c="orange">Poza kadrą w aplikacji (brak w pulach pozycji): {pozaKadra.join(', ')}</Text>
+      )}
+      {uwaga && <Text size="xs" mt={6} c="dimmed">{uwaga}</Text>}
+    </Card>
+  );
+}
 
 // Pionowe boisko (68 x 105 m): moja bramka na dole, atak w gore
 function Murawa() {
@@ -135,6 +184,7 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
     queryFn: () => api.sklad({ wagi, ignoruj_mnoznik: ustawienia.ignoruj_mnoznik, k_baza: ustawienia.k_baza,
       tylko_pierwsza: tylkoPierwsza }),
   });
+  const zGry = useQuery({ queryKey: ['taktyka-z-gry', wersja], queryFn: api.taktykaZGry, retry: false });
   const [biezace, setBiezace] = usePamiec<Ustawienie | null>('fm-taktyka', null);
   const [zapisane, setZapisane] = usePamiec<Record<string, Ustawienie>>('fm-taktyki', {});
   const [nazwa, setNazwa] = usePamiec('fm-taktyka-nazwa', '');
@@ -211,6 +261,13 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
   if (!biezace) return zawodnicy.length ? <Loader m="md" /> : <Alert color="gray">Brak zawodników w kadrze.</Alert>;
 
   const u = biezace;
+  const taktykaGry = zGry.data?.taktyki[0];
+  const wczytajZGry = () => {
+    if (!taktykaGry) return;
+    setBiezace(zTaktykiGry(taktykaGry, new Set(zawodnicy.map((z) => z.klucz))));
+    setNazwa('');
+  };
+  const zGryUstawione = u.sloty.some((s) => s.id.startsWith('g'));
   const naBoisku = new Set(Object.values(u.przypisania));
   const wSkladzie = u.sloty.map((s) => ({ s, z: wgKlucza[u.przypisania[s.id]] })).filter((x) => x.z);
   const wyniki = wSkladzie.map(({ s, z }) => wynikNa(z, s.pozycja)).filter((w): w is number => w !== null);
@@ -268,14 +325,14 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
   return (
     <Group align="flex-start" gap="md" wrap="nowrap">
       {przeciaganie?.aktywne && przeciaganie.typ === 'gracz' && wgKlucza[przeciaganie.id] && (
-        <div style={{ position: 'fixed', left: przeciaganie.x + przeciaganie.dx, top: przeciaganie.y + przeciaganie.dy, transform: 'translate(-50%, -50%)',
+        <div style={{ position: 'fixed', left: (przeciaganie.x + przeciaganie.dx) / skalaInterfejsu(), top: (przeciaganie.y + przeciaganie.dy) / skalaInterfejsu(), transform: 'translate(-50%, -50%)',
           pointerEvents: 'none', zIndex: 1000, background: '#c92a2a', color: 'white', fontWeight: 700, fontSize: 13,
           padding: '4px 10px', borderRadius: 14, boxShadow: '0 4px 10px rgba(0,0,0,0.5)', whiteSpace: 'nowrap' }}>
           {wgKlucza[przeciaganie.id].Piłkarz}
         </div>
       )}
       <div ref={boisko} data-boisko
-        style={{ position: 'relative', height: 'min(78vh, 900px)', aspectRatio: '74 / 111', flexShrink: 0,
+        style={{ position: 'relative', height: 'min(calc(78vh / var(--skala, 1)), 900px)', aspectRatio: '74 / 111', flexShrink: 0,
           borderRadius: 10, overflow: 'hidden', boxShadow: '0 4px 18px rgba(0,0,0,0.45)' }}>
         <Murawa />
         {u.sloty.map((s, i) => (
@@ -297,18 +354,23 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
 
       <Stack gap="sm" style={{ flex: 1, minWidth: 280 }}>
         <Group gap="xs" align="end">
-          <Select label="Formacja" w={130} data={FORMACJE} value={u.formacja} allowDeselect={false}
+          <Select label="Formacja" w={SZEROKOSC.waska} allowDeselect={false} value={u.formacja}
+            data={FORMACJE.includes(u.formacja) ? FORMACJE : [u.formacja, ...FORMACJE]}
             onChange={(f) => f && setBiezace(zmienFormacje(u, f))} />
           <Button variant="light" onClick={() => setBiezace({ ...u, przypisania: najlepszaXI(u.sloty, zawodnicy) })}>
             Ułóż najlepszą XI
           </Button>
           <Button variant="default" onClick={() => setBiezace({ ...u, przypisania: {} })}>Wyczyść</Button>
-          <Button variant="subtle" color="gray" onClick={() => setBiezace({ ...u, sloty: slotyFormacji(u.formacja).map((s, i) => ({ ...s, pozycja: u.sloty[i]?.pozycja ?? s.pozycja })) })}>
+          <Button variant="subtle" color="gray" disabled={zGryUstawione}
+            title={zGryUstawione ? 'Pozycje z gry - aby je przywrócić, wczytaj taktykę z gry ponownie' : undefined}
+            onClick={() => setBiezace({ ...u, sloty: slotyFormacji(u.formacja).map((s, i) => ({ ...s, pozycja: u.sloty[i]?.pozycja ?? s.pozycja })) })}>
             Wyrównaj pozycje
           </Button>
         </Group>
+        <PanelTaktykiGry taktyka={taktykaGry} uwaga={zGry.data?.uwaga} blad={zGry.error as Error | null}
+          ladowanie={zGry.isLoading} wgKlucza={wgKlucza} naWczytaj={wczytajZGry} />
         <Group gap="xs" align="end">
-          <Select label="Zapisane ustawienia" w={200} placeholder="brak" clearable data={Object.keys(zapisane)}
+          <Select label="Zapisane ustawienia" w={SZEROKOSC.srednia} placeholder="brak" clearable data={Object.keys(zapisane)}
             value={zapisane[nazwa] ? nazwa : null}
             onChange={(n) => {
               if (n && zapisane[n]) {
@@ -316,7 +378,7 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
                 setNazwa(n);
               } else setNazwa('');
             }} />
-          <TextInput label="Nazwa" w={160} value={nazwa} onChange={(e) => setNazwa(e.currentTarget.value)} placeholder="np. Liga" />
+          <TextInput label="Nazwa" w={SZEROKOSC.srednia} value={nazwa} onChange={(e) => setNazwa(e.currentTarget.value)} placeholder="np. Liga" />
           <Button onClick={() => zapisz(nazwa)} disabled={!nazwa.trim()}>Zapisz</Button>
           {zapisane[nazwa] && (
             <Button variant="subtle" color="red" onClick={() => {
@@ -327,7 +389,7 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
             }}>Usuń</Button>
           )}
         </Group>
-        <Card withBorder padding="xs">
+        <Card withBorder padding="sm">
           <Group gap="lg">
             <Text size="sm">Średni SCORE XI: <b>{wyniki.length ? formatuj(wyniki.reduce((a, b) => a + b, 0) / wyniki.length, 'dec1') : '–'}</b></Text>
             <Text size="sm">Średni wiek: <b>{wSkladzie.length ? formatuj(sredniWiek, 'dec1') : '–'}</b></Text>
@@ -340,13 +402,13 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
           zawodników, żeton na wolne miejsce przesuwa pozycję. Kółko pozycji: zmiana pozycji; dwuklik na nazwisku: karta;
           × zdejmuje z boiska. SCORE liczony na pozycji na boisku; „poza pozycją” = ocena pozycji z gry (1–20).
         </Text>
-        <Card withBorder padding="xs" data-lista>
+        <Card withBorder padding="sm" data-lista>
           <Group justify="space-between" mb={6}>
             <Title order={6}>Kadra ({zawodnicy.length})</Title>
-            <Select size="xs" w={190} placeholder="Wszystkie pozycje" clearable value={filtr} onChange={setFiltr}
+            <Select w={SZEROKOSC.srednia} placeholder="Wszystkie pozycje" clearable value={filtr} onChange={setFiltr}
               data={POZYCJE.map((p) => ({ value: p, label: `${SKROTY[p]} · ${p}` }))} />
           </Group>
-          <ScrollArea h="min(46vh, 520px)">
+          <ScrollArea h="min(calc(46vh / var(--skala, 1)), 520px)">
             <Stack gap={4}>
               {lista.map((z) => {
                 const wynik = filtr ? wynikNa(z, filtr) : najlepszyWynik(z);

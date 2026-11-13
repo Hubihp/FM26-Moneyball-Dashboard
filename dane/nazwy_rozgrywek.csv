@@ -24,12 +24,12 @@ database_id,nazwa
 84,Liga MX
 102422,Primera Nacional
 102423,Série A
-102424,Liga brazylijska (nieznana) #102424
+102424,Campeonato Carioca
 102426,Brasileirão Série C
 102428,J1 League
 102429,J2 League
-107185,Liga brazylijska (nieznana) #107185
-107186,Liga brazylijska (nieznana) #107186
+107185,Campeonato Alagoano
+107186,Campeonato Acreano
 107191,Série B
 115424,J2 League
 129558,Ekstraklasa
@@ -37,28 +37,29 @@ database_id,nazwa
 129645,Hrvatska nogometna liga
 129646,Prva nogometa liga
 136407,K League 1
-302205,Liga brazylijska (nieznana) #302205
-302207,Liga brazylijska (nieznana) #302207
-309678,Liga brazylijska (nieznana) #309678
-309680,Liga brazylijska (nieznana) #309680
-309682,Liga brazylijska (nieznana) #309682
+302205,Campeonato Gaúcho
+302207,Campeonato Amazonense
+309678,Campeonato Baiano
+309680,Campeonato Goiano
+309682,Campeonato Mineiro
 309684,Brasileirão Série C
-309686,Liga brazylijska (nieznana) #309686
-309688,Liga brazylijska (nieznana) #309688
-313192,Liga brazylijska (nieznana) #313192
-313194,Liga brazylijska (nieznana) #313194
-313196,Liga brazylijska (nieznana) #313196
-313198,Liga brazylijska (nieznana) #313198
-313200,Liga brazylijska (nieznana) #313200
-313202,Liga brazylijska (nieznana) #313202
-313204,Liga brazylijska (nieznana) #313204
-313206,Liga brazylijska (nieznana) #313206
-313208,Liga brazylijska (nieznana) #313208
-313210,Liga brazylijska (nieznana) #313210
-313212,Liga brazylijska (nieznana) #313212
-313214,Liga brazylijska (nieznana) #313214
-313216,Liga brazylijska (nieznana) #313216
-313218,Liga brazylijska (nieznana) #313218
-313220,Liga brazylijska (nieznana) #313220
+309686,Campeonato Paranaense
+309688,Campeonato Catarinense
+313192,Campeonato Amapaense
+313194,Campeonato Cearense
+313196,Campeonato Brasiliense
+313198,Campeonato Capixaba
+313200,Campeonato Maranhense
+313202,Campeonato Sul-Mato-Grossense
+313204,Campeonato Mato-Grossense
+313206,Campeonato Paraibano
+313208,Campeonato Piauiense
+313210,Campeonato Potiguar
+313212,Campeonato Rondoniense
+313214,Campeonato Roraimense
+313216,Campeonato Sergipano
+313218,Campeonato Tocantinense
+313220,Campeonato Paraense
+7920263,Saudi Pro League
 66029602,K League 2
 2000017075,Liga Rozwojowa

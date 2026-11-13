@@ -58,7 +58,7 @@ export default function ListaZyczen({ lista, setLista, wersja, wagi, ustawienia,
         </Text>
         <Group gap="xs">
           {dane.isFetching && <Loader size="xs" />}
-          <Button size="xs" variant="subtle" color="red" onClick={() => setLista([])}>Wyczyść listę</Button>
+          <Button variant="subtle" color="red" onClick={() => setLista([])}>Wyczyść listę</Button>
         </Group>
       </Group>
       {dane.error && <Alert color="red">{(dane.error as Error).message}</Alert>}
@@ -68,7 +68,7 @@ export default function ListaZyczen({ lista, setLista, wersja, wagi, ustawienia,
             {nieznalezieni.map((w) => `${w.pilkarz} (${w.klub}, ${w.pozycja})`).join(', ')} - np. po wczytaniu innego
             zapisu albo gdy zawodnik nie spełnia już progu minut.
           </Text>
-          <Button mt="xs" size="xs" variant="light" color="yellow"
+          <Button mt="xs" variant="light" color="yellow"
             onClick={() => setLista(lista.filter((w) => !nieznalezieni.includes(w)))}>
             Usuń nieznalezionych z listy
           </Button>

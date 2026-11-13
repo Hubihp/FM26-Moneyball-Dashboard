@@ -101,7 +101,7 @@ def uruchom(utworz_app, host, port, start):
     # okno pod tym samym adresem co w przegladarce (przenoszenie danych z przegladarki)
     adres = f"http://localhost:{port}"
     okno = webview.create_window(f"FM27 Dashboard {__version__}", html=EKRAN_LADOWANIA, width=1500, height=950,
-                                 min_size=(1100, 700), text_select=True)
+                                 min_size=(1100, 700), text_select=True, maximized=True)
     serwer = None
 
     def pokaz(tekst):

@@ -1,5 +1,5 @@
 """
-Zrodlo: plik zapisu kariery FM27 albo FM26 (.fm), czytany biblioteka `fmsave`.
+Zrodlo: plik zapisu kariery FM27 (.fm), czytany biblioteka `fmsave`.
 
 Plik .fm to kontener z sekcjami skompresowanymi Zstandardem (bez szyfrowania); fmsave
 rozpakowuje go i dekoduje rekordy gry. Z jednego zapisu powstaja od razu ramki dla
@@ -18,10 +18,11 @@ from datetime import date, timedelta
 import numpy as np
 import pandas as pd
 
-from fm_moneyball.kraje import kraj_z_licznika, kraje_z_kotwic, narodowosci_lig
+from fm_moneyball.kraje import kraj_z_licznika, kraje_z_kotwic, narodowosci_lig, nazwy_z_bazy
 from fm_moneyball.mapy import KATALOG_DANYCH, KATALOG_DOMOWY, wczytaj_mape, zapisz_mape
 from fm_moneyball.parsery import fmt_eur
 from fm_moneyball.schemat import dopelnij_schemat
+from fm_moneyball.taktyka_gry import taktyki_klubu
 from fm_moneyball.stale import MAPOWANIE_NAZW_LIG, POZYCJE, SKROT_POZYCJI_APLIKACJI, kolumna_oceny
 
 PLIK_NAZW_ROZGRYWEK = KATALOG_DANYCH / "nazwy_rozgrywek.csv"
@@ -162,7 +163,10 @@ class WynikZapisu:
     tabele: dict = field(default_factory=dict)         # club_uid prowadzonego klubu -> tabela jego ligi
     budzety: dict = field(default_factory=dict)        # club_uid prowadzonego klubu -> budzet z finansow
     kraje_auto: dict = field(default_factory=dict)     # nation_id -> nazwa kraju z klubow-kotwic
+    kraje_baza: dict = field(default_factory=dict)     # nation_id -> nazwa z tabeli po numerze bazy gry
     menedzer: str | None = None                        # czlowiek prowadzacy kariere (klucz historii)
+    menedzer_nazwa: str | None = None                  # imie i nazwisko menedzera (naglowek aplikacji)
+    taktyki: dict = field(default_factory=dict)        # club_uid prowadzonego klubu -> taktyki pierwszej druzyny
 
 
 # =============================================================================
@@ -867,19 +871,25 @@ def podsumuj_ligi(liga_klubu, kluby, limit=5, narodowosci=None):
     """
     nazwa_klubu = {k.uid: k.name for k in kluby}
     kraj_klubu = {k.uid: getattr(k, "nation_id", None) for k in kluby}
+    reputacja_klubu = {k.uid: getattr(k, "reputation", None) for k in kluby}
     grupy = {}
     for uid, liga in liga_klubu.items():
         g = grupy.setdefault(liga.competition_id, {"klucz": liga.database_id,
                                                    "domyslna": Liga(liga.competition_id, liga.database_id, None).etykieta,
                                                    "nazwa": liga.nazwa, "kluby": [], "kraje": Counter(),
-                                                   "competition_id": liga.competition_id})
+                                                   "competition_id": liga.competition_id, "reputacje": []})
         g["kluby"].append(nazwa_klubu.get(uid) or "?")
+        if reputacja_klubu.get(uid):
+            g["reputacje"].append(reputacja_klubu[uid])
         if kraj_klubu.get(uid) is not None:
             g["kraje"][kraj_klubu[uid]] += 1
     wynik = []
     for g in grupy.values():
         kraje = g.pop("kraje")
         competition_id = g.pop("competition_id")
+        reputacje = sorted(g.pop("reputacje"))
+        # sila ligi do korekty SCORE: mediana reputacji jej klubow (odporna na pojedyncze wielkie kluby)
+        g["reputacja"] = float(reputacje[len(reputacje) // 2]) if reputacje else None
         if narodowosci is not None:
             kraj = kraj_z_licznika(narodowosci.get(competition_id))
         else:
@@ -890,6 +900,53 @@ def podsumuj_ligi(liga_klubu, kluby, limit=5, narodowosci=None):
 
 ETAPY_WCZYTYWANIA = ("Otwieranie zapisu", "Kluby i terminarz", "Zawodnicy", "Statystyki sezonu",
                      "Kontuzje", "Budowanie tabel")
+
+
+OBSLUGIWANA_GRA = 27      # program czyta tylko zapisy FM27
+
+
+class ZapisNieobslugiwany(Exception):
+    """Zapis, ktorego program nie czyta (inna gra niz FM27) - komunikat dla uzytkownika po polsku."""
+
+
+def komunikat_bledu(e):
+    """Wyjatek odczytu zapisu -> zrozumialy komunikat po polsku (szczegoly zostaja w dzienniku)."""
+    nazwa = type(e).__name__
+    if isinstance(e, ZapisNieobslugiwany):
+        return str(e)
+    if nazwa == "NotAFmSaveError":
+        return "Wybrany plik nie jest zapisem Football Managera. Wybierz plik .fm z folderu zapisów gry."
+    if nazwa == "UnsupportedGameError":
+        return ("Tego zapisu nie da się jeszcze odczytać - pochodzi z wersji gry, której biblioteka fmsave nie zna. "
+                "Zaktualizuj program, gdy pojawi się nowa wersja.")
+    if nazwa in ("ReaderCheckError", "CorruptSaveError"):
+        return ("Zapis ma układ danych, którego program nie potrafi odczytać (np. nowa łatka gry albo uszkodzony plik). "
+                "Spróbuj wczytać inny zapis lub zaktualizuj program.")
+    if isinstance(e, PermissionError):
+        return "Plik zapisu jest zablokowany - gra prawdopodobnie właśnie zapisuje. Spróbuj ponownie za chwilę."
+    if isinstance(e, FileNotFoundError):
+        return "Nie znaleziono pliku zapisu - mógł zostać przeniesiony albo usunięty."
+    if isinstance(e, MemoryError):
+        return "Za mało pamięci do odczytu zapisu. Zamknij inne programy i spróbuj ponownie."
+    return f"Nie udało się wczytać zapisu ({nazwa}). Szczegóły są w dzienniku programu."
+
+
+def menedzer_z_zapisu(zapis, zarzadzane):
+    """Imie i nazwisko menedzera (prowadzacego karierze) z rekordu personelu; zapasowo nazwa z klubu."""
+    for m in zarzadzane:
+        uid = getattr(m, "manager_staff_uid", None)
+        if uid is None:
+            continue
+        try:
+            for osoba in zapis.staff():
+                if osoba.uid == uid:
+                    pelne = " ".join(x for x in (osoba.first_name, osoba.last_name) if x)
+                    return osoba.common_name or pelne or osoba.name or m.manager_name
+        except Exception:   # personel to dodatek - nazwa z klubu wystarczy
+            pass
+        if getattr(m, "manager_name", None):
+            return m.manager_name
+    return None
 
 
 def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
@@ -920,11 +977,20 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
         etap(0)
         with fmsave.open(sciezka) as zapis:
             info = zapis.info
+            gra = str(info.build).split(".")[0]
+            if gra != str(OBSLUGIWANA_GRA):
+                raise ZapisNieobslugiwany(f"To zapis FM{gra} - program obsługuje tylko zapisy Football Managera 27.")
             etap(1)
             kluby = list(zapis.clubs())
             kandydaci = kandydaci_lig_lacznie(zapis, kluby, info.game_date, ostrzezenia)
             liga_klubu = ligi_klubow([], [], kluby, nazwy, kandydaci=kandydaci)
             zarzadzane = list(zapis.managed_clubs())
+            menedzer = menedzer_z_zapisu(zapis, zarzadzane)
+            try:
+                numery_krajow = {n.nation_id: n.database_id for n in zapis.nations()}
+            except Exception as e:   # nazwy krajow to dodatek - zostaja heurystyki
+                ostrzezenia.append(f"Nie udało się odczytać numerów krajów ({type(e).__name__}).")
+                numery_krajow = {}
             etap(2)
             zawodnicy = list(zapis.players())
             etap(3)
@@ -953,19 +1019,23 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
             except Exception as e:   # tabela to dodatek (profil druzyny) - jej brak nie blokuje reszty
                 ostrzezenia.append(f"Nie udało się odczytać tabel lig ({e}).")
                 tabele = {}
+            try:
+                taktyki = {uid: taktyki_klubu(zapis, uid) for uid in moje_uidy}
+            except Exception as e:   # taktyka to dodatek (tablica taktyczna)
+                ostrzezenia.append(f"Nie udało się odczytać taktyki z gry ({type(e).__name__}).")
+                taktyki = {}
             etap(4)
             try:
                 kontuzje = policz_kontuzje(zapis.injuries(), info.game_date)
             except Exception as e:   # historia kontuzji jest dodatkiem - jej brak nie blokuje reszty
                 ostrzezenia.append(f"Nie udało się odczytać historii kontuzji ({e}).")
                 kontuzje = {}
-    if str(info.build).startswith("27."):
-        ostrzezenia.append("Zapis FM27: obsługa tej wersji gry w bibliotece fmsave jest wstępna - część pól nie "
-                           "jest jeszcze potwierdzona, więc pojedyncze statystyki mogą być błędne.")
-    for w in zlapane:
-        if issubclass(w.category, fmsave.UnknownBuildWarning):
-            ostrzezenia.append(f"Wersja gry {info.build} nie jest jeszcze zweryfikowana w fmsave {fmsave.__version__} - "
-                               "dane mogą być odczytane błędnie. Sprawdź aktualizację programu.")
+    # jedno ostrzezenie o wiarygodnosci odczytu FM27 (fmsave nie potwierdzil jeszcze znaczenia czesci pol)
+    zweryfikowana = not any(issubclass(w.category, fmsave.UnknownBuildWarning) for w in zlapane)
+    ostrzezenia.append(
+        f"Odczyt zapisu FM27 jest wstępny: wersja gry {info.build} "
+        f"{'jest' if zweryfikowana else 'nie jest jeszcze'} sprawdzona przez bibliotekę fmsave, a znaczenie części "
+        "pól nie jest potwierdzone. Pojedyncze statystyki mogą być błędne - przy ważnej decyzji sprawdź je w grze.")
 
     etap(5)
     moje = [{"uid": m.club_uid, "nazwa": m.club_name} for m in zarzadzane]
@@ -986,11 +1056,14 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
         moje_kluby=moje,
         menedzer=next((str(m.manager_name or m.manager_staff_uid) for m in zarzadzane
                        if getattr(m, "manager_name", None) or getattr(m, "manager_staff_uid", None)), None),
+        menedzer_nazwa=menedzer,
         ligi=podsumuj_ligi(liga_klubu, kluby, narodowosci=narodowosci_lig(zawodnicy, liga_klubu)),
         kraje_auto=kraje_z_kotwic(kluby, zawodnicy),
+        kraje_baza=nazwy_z_bazy(numery_krajow),
         druzyny=druzyny,
         tabele={uid: t for uid, t in tabele.items() if t is not None},
         budzety={uid: b for uid, b in budzety.items() if b is not None},
+        taktyki={uid: t for uid, t in taktyki.items() if t},
     )
 
 

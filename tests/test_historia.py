@@ -105,7 +105,7 @@ def klient_z_historia(tmp_path, monkeypatch):
     poprzednie["Napastnik"].loc[:9, 'Liczba goli na 90 min'] /= 2
     for df in poprzednie.values():
         df['Mnożnik_Ligi'] = 0.9
-    kat = historia.katalog_kariery(tmp_path / "historia", "Jan Kowalski")
+    kat = historia.katalog_kariery(tmp_path / "historia" / "FM27", "Jan Kowalski")   # FM27 osobno
     historia.zapisz_migawke(kat, poprzednie, date(2026, 5, 1))
     stan = Stan(plik_ustawien=tmp_path / "u.json", sledzenie=False, katalog_cache=None, plik_nazw=tmp_path / "n.csv",
                 plik_mnoznikow=tmp_path / "m.csv", plik_krajow=tmp_path / "k.csv",
@@ -173,7 +173,7 @@ def test_historia_po_zmianie_klubu(tmp_path, monkeypatch):
                            menedzer="Jan Kowalski", moje_kluby=[{"uid": klub_uid, "nazwa": klub}])
     monkeypatch.setattr(modul, "wczytaj_zapis", atrapa)
     # migawka zapisana przez poprzednia wersje (katalog po klubie) - ma trafic do wspolnej historii
-    stary = tmp_path / "historia" / "1_Tottenham"
+    stary = tmp_path / "historia" / "FM27" / "1_Tottenham"
     historia.zapisz_migawke(stary, {"Napastnik": _ramka([1, 2])}, date(2027, 2, 1))
     for nr, zapis in enumerate(zapisy):
         biezacy["zapis"] = zapis
@@ -184,7 +184,7 @@ def test_historia_po_zmianie_klubu(tmp_path, monkeypatch):
                     katalog_historii=tmp_path / "historia")
         stan.ustaw_zrodlo("plik", plik=str(plik), w_tle=False)
         assert stan.migawka()["meta"]["moj_klub"] == zapis[2]        # moj klub z biezacego zapisu
-    kat = historia.katalog_kariery(tmp_path / "historia", "Jan Kowalski")
+    kat = historia.katalog_kariery(tmp_path / "historia" / "FM27", "Jan Kowalski")   # FM27 osobno
     assert [d for _, d in historia.migawki(kat)] == [date(2027, 2, 1)] + [z[0] for z in zapisy]
     assert not stary.exists()
     with TestClient(utworz_aplikacje(stan)) as k:
@@ -215,7 +215,7 @@ def test_prognoza_bez_historii_i_z_historia():
     bez = historia.prognoza(pula)
     assert bez.attrs["prognoza"]["pary"] == 0 and bez.attrs["prognoza"]["b"] == pytest.approx(historia.B_POCZATKOWE)
     mlody = bez[bez["Wiek"] == 19].iloc[0]
-    assert mlody["Prognoza_wiek"] > 2 and bez[bez["Wiek"] == 34].iloc[0]["Prognoza_wiek"] < -2
+    assert mlody["Prognoza_wiek"] > 1 and bez[bez["Wiek"] == 34].iloc[0]["Prognoza_wiek"] < -1   # wartosci z danych FM27
     assert mlody["Prognoza SCORE"] == pytest.approx(
         mlody["SCORE"] + (historia.B_POCZATKOWE - 1) * (mlody["SCORE"] - pula["SCORE"].mean()) + mlody["Prognoza_wiek"])
     # korekta ligowa nie podlega regresji
@@ -235,3 +235,22 @@ def test_prognoza_bez_historii_i_z_historia():
     # stabilnosc obcinana do zakresu
     pula["Δ SCORE"] = -2 * (pula["SCORE_poprzedni"] - 50)
     assert historia.model_prognozy(pula)["b"] >= historia.B_ZAKRES[0]
+
+
+def test_migawki_do_uzupelnienia_z_folderu(tmp_path):
+    from fm_moneyball.zrodla.folder import PlikZapisu
+    katalog = tmp_path / "kariera"
+    katalog.mkdir()
+    (katalog / "2027-09-15.csv.gz").write_bytes(b"")          # wrzesien juz jest
+    pliki = {n: PlikZapisu(tmp_path / f"{n}.fm", 100, 1.0) for n in "abcdef"}
+    zapisy = [(pliki["a"], date(2027, 8, 1)), (pliki["b"], date(2027, 8, 20)),   # sierpien: pozniejszy (b)
+              (pliki["c"], date(2027, 9, 30)),                                    # wrzesien ma migawke
+              (pliki["d"], date(2027, 11, 2)),                                    # biezacy miesiac
+              (pliki["e"], date(2028, 1, 1)),                                     # pozniejszy niz biezacy
+              (pliki["f"], date(2027, 6, 1))]
+    wynik = historia.do_uzupelnienia(zapisy, katalog, date(2027, 11, 6))
+    assert [p.sciezka.stem for p, _ in wynik] == ["b", "f"]
+    historia.zapisz_przejrzane(katalog, {historia.klucz_pliku(pliki["b"]): "inna kariera"})
+    wynik = historia.do_uzupelnienia(zapisy, katalog, date(2027, 11, 6))
+    assert [p.sciezka.stem for p, _ in wynik] == ["a", "f"]     # przejrzany plik pominiety, zostaje inny z miesiaca
+    assert historia.do_uzupelnienia(zapisy, katalog, date(2027, 11, 6), maks=1) == wynik[:1]

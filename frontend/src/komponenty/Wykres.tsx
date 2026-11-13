@@ -18,27 +18,39 @@ echarts.use([BarChart, LineChart, RadarChart, ScatterChart, GridComponent, Legen
 type Props = { opcje: EChartsOption; wysokosc?: number | string; naKlik?: (dane: unknown) => void };
 
 // Cienka otoczka na ECharts: tworzy wykres raz, aktualizuje opcje i reaguje na zmiane rozmiaru.
+// Na ukrytej karcie (React Activity) efekty sa zdejmowane, ale DOM zostaje - wykres nie jest wtedy niszczony,
+// tylko podejmowany po powrocie (bez ponownego rysowania tysiecy punktow). Niszczony, gdy element znika z DOM.
 export default function Wykres({ opcje, wysokosc = 420, naKlik }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const wykres = useRef<echarts.ECharts | null>(null);
+  const narysowane = useRef<string | null>(null);     // klucz opcji obecnych na wykresie
 
   useEffect(() => {
-    if (!ref.current) return;
-    wykres.current = echarts.init(ref.current, 'dark', { renderer: 'canvas' });
+    const el = ref.current;
+    if (!el) return;
+    const istniejacy = echarts.getInstanceByDom(el);
+    if (!istniejacy) narysowane.current = null;
+    wykres.current = istniejacy ?? echarts.init(el, 'dark', { renderer: 'canvas' });
     // resize tylko przy faktycznej zmianie rozmiaru (kazde resize chowa podpowiedz)
-    let rozmiar = '';
+    // (podjety wykres ma juz rozmiar - porownanie z nim, a nie z pustym napisem)
+    const w0 = wykres.current;
+    let rozmiar = istniejacy ? `${w0.getWidth()}x${w0.getHeight()}` : '';
     const obserwator = new ResizeObserver(([wpis]) => {
       const nowy = `${Math.round(wpis.contentRect.width)}x${Math.round(wpis.contentRect.height)}`;
-      if (nowy !== rozmiar) {
+      if (nowy !== rozmiar && wpis.contentRect.width > 0) {
         rozmiar = nowy;
         wykres.current?.resize();
       }
     });
-    obserwator.observe(ref.current);
+    obserwator.observe(el);
+    const instancja = wykres.current;
     return () => {
       obserwator.disconnect();
-      wykres.current?.dispose();
       wykres.current = null;
+      // ukrycie karty: element zostaje w DOM; odmontowanie: element usuniety - wtedy dopiero dispose
+      window.setTimeout(() => {
+        if (!el.isConnected && !instancja.isDisposed()) instancja.dispose();
+      }, 0);
     };
   }, []);
 
@@ -48,8 +60,10 @@ export default function Wykres({ opcje, wysokosc = 420, naKlik }: Props) {
   const aktualne = useRef(opcje);
   aktualne.current = opcje;
   useEffect(() => {
+    if (!wykres.current || narysowane.current === klucz) return;
+    narysowane.current = klucz;
     const o = aktualne.current;
-    wykres.current?.setOption({
+    wykres.current.setOption({
       backgroundColor: 'transparent', ...o,
       // podpowiedz w granicach wykresu: nie wydluza strony i nie wywoluje pasow przewijania
       tooltip: Array.isArray(o.tooltip) ? o.tooltip : { confine: true, ...(o.tooltip ?? {}) },

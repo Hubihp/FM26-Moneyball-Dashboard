@@ -149,7 +149,7 @@ function WidokPozycji({ wersja, szukajNastepcy, otworz, zapytanieDla, mojKlubUid
             ) : (
               <Text size="sm" c="dimmed">Brak zawodników na tej pozycji.</Text>
             )}
-            <Button mt="sm" variant="light" size="xs" onClick={() => szukajNastepcy(p.pozycja)}>
+            <Button mt="sm" variant="light" onClick={() => szukajNastepcy(p.pozycja)}>
               Szukaj wzmocnienia
             </Button>
           </Card>

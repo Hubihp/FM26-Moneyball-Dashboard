@@ -26,6 +26,7 @@ export type Stan = {
   };
   meta: {
     nazwa_zapisu?: string;
+    menedzer_nazwa?: string | null;   // imie i nazwisko menedzera z zapisu (naglowek)
     plik?: string;
     data_gry?: string | null;
     moj_klub?: string | null;
@@ -58,6 +59,8 @@ export type MetaPozycji = {
   ma_historie: boolean;
   data_porownania: string | null;
   min_minut_rozwoju: number;
+  min_minut_auto: number;            // prog automatyczny calej puli (orientacyjnie; filtr liczy go wg ligi)
+  statystyki_niedostepne: string[];  // cechy wag domyslnych, ktorych zapis nie podaje
 };
 
 export type PunktHistorii = {
@@ -116,7 +119,7 @@ export type Filtry = {
   bez_ceny: boolean;
   szukaj: string;
   kontrakt_mies: number | null;
-  min_minut: number;
+  min_minut: number | null;   // null = automatycznie wg ligi zawodnika (moment sezonu)
   bez_mojego_klubu: boolean;
   okazje: string[];
   min_rozwoj: number | null; // zmiana SCORE wzgledem poprzedniego sezonu
@@ -198,11 +201,15 @@ export type Liga = {
   nazwa: string | null;
   liczba: number;
   kluby: string[];
-  mnoznik: number | null;
+  mnoznik: number | null;           // wpisany recznie (pierwszenstwo)
+  mnoznik_auto?: number | null;     // z danych o transferach i reputacji ligi
+  zrodlo_mnoznika?: 'transfery' | 'reputacja';
+  reputacja?: number | null;
+  nazwa_auto?: boolean;
 };
 export type Ligi = {
   ligi: Liga[]; znane_nazwy: string[]; mnozniki: Record<string, number>; mnoznik_nieznanej: number;
-  mnoznik_rezerw: number | null; nazwa_rezerw: string;
+  mnoznik_rezerw: number | null; nazwa_rezerw: string; mnoznik_rezerw_auto: number;
 };
 
 export type PozycjaKadry = {
@@ -229,6 +236,15 @@ export type ZawodnikSkladu = {
   oceny: Record<string, number>;
   score: Record<string, number>;
   id_w_pulach: Record<string, string>;
+};
+
+export type SlotZGry = {
+  numer: number; pozycja: string; pozycja_bez: string | null; x: number; y: number;
+  uid: string | null; nazwa: string | null;
+};
+export type TaktykaZGry = {
+  nazwa: string; styl: string | null; mentalnosc: string | null; formacja: string; formacja_bez: string;
+  sloty: SlotZGry[]; rezerwowi: { uid: string; nazwa: string | null }[];
 };
 
 export type MetrykaProfilu = {
@@ -421,6 +437,7 @@ export const api = {
     k_baza: number }) => post<RozbicieWyniku>('/api/rozbicie', body),
   sklad: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number;
     tylko_pierwsza: boolean }) => post<{ zawodnicy: ZawodnikSkladu[]; pozycje: string[] }>('/api/sklad', body),
+  taktykaZGry: () => zadanie<{ taktyki: TaktykaZGry[]; uwaga: string }>('/api/taktyka-z-gry'),
   profilDruzyny: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number;
     tylko_pierwsza?: boolean }) =>
     post<ProfilDruzyny>('/api/profil-druzyny', body),

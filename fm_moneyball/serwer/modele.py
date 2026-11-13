@@ -66,7 +66,7 @@ class FiltryModel(BaseModel):
     pensja: tuple[float | None, float | None] | None = None
     szukaj: str = ""
     kontrakt_mies: int | None = None
-    min_minut: int = 0
+    min_minut: int | None = 0          # None = automatycznie wg ligi zawodnika
     bez_mojego_klubu: bool = False
     okazje: list[str] = Field(default_factory=list)
     min_rozwoj: float | None = None

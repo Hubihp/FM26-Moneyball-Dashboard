@@ -17,7 +17,7 @@ import {
 } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Activity, lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { api, type Filtry, type Stan, type Wiersz, type ZapytanieRankingu } from './api';
 import { PasekSystemu, WersjaProgramu } from './komponenty/Aktualizacja';
@@ -32,10 +32,28 @@ import PanelZrodla from './komponenty/PanelZrodla';
 
 import TabelaRankingu from './komponenty/TabelaRankingu';
 // Komponenty z wykresami (ECharts) ladowane dopiero przy pierwszym uzyciu
+import { usePowiekszenie } from './powiekszenie';
+import { SZEROKOSC } from './wyglad';
+
 const KartaZawodnika = lazy(() => import('./komponenty/KartaZawodnika'));
 const Porownanie = lazy(() => import('./komponenty/Porownanie'));
 const Wykresy = lazy(() => import('./komponenty/Wykresy'));
 const ProfilDruzyny = lazy(() => import('./komponenty/ProfilDruzyny'));
+
+// kod leniwych kart pobierany w bezczynnosci po starcie - pierwsze wejscie w karte nie czeka na plik
+const LENIWE = [() => import('./komponenty/KartaZawodnika'), () => import('./komponenty/Porownanie'),
+  () => import('./komponenty/Wykresy'), () => import('./komponenty/ProfilDruzyny'),
+  () => import('./komponenty/SprzedajDrogo'), () => import('./komponenty/Optymalizator'),
+  () => import('./komponenty/Taktyka')];
+
+// Karta odwiedzona raz zostaje zamontowana: ukryta (Activity) zachowuje stan i dane, nie pobiera niczego w tle,
+// a po powrocie pokazuje sie od razu. Nieodwiedzona - nic nie renderuje.
+function Karta({ id, aktywna, odwiedzone, children }: {
+  id: string; aktywna: string | null; odwiedzone: Set<string>; children: ReactNode;
+}) {
+  if (!odwiedzone.has(id) && aktywna !== id) return null;
+  return <Activity mode={aktywna === id ? 'visible' : 'hidden'}>{children}</Activity>;
+}
 
 const POZYCJE = ['Bramkarz', 'Środkowy Obrońca', 'Lewy Obrońca', 'Prawy Obrońca', 'Lewy Wahadłowy', 'Prawy Wahadłowy',
   'Defensywny Pomocnik', 'Środkowy Pomocnik', 'Lewy Pomocnik', 'Prawy Pomocnik', 'Ofensywny Pomocnik', 'Lewy Skrzydłowy',
@@ -126,6 +144,14 @@ export default function App() {
   // jednorazowa migracja: wspolne filtry startuja od dawnych filtrow ostatnio wybranej pozycji
   const [filtryWspolne, setFiltryWspolne] = usePamiec<Filtry>('fm-filtry-wspolne',
     { ...PUSTE_FILTRY, ...(filtryPozycji[pozycja] ?? {}), kandydaci_z: [], kandydaci: false });
+  // jednorazowo: dawny domyslny prog 1000 minut -> prog automatyczny wg ligi (w trakcie sezonu 1000 min
+  // ukrywalo wiekszosc zawodnikow); wlasna, inna wartosc zostaje
+  const [minutyAuto, setMinutyAuto] = usePamiec<boolean>('fm-minuty-auto', false);
+  useEffect(() => {
+    if (minutyAuto) return;
+    if (filtryWspolne.min_minut === 1000) setFiltryWspolne({ ...filtryWspolne, min_minut: null });
+    setMinutyAuto(true);
+  }, [minutyAuto, filtryWspolne, setFiltryWspolne, setMinutyAuto]);
   const filtryDla = (poz: string): Filtry => {
     const kandydaciZ = filtryPozycji[poz]?.kandydaci_z ?? [];
     return { ...PUSTE_FILTRY, ...filtryWspolne, kandydaci_z: kandydaciZ,
@@ -145,6 +171,18 @@ export default function App() {
   const [karta, setKarta] = useState<string | null>(null);
   const [kartaWiersz, setKartaWiersz] = useState<Wiersz | undefined>(undefined);
   const [zakladka, setZakladka] = useState<string | null>('ranking');
+  const [skala, plakietkaSkali] = usePowiekszenie();
+  const [odwiedzone, setOdwiedzone] = useState<Set<string>>(() => new Set(['ranking']));
+  useEffect(() => {
+    if (zakladka && !odwiedzone.has(zakladka)) setOdwiedzone(new Set([...odwiedzone, zakladka]));
+  }, [zakladka, odwiedzone]);
+  const stanKart = { aktywna: zakladka, odwiedzone };
+  useEffect(() => {
+    const zaladuj = () => LENIWE.forEach((f) => { f().catch(() => undefined); });
+    const ric = (window as Window & { requestIdleCallback?: (f: () => void) => number }).requestIdleCallback;
+    const t = ric ? ric(zaladuj) : window.setTimeout(zaladuj, 1500);
+    return () => { if (!ric) window.clearTimeout(t); };
+  }, []);
 
   const stan = useQuery({ queryKey: ['stan'], queryFn: api.stan, staleTime: 0 });
 
@@ -250,12 +288,16 @@ export default function App() {
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap">
-            <Title order={3}>FM27 Dashboard</Title>
+            <Title order={3} style={{ whiteSpace: 'nowrap' }}>FM27 Dashboard</Title>
             <WersjaProgramu />
-            {s?.meta.nazwa_zapisu && <Badge variant="light" size="lg">{s.meta.nazwa_zapisu}</Badge>}
+            {(s?.meta.menedzer_nazwa || s?.meta.nazwa_zapisu) && (
+              <Tooltip label={s?.meta.nazwa_zapisu ? `Zapis: ${s.meta.nazwa_zapisu}` : 'Menedżer'} disabled={!s?.meta.menedzer_nazwa}>
+                <Badge variant="light" size="lg">{s?.meta.menedzer_nazwa || s?.meta.nazwa_zapisu}</Badge>
+              </Tooltip>
+            )}
             {s?.meta.data_gry && <Badge variant="outline" color="gray">data w grze: {s.meta.data_gry}</Badge>}
             {mojeKluby.length > 1 ? (
-              <Select size="xs" w={220} aria-label="Twój klub" allowDeselect={false}
+              <Select w={SZEROKOSC.srednia} aria-label="Twój klub" allowDeselect={false}
                 leftSection={<span className="legenda-moj-klub" />}
                 value={mojKlubUid !== null && mojKlubUid !== undefined ? String(mojKlubUid) : null}
                 data={mojeKluby.map((k) => ({ value: String(k.uid), label: k.nazwa }))} onChange={zmienMojKlub} />
@@ -302,7 +344,7 @@ export default function App() {
         />
       </AppShell.Navbar>
 
-      <AppShell.Main style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <AppShell.Main style={{ height: 'calc(100vh / var(--skala, 1))', display: 'flex', flexDirection: 'column' }}>
         <PasekSystemu />
         {s?.status === 'blad' && <Alert color="red" m="md" title="Problem z danymi">{s.komunikat}</Alert>}
         {(s?.meta.ostrzezenia ?? []).filter((o) => !ukryteOstrzezenia.includes(o)).map((o) => (
@@ -334,7 +376,7 @@ export default function App() {
             </Stack>
           </Center>
         ) : (
-          <Tabs value={zakladka} onChange={setZakladka} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <Tabs value={zakladka} onChange={setZakladka} keepMounted style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <Tabs.List px="md">
               <Tabs.Tab value="ranking">
                 Ranking {rankingPozycji ? `(${rankingPozycji.liczba} z ${rankingPozycji.liczba_wszystkich}` : ''}
@@ -385,16 +427,16 @@ export default function App() {
               </Box>
             </Tabs.Panel>
             <Tabs.Panel value="okazje" style={{ flex: 1, minHeight: 0 }}>
-              {zakladka === 'okazje' && meta.data && (
+              <Karta id="okazje" {...stanKart}>{meta.data && (
                 <Okazje zapytanie={zapytanieOpoznione} okazje={meta.data.okazje} wersja={wersja} mojKlubUid={mojKlubUid}
                   naWybor={otworzKarte} ulubione={ulubione} przelaczUlubione={przelaczUlubione}
                   wybrane={okazjeWybrane} setWybrane={setOkazjeWybrane}
                   pominMoj={okazjeBezMojego} setPominMoj={setOkazjeBezMojego}
                   zaznaczeni={wybraniPozycji} naZaznaczenie={zaznacz} />
-              )}
+              )}</Karta>
             </Tabs.Panel>
             <Tabs.Panel value="lista" style={{ flex: 1, minHeight: 0 }}>
-              {zakladka === 'lista' && (
+              <Karta id="lista" {...stanKart}>{(
                 <ListaZyczen lista={lista} setLista={setLista} wersja={wersja} wagi={wagiWlasne} ustawienia={ustawienia}
                   mojKlubUid={mojKlubUid} pozycja={pozycja}
                   zaznaczeni={wybraniPozycji} naZaznaczenie={zaznacz}
@@ -402,10 +444,10 @@ export default function App() {
                     setPozycja(poz);
                     otworzKarte(id, wiersz);
                   }} />
-              )}
+              )}</Karta>
             </Tabs.Panel>
             <Tabs.Panel value="kadra" style={{ overflow: 'auto' }}>
-              {zakladka === 'kadra' && (
+              <Karta id="kadra" {...stanKart}>{(
                 <MojaKadra wersja={wersja} wagi={wagiWlasne} ustawienia={ustawienia} szukajNastepcy={szukajNastepcy}
                   zapytanieDla={zapytanieDla} mojKlubUid={mojKlubUid} filtry={filtryKadry}
                   ulubione={ulubione} przelaczUlubione={przelaczUlubione} budzetGry={s?.meta.budzet}
@@ -413,10 +455,10 @@ export default function App() {
                     setPozycja(poz);
                     otworzKarte(id, wiersz);
                   }} />
-              )}
+              )}</Karta>
             </Tabs.Panel>
             <Tabs.Panel value="profil" style={{ overflow: 'auto' }}>
-              {zakladka === 'profil' && (
+              <Karta id="profil" {...stanKart}>{(
                 <Suspense fallback={<Loader m="md" />}>
                   <ProfilDruzyny wersja={wersja} wagi={wagiWlasne} ustawienia={ustawienia}
                     otworz={(poz, id) => {
@@ -424,31 +466,34 @@ export default function App() {
                       otworzKarte(id);
                     }} />
                 </Suspense>
-              )}
+              )}</Karta>
             </Tabs.Panel>
             <Tabs.Panel value="ligi" style={{ overflow: 'auto' }}>
-              {zakladka === 'ligi' && <Ligi wersja={wersja} />}
+              <Karta id="ligi" {...stanKart}>{<Ligi wersja={wersja} />}</Karta>
             </Tabs.Panel>
             <Tabs.Panel value="porownanie" style={{ overflow: 'auto' }}>
-              {zakladka === 'porownanie' && (
+              <Karta id="porownanie" {...stanKart}>{(
                 <Suspense fallback={<Loader m="md" />}>
                   <Porownanie pozycja={pozycja} wersja={wersja} wiersze={wiersze} wybrani={wybraniPozycji}
                     setWybrani={(ids) => setWybrani({ ...wybrani, [pozycja]: ids })} zapytanie={zapytanie} />
                 </Suspense>
-              )}
+              )}</Karta>
             </Tabs.Panel>
             <Tabs.Panel value="wykresy" style={{ overflow: 'auto' }}>
-              {zakladka === 'wykresy' && rankingPozycji && (
+              <Karta id="wykresy" {...stanKart}>{rankingPozycji && (
                 <Suspense fallback={<Loader m="md" />}>
                   <Wykresy wiersze={wiersze} kolumny={rankingPozycji.kolumny} modelWyceny={rankingPozycji.model_wyceny}
                     mojKlubUid={mojKlubUid} naWybor={setKarta} />
                 </Suspense>
-              )}
+              )}</Karta>
             </Tabs.Panel>
           </Tabs>
         )}
       </AppShell.Main>
 
+      {plakietkaSkali && (
+        <div className="plakietka-skali" role="status">Powiększenie {Math.round(skala * 100)}% · Ctrl+0 przywraca 100%</div>
+      )}
       <PanelZrodla otwarty={panelZrodla} zamknij={() => setPanelZrodla(false)} stan={s} />
       {karta && (
       <Suspense fallback={null}>

@@ -21,6 +21,9 @@ def utworz_aplikacje(stan, pamiec=None, aktualizacje=None, okno=None):
     app = FastAPI(title="FM27 Dashboard", docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.stan = stan
     obl = Obliczenia(stan)
+    # po kazdym wczytaniu: w tle laczenie pul i SCORE wszystkich pozycji, zeby pierwsze wejscie w karte bylo szybkie
+    stan.po_wczytaniu.append(lambda wersja: stan.wszyscy_zawodnicy())
+    stan.po_wczytaniu.append(obl.rozgrzej)
     app.include_router(zrodlo.utworz(stan))
     app.include_router(ligi.utworz(stan))
     app.include_router(analiza.utworz(stan, obl))

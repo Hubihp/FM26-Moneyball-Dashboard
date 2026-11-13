@@ -52,6 +52,7 @@ export default function PanelZrodla({ otwarty, zamknij, stan }: Props) {
   const zapisy = useQuery({
     queryKey: ['zapisy', folder],
     queryFn: () => api.zapisy(folder || null),
+    staleTime: 0,
     enabled: otwarty && typ === 'folder',
   });
   useEffect(() => {
@@ -120,7 +121,7 @@ export default function PanelZrodla({ otwarty, zamknij, stan }: Props) {
         {typ === 'folder' && (
           <Stack gap="xs">
             <TextInput
-              label="Folder zapisów FM27 / FM26"
+              label="Folder zapisów FM27"
               description="Zwykle Dokumenty\Sports Interactive\Football Manager 26\games"
               value={folder}
               onChange={(e) => setFolder(e.currentTarget.value)}

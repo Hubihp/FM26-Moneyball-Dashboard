@@ -1,0 +1,229 @@
+database_id,nazwa
+5,Algieria
+6,Angola
+7,Benin
+8,Botswana
+9,Burkina Faso
+10,Burundi
+11,Kamerun
+12,Republika Zielonego Przylądka
+13,Republika Środkowoafrykańska
+14,Czad
+15,Dżibuti
+16,Egipt
+17,Gwinea Równikowa
+18,Etiopia
+19,Gabon
+20,Gambia
+21,Ghana
+22,Gwinea
+23,Gwinea Bissau
+24,Wybrzeże Kości Słoniowej
+25,Kenia
+26,Lesotho
+27,Liberia
+28,Libia
+29,Madagaskar
+30,Malawi
+31,Mali
+32,Mauretania
+33,Mauritius
+34,Maroko
+35,Mozambik
+36,Namibia
+37,Niger
+38,Nigeria
+39,Rwanda
+40,Wyspy Świętego Tomasza i Książęca
+41,Senegal
+42,Seszele
+43,Sierra Leone
+44,Somalia
+45,RPA
+46,Sudan
+47,Eswatini
+48,Tanzania
+49,Kongo
+50,Togo
+51,Tunezja
+52,Uganda
+53,DR Konga
+54,Zambia
+55,Zimbabwe
+106,Afganistan
+107,Bahrajn
+108,Bangladesz
+109,Brunei
+110,Chiny
+111,Hongkong
+112,Indie
+113,Indonezja
+114,Iran
+115,Irak
+116,Japonia
+117,Jordania
+118,Kambodża
+119,Kazachstan
+120,Kuwejt
+121,Kirgistan
+122,Laos
+123,Liban
+124,Makau
+125,Malezja
+126,Malediwy
+127,Mjanma
+128,Nepal
+129,Korea Płn.
+130,Oman
+131,Pakistan
+132,Katar
+133,Arabia Saudyjska
+134,Singapur
+135,Korea Płd.
+136,Sri Lanka
+137,Syria
+138,Tajwan
+139,Tadżykistan
+140,Tajlandia
+141,Filipiny
+142,Turkmenistan
+143,Zjednoczone Emiraty Arabskie
+144,Uzbekistan
+145,Wietnam
+146,Jemen
+359,Antigua i Barbuda
+360,Aruba
+361,Barbados
+362,Belize
+363,Bermudy
+364,Kanada
+365,Kajmany
+366,Kostaryka
+367,Kuba
+368,Dominika
+370,Salwador
+371,Grenada
+373,Gwatemala
+374,Gujana
+375,Haiti
+376,Honduras
+377,Jamajka
+379,Meksyk
+380,Curaçao
+381,Nikaragua
+382,Panama
+383,Portoryko
+384,Saint Kitts i Nevis
+385,Saint Lucia
+386,Saint Vincent i Grenadyny
+387,Surinam
+388,Bahamy
+389,Trynidad i Tobago
+390,USA
+752,Albania
+753,Andora
+754,Armenia
+755,Austria
+756,Azerbejdżan
+757,Belgia
+758,Białoruś
+759,Bośnia i Hercegowina
+760,Bułgaria
+761,Chorwacja
+762,Cypr
+763,Czechy
+764,Dania
+765,Anglia
+766,Estonia
+767,Wyspy Owcze
+768,Finlandia
+769,Francja
+770,Gruzja
+771,Niemcy
+772,Grecja
+773,Węgry
+774,Islandia
+775,Izrael
+776,Włochy
+777,Łotwa
+778,Liechtenstein
+779,Litwa
+780,Luksemburg
+781,Macedonia Płn.
+782,Malta
+783,Mołdawia
+784,Holandia
+785,Irlandia Płn.
+786,Norwegia
+787,Polska
+788,Portugalia
+789,Irlandia
+790,Rumunia
+791,Rosja
+792,San Marino
+793,Szkocja
+794,Słowacja
+795,Słowenia
+796,Hiszpania
+797,Szwecja
+798,Szwajcaria
+799,Turcja
+800,Ukraina
+801,Walia
+802,Serbia
+1435,Australia
+1436,Wyspy Cooka
+1437,Fidżi
+1438,Nowa Zelandia
+1439,Papua-Nowa Gwinea
+1440,Wyspy Salomona
+1441,Tahiti
+1442,Tonga
+1443,Vanuatu
+1444,Samoa
+1649,Argentyna
+1650,Boliwia
+1651,Brazylia
+1652,Chile
+1653,Kolumbia
+1654,Ekwador
+1655,Paragwaj
+1656,Peru
+1657,Urugwaj
+1658,Wenezuela
+1662,Palestyna
+129504,Samoa Amerykańskie
+129505,Mongolia
+129508,Guam
+129511,Erytrea
+129514,Anguilla
+129517,Brytyjskie Wyspy Dziewicze
+129520,Montserrat
+129523,Wyspy Dziewicze USA
+129526,Turks i Caicos
+129532,Nowa Kaledonia
+131012,Bhutan
+142527,Dominikana
+209002,Kiribati
+214394,Gibraltar
+214395,Bonaire
+215446,Krym
+217945,Kosowo
+917496,Gujana Francuska
+917498,Gwadelupa
+917502,Martynika
+917506,Sint Maarten
+917508,Saint-Martin
+917510,Reunion
+918740,Majotta
+918745,Wallis i Futuna
+918748,Saint-Pierre i Miquelon
+919586,Komory
+5626837,Timor Wschodni
+13100103,Zanzibar
+13113220,Sudan Płd.
+15064643,Mikronezja
+23008660,Mariany Płn.
+23088616,Tuvalu
+62002127,Czarnogóra
+82082526,Saint-Barthélemy

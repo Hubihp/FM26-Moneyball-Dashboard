@@ -177,7 +177,9 @@ def test_ligi_edycja_nazwy_i_mnoznika(tmp_path, monkeypatch):
         df['Liga_domyslna'] = "Rozgrywki #999011"
     with TestClient(utworz_aplikacje(stan)) as k:
         ligi = k.get("/api/ligi").json()
-        assert ligi["ligi"][0]["klucz"] == 999011 and ligi["ligi"][0]["nazwa"] is None
+        # liga spoza tabeli nazw dostaje nazwe automatyczna (bez recznego wpisywania)
+        assert ligi["ligi"][0]["klucz"] == 999011 and ligi["ligi"][0]["nazwa_auto"]
+        assert ligi["ligi"][0]["nazwa"].startswith("Liga")
         assert "Premier League" in ligi["znane_nazwy"]
         odp = k.put("/api/ligi/999011", json={"nazwa": "Liga Testowa", "mnoznik": 0.7}).json()
         assert odp["ligi"][0]["nazwa"] == "Liga Testowa" and odp["ligi"][0]["mnoznik"] == 0.7
@@ -405,7 +407,7 @@ def test_porownanie_z_moim_api(klient):
     wiersze = klient.post("/api/ranking", json={"pozycja": "Napastnik", "filtry": {"min_minut": 0}}).json()["wiersze"]
     obcy = next(w for w in wiersze if w["Klub_UID"] != uid)
     wynik = klient.post("/api/porownanie-z-moim", json={"pozycja": "Napastnik", "id": obcy["ID"]}).json()
-    assert wynik["moj"]["SCORE"] == max(w["SCORE"] for w in wiersze if w["Klub_UID"] == uid)
+    assert wynik["moj"]["SCORE"] == pytest.approx(max(w["SCORE"] for w in wiersze if w["Klub_UID"] == uid))
     assert wynik["werdykt"] in {"wzmocnienie", "podobny poziom", "nie wzmacnia"}
     assert wynik["roznica"] == pytest.approx(obcy["SCORE"] - wynik["moj"]["SCORE"])
     assert {c["nazwa"] for c in wynik["cechy"]} == set(klient.get("/api/pozycja/Napastnik").json()["wagi_domyslne"])

@@ -25,7 +25,7 @@ class Filtry:
     pensja: tuple | None = None          # (min, max) w EUR na tydzien; zawodnicy bez pensji przechodza
     szukaj: str = ""
     kontrakt_mies: int | None = None     # kontrakt wygasa w ciagu N miesiecy od daty w grze
-    min_minut: int = 0
+    min_minut: int | None = 0          # None = prog automatyczny wg ligi zawodnika (prog_minut_ligi)
     bez_mojego_klubu: bool = False
     okazje: list = field(default_factory=list)   # zawodnik musi miec ktorykolwiek z tych znacznikow
     tylko_z_okazja: bool = False                 # zawodnik musi miec jakakolwiek okazje (karta Okazje)
@@ -103,9 +103,47 @@ def oznacz_pareto(widoczni):
     return widoczni
 
 
+def dostepna(df, kolumna):
+    """Kolumna jest w danych i ma choc jedna wartosc (FM27 nie podaje np. pressingu - kolumna jest pusta)."""
+    return kolumna in df.columns and bool(df[kolumna].notna().any())
+
+
+UDZIAL_PROGU_MINUT = 1 / 3      # prog = 1/3 minut typowego podstawowego zawodnika w tej chwili sezonu
+
+
+def prog_minut_auto(df):
+    """
+    Domyslny prog minut zalezny od momentu sezonu: 1/3 minut, jakie ma typowy podstawowy zawodnik
+    (90. percentyl minut w puli), zaokraglona w dol do pelnych meczow (90 min). Na koniec sezonu ok. 900-1000 min,
+    jesienia odpowiednio mniej - staly prog 1000 min ukrywal wtedy wiekszosc zawodnikow.
+    """
+    if 'Minuty' not in df.columns or not df['Minuty'].notna().any():
+        return 0
+    podstawowy = float(df['Minuty'].quantile(0.9))
+    return int(max(90, (podstawowy * UDZIAL_PROGU_MINUT) // 90 * 90))
+
+
+MIN_ZAWODNIKOW_LIGI_PROGU = 15  # mniej zawodnikow ligi w puli - prog z calej puli
+
+
+def prog_minut_ligi(pula):
+    """
+    Prog minut dla kazdego zawodnika wg jego ligi (prog_minut_auto liczony w obrebie ligi). Ligi graja w roznym
+    rytmie (jesienia Europa ma kilkanascie kolejek, ligi "rok kalendarzowy" - pelny sezon), wiec wspolny prog
+    ucinalby jedne, a przepuszczal drugie. Male ligi w puli dostaja prog calej puli.
+    """
+    ogolny = prog_minut_auto(pula)
+    if 'Liga' not in pula.columns:
+        return pd.Series(ogolny, index=pula.index)
+    liga = pula['Liga'].fillna("?")
+    progi = {nazwa: (prog_minut_auto(grupa) if len(grupa) >= MIN_ZAWODNIKOW_LIGI_PROGU else ogolny)
+             for nazwa, grupa in pula.groupby(liga)}
+    return liga.map(progi).astype(float)
+
+
 def wagi_domyslne(pozycja, df):
-    """Domyslne wagi pozycji, tylko dla cech obecnych w danych."""
-    return {c: w for c, w in MERYTORYKA_WAG.get(pozycja, {}).items() if c in df.columns}
+    """Domyslne wagi pozycji, tylko dla cech, ktore sa w danych (pusta kolumna = cecha niedostepna)."""
+    return {c: w for c, w in MERYTORYKA_WAG.get(pozycja, {}).items() if dostepna(df, c)}
 
 
 def policz_wynik(df, wagi, ignoruj_mnoznik=False, k_baza=5, odniesienie=None):
@@ -194,8 +232,11 @@ def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
         wynik = wynik[wynik['Kraj'].isin(filtry.kraje)]
     if filtry.nogi and 'Preferowana noga' in wynik.columns:
         wynik = wynik[wynik['Preferowana noga'].isin(filtry.nogi)]
-    if filtry.min_minut and 'Minuty' in wynik.columns and wynik['Minuty'].notna().any():
-        wynik = wynik[wynik['Minuty'].fillna(0) >= filtry.min_minut]
+    if 'Minuty' in wynik.columns and wynik['Minuty'].notna().any():
+        if filtry.min_minut is None:     # automatycznie: wg momentu sezonu w lidze zawodnika
+            wynik = wynik[wynik['Minuty'].fillna(0) >= prog_minut_ligi(pula).reindex(wynik.index).fillna(0)]
+        elif filtry.min_minut:
+            wynik = wynik[wynik['Minuty'].fillna(0) >= filtry.min_minut]
     if filtry.kontrakt_mies:
         start = pd.Timestamp(data_gry or date.today())
         koniec = start + pd.DateOffset(months=int(filtry.kontrakt_mies))
@@ -248,7 +289,8 @@ def _wstaw_po(lista, nowy, po):
 
 def kolumny_tabeli(pozycja, pula):
     """Lista kolumn tabeli: [{naglowek, pole, format, statystyka, nizsze_lepsze}]."""
-    nazwy = [c for c in KOLUMNY_PER_POZYCJA.get(pozycja, []) if c in pula.columns]
+    nazwy = [c for c in KOLUMNY_PER_POZYCJA.get(pozycja, [])
+             if c in pula.columns and (c in NIE_STATYSTYKI or dostepna(pula, c))]
     if 'Minuty' in pula.columns and pula['Minuty'].notna().any():
         _wstaw_po(nazwy, 'Minuty', 'Klub')
     if 'Płaca' in pula.columns:
@@ -292,7 +334,7 @@ def kolumny_listy(pula):
 
 
 def kolumny_statystyk(pozycja, pula):
-    return [c for c in KOLUMNY_PER_POZYCJA.get(pozycja, []) if c not in NIE_STATYSTYKI and c in pula.columns]
+    return [c for c in KOLUMNY_PER_POZYCJA.get(pozycja, []) if c not in NIE_STATYSTYKI and dostepna(pula, c)]
 
 
 def do_json(ramka, pola):
@@ -313,6 +355,19 @@ def do_json(ramka, pola):
             elif isinstance(v, np.bool_):
                 rekord[k] = bool(v)
     return rekordy
+
+
+def do_json_tekst(ramka, pola):
+    """
+    Jak do_json, ale od razu tekst JSON (pandas to_json w C): kilkanascie razy szybciej przy tysiacach wierszy
+    rankingu i bez kodowania wynikow przez FastAPI. NaN i nieskonczonosci -> null, daty -> ISO.
+    """
+    pola = [p for p in dict.fromkeys(pola) if p in ramka.columns]
+    wynik = ramka[pola]
+    daty = [k for k in pola if pd.api.types.is_datetime64_any_dtype(wynik[k])]
+    if daty:
+        wynik = wynik.assign(**{k: wynik[k].dt.strftime('%Y-%m-%d') for k in daty})
+    return wynik.to_json(orient='records', force_ascii=False, date_format='iso')
 
 
 POLA_WIERSZA = ['ID', 'UID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Kraj', 'Wiek', 'Pozycja', 'Preferowana noga', 'Minuty',

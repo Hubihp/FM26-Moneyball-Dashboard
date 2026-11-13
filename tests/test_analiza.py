@@ -133,3 +133,16 @@ def test_filtr_pensji_tygodniowej():
     assert list(widoczni.index) == [1, 2]          # 1000 €/tydz. odpada, brak pensji przechodzi
     widoczni = analiza.filtruj(pula, analiza.Filtry(pensja=(None, 2_000), min_minut=0))
     assert list(widoczni.index) == [0, 2]
+
+
+def test_prog_minut_automatyczny_wg_ligi():
+    """Jesienia ligi europejskie maja malo minut, ligi 'rok kalendarzowy' pelny sezon - prog wg ligi zawodnika."""
+    from fm_moneyball.analiza import Filtry, filtruj, prog_minut_ligi
+    europa = pd.DataFrame({"Liga": ["E"] * 20, "Minuty": [100.0 * i for i in range(1, 21)]})       # max 2000
+    kalendarz = pd.DataFrame({"Liga": ["K"] * 20, "Minuty": [200.0 * i for i in range(1, 21)]})    # max 4000
+    pula = pd.concat([europa, kalendarz], ignore_index=True).assign(SCORE=50.0)
+    progi = prog_minut_ligi(pula)
+    assert progi.iloc[0] < progi.iloc[25] and progi.iloc[0] % 90 == 0
+    widoczni = filtruj(pula, Filtry(min_minut=None))
+    assert len(widoczni[widoczni.Liga == "E"]) > len(pula[(pula.Liga == "E") & (pula.Minuty >= progi.iloc[25])])
+    assert len(filtruj(pula, Filtry(min_minut=0))) == 40

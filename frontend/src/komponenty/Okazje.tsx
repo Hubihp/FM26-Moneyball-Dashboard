@@ -63,7 +63,7 @@ export default function Okazje({ zapytanie, okazje, wersja, mojKlubUid, naWybor,
       </Text>
       {mojKlubUid !== null && mojKlubUid !== undefined && (
         <Group gap="xs">
-          <Switch size="xs" checked={pominMoj} onChange={(e) => setPominMoj(e.currentTarget.checked)}
+          <Switch checked={pominMoj} onChange={(e) => setPominMoj(e.currentTarget.checked)}
             label="Pomiń zawodników mojego klubu" />
           {pominMoj && ukryci > 0 && (
             <Text size="xs" c="dimmed">(ukryto {ukryci} z twojego klubu)</Text>

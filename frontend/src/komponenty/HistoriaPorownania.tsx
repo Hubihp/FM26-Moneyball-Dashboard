@@ -6,6 +6,7 @@ import { api, type PunktHistorii, type ZapytanieRankingu } from '../api';
 import { formatuj, kolorZmiany } from '../format';
 import { KOLOR_MALEJ_PROBY, punktWykresu } from './HistoriaZawodnika';
 import Wykres from './Wykres';
+import { SZEROKOSC } from '../wyglad';
 
 type Props = { wybrani: string[]; zapytanie: ZapytanieRankingu; wersja: number };
 
@@ -43,7 +44,7 @@ export default function HistoriaPorownania({ wybrani, zapytanie, wersja }: Props
     <Stack gap="xs">
       <Group justify="space-between" align="end">
         {naglowek}
-        <Select size="xs" w={300} label="Na wykresie" value={miara} allowDeselect={false} onChange={(v) => setMiara(v ?? 'SCORE')}
+        <Select w={SZEROKOSC.szeroka} label="Na wykresie" value={miara} allowDeselect={false} onChange={(v) => setMiara(v ?? 'SCORE')}
           data={['SCORE', 'Minuty', ...statystyki]} />
       </Group>
       <Wykres

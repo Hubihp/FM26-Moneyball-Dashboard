@@ -32,10 +32,10 @@ function PrzyciskPrzeniesienia() {
   return czeka ? (
     <Group gap="xs">
       <Text size="sm">Przeglądarka przesłała dane? Odśwież okno, żeby je zobaczyć.</Text>
-      <Button size="xs" onClick={() => window.location.reload()}>Odśwież</Button>
+      <Button onClick={() => window.location.reload()}>Odśwież</Button>
     </Group>
   ) : (
-    <Button size="xs" variant="light" onClick={() => przeniesDane(setCzeka)}>Przenieś dane z przeglądarki</Button>
+    <Button variant="light" onClick={() => przeniesDane(setCzeka)}>Przenieś dane z przeglądarki</Button>
   );
 }
 
@@ -102,18 +102,18 @@ export function PasekSystemu() {
             {s.postep ? <Postep s={s} /> : (
               <Group gap="xs">
                 {s.mozna_instalowac ? (
-                  <Button size="xs" onClick={instaluj}>Zainstaluj teraz {s.rozmiar ? `(${mb(s.rozmiar)})` : ''}</Button>
+                  <Button onClick={instaluj}>Zainstaluj teraz {s.rozmiar ? `(${mb(s.rozmiar)})` : ''}</Button>
                 ) : (
-                  <Button size="xs" component="a" href={s.strona} target="_blank">Pobierz ze strony wydania</Button>
+                  <Button component="a" href={s.strona} target="_blank">Pobierz ze strony wydania</Button>
                 )}
-                <Button size="xs" variant="default" onClick={() => setPozniej(true)}>Później</Button>
-                <Button size="xs" variant="subtle" color="gray" onClick={() => setPominieta(s.wersja)}>
+                <Button variant="default" onClick={() => setPozniej(true)}>Później</Button>
+                <Button variant="subtle" color="gray" onClick={() => setPominieta(s.wersja)}>
                   Pomiń tę wersję
                 </Button>
               </Group>
             )}
             {s.postep?.etap === 'blad' && (
-              <Button size="xs" w="fit-content" onClick={instaluj}>Spróbuj ponownie</Button>
+              <Button w="fit-content" onClick={instaluj}>Spróbuj ponownie</Button>
             )}
             {bladInstalacji && <Text size="sm" c="red">{bladInstalacji}</Text>}
             <Text size="xs" c="dimmed">
@@ -152,7 +152,7 @@ export function WersjaProgramu() {
       <Modal opened={otwarte} onClose={() => setOtwarte(false)} title={<b>FM27 Dashboard {s.wersja_programu}</b>}>
         <Stack gap="sm">
           <Group gap="xs">
-            <Button size="xs" variant="light" loading={sprawdzanie} onClick={sprawdz}>Sprawdź aktualizacje</Button>
+            <Button variant="light" loading={sprawdzanie} onClick={sprawdz}>Sprawdź aktualizacje</Button>
             <Text size="sm">
               {!s.sprawdzono ? 'Sprawdzanie...' : s.dostepna ? `Dostępna wersja ${s.wersja}.` : 'Masz najnowszą wersję.'}
             </Text>

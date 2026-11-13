@@ -1,13 +1,15 @@
 """
 Nazwy krajow (narodowosci) zawodnikow z zapisu.
 
-Zapis FM26 nie zawiera nazw krajow, tylko ich identyfikatory (nation_id). Nazwy bierzemy:
-1. recznie wpisane (dane/nazwy_krajow.csv i ~/.fm_moneyball/nazwy_krajow.csv),
-2. automatycznie z nazwanych lig: liga "Ekstraklasa (POL 1)" gra w kraju o id dominujacym
+Zapis FM27 nie zawiera nazw krajow, tylko ich identyfikatory (nation_id). Nazwy bierzemy, od najwazniejszych:
+1. recznie wpisane przez uzytkownika (~/.fm_moneyball/nazwy_krajow.csv) - opcjonalnie,
+2. z wbudowanej tabeli dane/nazwy_krajow_baza.csv po stalym numerze kraju w bazie gry (database_id;
+   zapis podaje go przez fmsave nations()) - wszystkie kraje z zawodnikami, bez recznego wpisywania,
+3. automatycznie z nazwanych lig: liga "Ekstraklasa (POL 1)" gra w kraju o id dominujacym
    wsrod jej klubow, wiec ten id to Polska,
-3. z klubow-kotwic (kraje bez wczytanej ligi): najczestsza narodowosc w kadrach typowo krajowych
+4. z klubow-kotwic (kraje bez wczytanej ligi): najczestsza narodowosc w kadrach typowo krajowych
    klubow, np. Hibernian, Aberdeen, Motherwell -> Szkocja,
-4. w pozostalych przypadkach "Kraj #id" (do nazwania w zakladce Ligi).
+5. w pozostalych przypadkach "Kraj #id".
 """
 import re
 import unicodedata
@@ -16,7 +18,7 @@ from collections import Counter
 from fm_moneyball.mapy import KATALOG_DANYCH, KATALOG_DOMOWY, wczytaj_mape, zapisz_mape
 from fm_moneyball.stale import MAPOWANIE_NAZW_LIG
 
-PLIK_KRAJOW = KATALOG_DANYCH / "nazwy_krajow.csv"
+PLIK_KRAJOW_BAZA = KATALOG_DANYCH / "nazwy_krajow_baza.csv"   # database_id kraju -> nazwa
 PLIK_KRAJOW_UZYTKOWNIKA = KATALOG_DOMOWY / "nazwy_krajow.csv"
 
 # Kod kraju z etykiety ligi, np. "(POL 1)" -> nazwa kraju
@@ -45,9 +47,28 @@ def nazwy_auto(ligi):
     return {kraj: licznik.most_common(1)[0][0] for kraj, licznik in glosy.items()}
 
 
-def wczytaj_nazwy_krajow(plik_uzytkownika=PLIK_KRAJOW_UZYTKOWNIKA, domyslny=PLIK_KRAJOW):
-    """Reczne nazwy krajow: domyslne z repozytorium nadpisane edycjami uzytkownika."""
-    return {**wczytaj_mape(domyslny), **wczytaj_mape(plik_uzytkownika)}
+def wczytaj_nazwy_krajow(plik_uzytkownika=PLIK_KRAJOW_UZYTKOWNIKA, domyslny=None):
+    """Reczne nazwy krajow uzytkownika (opcjonalnie nad mapa domyslna, np. w testach)."""
+    return {**(wczytaj_mape(domyslny) if domyslny else {}), **wczytaj_mape(plik_uzytkownika)}
+
+
+def odmiana_klubow(n):
+    """1 klub, 2-4 kluby, 5+ klubow (z wyjatkiem 12-14)."""
+    if n == 1:
+        return "klub"
+    return "kluby" if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14) else "klubów"
+
+
+def nazwa_auto_ligi(kraj, liczba_klubow=None):
+    """Nazwa ligi, ktorej nie ma w tabeli nazw: kraj jej klubow i liczba klubow, np. 'Liga: Hiszpania (7 klubów)'."""
+    kluby = f" ({liczba_klubow} {odmiana_klubow(liczba_klubow)})" if liczba_klubow else ""
+    return f"Liga: {kraj}{kluby}" if kraj else f"Liga międzynarodowa{kluby}"
+
+
+def nazwy_z_bazy(numery_bazy, plik=PLIK_KRAJOW_BAZA):
+    """{nation_id z zapisu: database_id} (fmsave nations()) -> {nation_id: nazwa} z wbudowanej tabeli."""
+    tabela = wczytaj_mape(plik)
+    return {lok: tabela[baza] for lok, baza in (numery_bazy or {}).items() if baza in tabela}
 
 
 def zapisz_nazwe_kraju(kraj_id, nazwa, sciezka=PLIK_KRAJOW_UZYTKOWNIKA):
@@ -71,13 +92,22 @@ def podsumuj_kraje(zawodnicy, nazwy, zrodla=None, przyklady=3):
         return []
     if 'Kraj_ID' not in zawodnicy.columns:
         return _podsumuj_kolumne_kraj(zawodnicy, przyklady)
+    z_krajem = zawodnicy.dropna(subset=['Kraj_ID'])
+    liczby = z_krajem.groupby('Kraj_ID').size()
+    # najdrozsi zawodnicy kazdego kraju: jedno sortowanie calosci zamiast osobnego dla kazdego z ~250 krajow
+    najlepsi = (z_krajem.sort_values('Wartość_Numeryczna', ascending=False, na_position='last', kind='stable')
+                .groupby('Kraj_ID', sort=False).head(przyklady))
+    opisy = {}
+    for kraj_id, pilkarz, klub in zip(najlepsi['Kraj_ID'], najlepsi['Piłkarz'],
+                                      najlepsi['Klub'] if 'Klub' in najlepsi.columns else [None] * len(najlepsi)):
+        opisy.setdefault(int(kraj_id), []).append(f"{pilkarz} ({klub if isinstance(klub, str) and klub else '?'})")
     wynik = []
-    for kraj_id, grupa in zawodnicy.dropna(subset=['Kraj_ID']).groupby('Kraj_ID'):
+    for kraj_id, liczba in liczby.items():
         kraj_id = int(kraj_id)
         wynik.append({
             "id": kraj_id, "nazwa": nazwy.get(kraj_id), "zrodlo": (zrodla or {}).get(kraj_id),
-            "reczna": (zrodla or {}).get(kraj_id) == "ręcznie", "liczba": int(len(grupa)),
-            "przyklady": _przyklady(grupa, przyklady),
+            "reczna": (zrodla or {}).get(kraj_id) == "ręcznie", "liczba": int(liczba),
+            "przyklady": opisy.get(kraj_id, []),
         })
     return sorted(wynik, key=lambda k: (k["nazwa"] is not None, -k["liczba"]))
 
