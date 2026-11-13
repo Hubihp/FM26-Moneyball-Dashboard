@@ -27,7 +27,8 @@ from fm_moneyball import historia
 from fm_moneyball.historia import KATALOG_HISTORII
 from fm_moneyball.kraje import PLIK_KRAJOW_UZYTKOWNIKA, nazwa_auto_ligi, nazwy_auto, wczytaj_nazwy_krajow
 from fm_moneyball.ligi import (KOREKTA_REZERW, PLIK_MNOZNIKOW_UZYTKOWNIKA, korekta_ligi, mnoznik_z_korekty,
-                               wczytaj_korekty, wczytaj_mnozniki_uzytkownika, wszystkie_mnozniki)
+                               plik_mnoznikow_klucz, wczytaj_korekty, wczytaj_mnozniki_klucz,
+                               wczytaj_mnozniki_uzytkownika, wszystkie_mnozniki)
 from fm_moneyball.mapy import KATALOG_DOMOWY
 from fm_moneyball.schemat import ustaw_kraje, ustaw_ligi
 from fm_moneyball.stale import POZYCJE
@@ -41,8 +42,10 @@ log = logging.getLogger("fm_moneyball")
 CO_ILE_SPRAWDZAC = 15        # sekundy miedzy sprawdzeniami folderu zapisow
 # 2: domyslnie zawodnik we wszystkich pulach, w ktorych jest naturalny (wczesniej tylko glowna)
 WERSJA_USTAWIEN = 2
-WERSJA_CACHE = 19            # zmiana formatu wyniku = nowy klucz cache (19: taktyka z gry)
+WERSJA_CACHE = 20            # zmiana formatu wyniku = nowy klucz cache (20: aktywna taktyka z gry)
 ILE_W_CACHE = 3
+MAKS_ODCZYTOW_HISTORII_NA_RAZ = 6   # starsze zapisy folderu czytane na jedno wczytanie (historia z folderu)
+PRZERWA_HISTORII_S = 3.0            # przerwa miedzy nimi - serwer odpowiada w tym czasie bez opoznien
 DEMO_DATA_GRY = date(2027, 1, 15)
 
 
@@ -113,6 +116,7 @@ def przygotuj_dane(surowe, ligi, kraje_auto, kraje_baza, plik_nazw, plik_mnoznik
         liga["zrodlo_mnoznika"] = zrodlo
         if liga["klucz"] is not None:
             mnozniki_klucz[liga["klucz"]] = liga["mnoznik_auto"]
+    mnozniki_klucz.update(wczytaj_mnozniki_klucz(plik_mnoznikow_klucz(plik_mnoznikow)))   # reczne po numerze ligi
     if ligi:   # zapis gry; CSV i demo - wbudowana tabela mnoznikow po nazwie
         mnozniki = wczytaj_mnozniki_uzytkownika(plik_mnoznikow)
         opcje_lig = {"mnoznik_nieznanej": mnoznik_z_korekty(KOREKTA_REZERW), "mnozniki_klucz": mnozniki_klucz}
@@ -506,6 +510,8 @@ class Stan:
         konfig, katalog = self.konfig, self.katalog_kariery()
         if not self._sledzenie or konfig.typ != "folder" or not konfig.folder or katalog is None:
             return
+        if not self.meta.get("menedzer"):
+            return     # bez menedzera nie da sie odroznic zapisow tej kariery od innych w tym samym folderze
         if self._watek_historii is not None and self._watek_historii.is_alive():
             return
         self._watek_historii = threading.Thread(
@@ -533,7 +539,9 @@ class Stan:
                         zapisy.append((plik, zapis.info.game_date))
             except Exception:
                 continue
-        lista = historia.do_uzupelnienia(zapisy, katalog, data_gry)
+        # najwyzej kilka odczytow na raz (kazdy to ok. minuty obliczen w procesie serwera - interfejs zwalnia);
+        # reszta przy kolejnych wczytaniach, bo przejrzane pliki sa zapamietane
+        lista = historia.do_uzupelnienia(zapisy, katalog, data_gry)[:MAKS_ODCZYTOW_HISTORII_NA_RAZ]
         if not lista:
             return
         rozgrzewanie = self._watek_rozgrzewania
@@ -541,12 +549,16 @@ class Stan:
             rozgrzewanie.join()      # najpierw obliczenia dla interfejsu, potem dlugi odczyt starszych zapisow
         przejrzane, dodane = historia.przejrzane(katalog), 0
         log.info("Historia z folderu: zapisy do odczytu: %d", len(lista))
-        for plik, dzien in lista:
+        for nr, (plik, dzien) in enumerate(lista):
+            if nr and self._zatrzymaj.wait(PRZERWA_HISTORII_S):
+                break        # przerwa miedzy odczytami: interfejs dostaje procesor; zatrzymanie programu konczy prace
             if pokolenie != self.pokolenie:
                 break
+            if not folder_zapisow.czy_stabilny(plik.sciezka, odstep=0.5):
+                continue     # gra wlasnie zapisuje ten plik - sprobujemy przy kolejnym wczytaniu
             try:
                 wynik = wczytaj_zapis(plik.sciezka, opcje)
-                if menedzer and wynik.menedzer != menedzer:
+                if wynik.menedzer != menedzer:
                     przejrzane[historia.klucz_pliku(plik)] = "inna kariera"
                     continue
                 dane, _, _ = przygotuj_dane(wynik.dane, wynik.ligi, wynik.kraje_auto, wynik.kraje_baza,
@@ -554,6 +566,8 @@ class Stan:
                 if historia.zapisz_migawke(katalog, dane, wynik.data_gry) is not None:
                     dodane += 1
                 przejrzane[historia.klucz_pliku(plik)] = "ok"
+            except (OSError, MemoryError) as e:   # przejsciowe (plik zablokowany, brak pamieci) - bez zapamietania
+                log.warning("Historia z folderu: %s na razie nieczytelny (%s)", plik.nazwa, e)
             except Exception as e:   # dodatek - uszkodzony albo obcy zapis nie blokuje reszty
                 log.warning("Historia z folderu: pominięto %s (%s)", plik.nazwa, e)
                 przejrzane[historia.klucz_pliku(plik)] = "błąd"

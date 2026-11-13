@@ -35,8 +35,8 @@ const nazwisko = (z: ZawodnikSkladu) => z.Piłkarz.split(' ').slice(-1)[0];
 const najlepszyWynik = (z: ZawodnikSkladu) => Math.max(...Object.values(z.score), -Infinity);
 
 // Taktyka zapisana w grze: nazwa, mentalnosc, formacja z pilka i bez pilki, rezerwowi
-function PanelTaktykiGry({ taktyka, uwaga, blad, ladowanie, wgKlucza, naWczytaj }: {
-  taktyka: TaktykaZGry | undefined; uwaga: string | undefined; blad: Error | null; ladowanie: boolean;
+function PanelTaktykiGry({ taktyka, liczba, uwaga, blad, ladowanie, wgKlucza, naWczytaj }: {
+  taktyka: TaktykaZGry | undefined; liczba: number; uwaga: string | undefined; blad: Error | null; ladowanie: boolean;
   wgKlucza: Record<string, ZawodnikSkladu>; naWczytaj: () => void;
 }) {
   if (ladowanie) return null;
@@ -75,6 +75,11 @@ function PanelTaktykiGry({ taktyka, uwaga, blad, ladowanie, wgKlucza, naWczytaj 
       )}
       {pozaKadra.length > 0 && (
         <Text size="xs" mt={6} c="orange">Poza kadrą w aplikacji (brak w pulach pozycji): {pozaKadra.join(', ')}</Text>
+      )}
+      {liczba > 1 && (
+        <Text size="xs" mt={6} c="dimmed">
+          Pierwsza drużyna ma {liczba} taktyki w grze - pokazana ta, do której pasuje wybrana XI (oceny pozycji zawodników).
+        </Text>
       )}
       {uwaga && <Text size="xs" mt={6} c="dimmed">{uwaga}</Text>}
     </Card>
@@ -367,7 +372,7 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
             Wyrównaj pozycje
           </Button>
         </Group>
-        <PanelTaktykiGry taktyka={taktykaGry} uwaga={zGry.data?.uwaga} blad={zGry.error as Error | null}
+        <PanelTaktykiGry taktyka={taktykaGry} liczba={zGry.data?.taktyki.length ?? 0} uwaga={zGry.data?.uwaga} blad={zGry.error as Error | null}
           ladowanie={zGry.isLoading} wgKlucza={wgKlucza} naWczytaj={wczytajZGry} />
         <Group gap="xs" align="end">
           <Select label="Zapisane ustawienia" w={SZEROKOSC.srednia} placeholder="brak" clearable data={Object.keys(zapisane)}

@@ -360,7 +360,8 @@ def do_json(ramka, pola):
 def do_json_tekst(ramka, pola):
     """
     Jak do_json, ale od razu tekst JSON (pandas to_json w C): kilkanascie razy szybciej przy tysiacach wierszy
-    rankingu i bez kodowania wynikow przez FastAPI. NaN i nieskonczonosci -> null, daty -> ISO.
+    rankingu i bez kodowania wynikow przez FastAPI. NaN i nieskonczonosci -> null, daty -> ISO. Liczby do 10 miejsc
+    po przecinku (wiecej niz potrzeba do wyswietlenia; pelnej precyzji to_json nie daje).
     """
     pola = [p for p in dict.fromkeys(pola) if p in ramka.columns]
     wynik = ramka[pola]

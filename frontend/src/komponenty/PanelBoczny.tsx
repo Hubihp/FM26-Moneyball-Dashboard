@@ -165,8 +165,9 @@ export default function PanelBoczny(p: Props) {
 
         {meta?.minuty_max ? (
           <NumberInput label="Minimum minut" min={0} step={90} value={filtry.min_minut ?? ''}
-            placeholder={`auto wg ligi (ok. ${meta.min_minut_auto})`}
-            description={filtry.min_minut === null ? 'automatycznie: 1/3 minut podstawowego zawodnika ligi' : undefined}
+            placeholder={`auto wg ligi (cała pula: ${meta.min_minut_auto})`}
+            description={filtry.min_minut === null
+              ? 'automatycznie, osobno dla każdej ligi: 1/3 minut podstawowego zawodnika tej ligi' : undefined}
             rightSectionWidth={56}
             rightSection={filtry.min_minut !== null ? (
               <Button variant="subtle" size="compact-xs" onClick={() => zmien('min_minut', null)}>auto</Button>

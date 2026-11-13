@@ -2,8 +2,8 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from fm_moneyball.kraje import podsumuj_kraje, zapisz_nazwe_kraju
-from fm_moneyball.ligi import (KOREKTA_REZERW, mnoznik_z_korekty, wczytaj_mnozniki_uzytkownika, wszystkie_mnozniki,
-                               zapisz_mnoznik)
+from fm_moneyball.ligi import (KOREKTA_REZERW, mnoznik_z_korekty, plik_mnoznikow_klucz, wczytaj_mnozniki_klucz,
+                               wczytaj_mnozniki_uzytkownika, wszystkie_mnozniki, zapisz_mnoznik, zapisz_mnoznik_klucz)
 from fm_moneyball.schemat import REZERWY
 from fm_moneyball.serwer.modele import KrajModel, LigaModel
 from fm_moneyball.stale import MNOZNIK_NIEZNANEJ_LIGI, MNOZNIKI_LIG
@@ -18,14 +18,20 @@ def utworz(stan):
     def ligi():
         mnozniki = wszystkie_mnozniki(stan.plik_mnoznikow)
         reczne = wczytaj_mnozniki_uzytkownika(stan.plik_mnoznikow)
+        reczne_klucz = wczytaj_mnozniki_klucz(plik_mnoznikow_klucz(stan.plik_mnoznikow))
         wynik = []
         for liga in stan.ligi:
             nazwa = liga.get("nazwa")
-            # "mnoznik" - wpisany recznie (pierwszenstwo), "mnoznik_auto" - z danych o transferach i reputacji ligi
-            wynik.append({**liga, "mnoznik": reczne.get(nazwa) if nazwa else None})
+            # "mnoznik" - wpisany recznie (po nazwie, a nowszy po numerze ligi), "mnoznik_auto" - z danych
+            # o transferach i reputacji ligi
+            reczny = reczne.get(nazwa) if nazwa else None
+            if reczny is None:
+                reczny = reczne_klucz.get(liga["klucz"])
+            wynik.append({**liga, "mnoznik": reczny})
         return {"ligi": sorted(wynik, key=lambda l: -l["liczba"]),
-                "znane_nazwy": sorted(set(MNOZNIKI_LIG) | set(mnozniki)),
-                "mnozniki": mnozniki,
+                # podpowiedzi nazw: nazwy lig z tabeli i z mnoznikow (CSV z gry, demo)
+                "znane_nazwy": sorted(set(MNOZNIKI_LIG) | set(mnozniki) | {l["nazwa"] for l in stan.ligi
+                                                                          if l.get("nazwa") and not l.get("nazwa_auto")}),
                 "mnoznik_nieznanej": MNOZNIK_NIEZNANEJ_LIGI,
                 # minuty w rezerwach, druzynach mlodziezowych i ligach niewykrytych (mnoznik wazony minutami)
                 "mnoznik_rezerw": mnozniki.get(REZERWY), "nazwa_rezerw": REZERWY,
@@ -35,12 +41,17 @@ def utworz(stan):
     def zmien_lige(klucz: int, z: LigaModel):
         if not any(l["klucz"] == klucz for l in stan.ligi):
             raise HTTPException(404, "Nieznana liga.")
+        liga = next(l for l in stan.ligi if l["klucz"] == klucz)
         nazwa = (z.nazwa or "").strip()
-        if nazwa:
+        # pusta nazwa = nazwa z tabeli albo automatyczna (bez zapisywania nazwy automatycznej jako wlasnej)
+        if nazwa and nazwa != liga.get("nazwa"):
             zapisz_nazwy_rozgrywek({klucz: nazwa}, stan.plik_nazw)
-            # reczny mnoznik nadpisuje automatyczny; puste pole wraca do automatycznego
-            if wczytaj_mnozniki_uzytkownika(stan.plik_mnoznikow).get(nazwa) != z.mnoznik:
-                zapisz_mnoznik(nazwa, z.mnoznik, stan.plik_mnoznikow)
+        # reczny mnoznik po numerze ligi (nie ginie przy zmianie nazwy); puste pole wraca do automatycznego.
+        # Dawny reczny mnoznik po nazwie tej ligi jest usuwany - inaczej mialby pierwszenstwo
+        dawna = liga.get("nazwa")
+        if dawna and dawna in wczytaj_mnozniki_uzytkownika(stan.plik_mnoznikow):
+            zapisz_mnoznik(dawna, None, stan.plik_mnoznikow)
+        zapisz_mnoznik_klucz(klucz, z.mnoznik, plik_mnoznikow_klucz(stan.plik_mnoznikow))
         stan.zastosuj_ligi()
         return ligi()
 

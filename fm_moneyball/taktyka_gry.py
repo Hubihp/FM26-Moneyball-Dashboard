@@ -96,13 +96,29 @@ def sloty_na_boisku(sloty):
     return wynik
 
 
-def taktyki_klubu(zapis, club_uid):
+# bit pozycji -> kod pozycji w ocenach zawodnika z zapisu (Positions: gk, dc, ...)
+KOD_BITU = {0: "gk", 1: "sw", 2: "dr", 3: "dl", 4: "dc", 5: "wbr", 6: "wbl", 7: "dm", 8: "mr", 9: "ml", 10: "mc",
+            11: "amr", 12: "aml", 13: "amc", 14: "stc"}
+
+
+def dopasowanie(sloty, wybor, oceny):
+    """Suma ocen (1-20) wybranych zawodnikow na pozycjach slotow taktyki - im wyzsza, tym lepiej XI pasuje."""
+    suma = 0
+    for numer, bit, *_ in sloty:
+        uid = (wybor.get(numer) or {}).get("uid")
+        if uid is not None and bit is not None:
+            suma += (oceny.get(int(uid)) or {}).get(KOD_BITU[bit], 0)
+    return suma
+
+
+def taktyki_klubu(zapis, club_uid, oceny=None):
     """
-    Taktyki pierwszej druzyny prowadzonego klubu: [{nazwa, mentalnosc, formacja, formacja_bez, sloty, rezerwowi}].
-    Pierwsza na liscie to taktyka o najnizszym indeksie (glowna). Sloty maja uid (tekst) i nazwisko wybranego
-    zawodnika. Zapis nie mowi, ktorej z kilku taktyk dotyczy wybor XI - fmsave potwierdza go dla wybranej taktyki,
-    wiec przy kilku taktykach przypisanie zawodnikow jest pewne tylko dla tej, ktora gra wybrala.
-    Rezerwowi to zapisana lista gry (moze byc dluzsza niz lawka w meczu).
+    Taktyki pierwszej druzyny prowadzonego klubu: [{nazwa, mentalnosc, formacja, formacja_bez, sloty, rezerwowi,
+    aktywna}]. Zapis trzyma jeden wybor XI (dla taktyki wybranej w grze), ale nie mowi, ktora to taktyka - przy
+    kilku taktykach aktywna jest ta, na ktorej pozycjach wybrani zawodnicy maja najwyzsze oceny pozycji
+    (oceny: {player_uid: {kod pozycji: ocena 1-20}}); remis albo brak ocen - najnizszy indeks. Tylko aktywna ma
+    zawodnikow w slotach (uid tekstem i nazwisko) i jest pierwsza na liscie. Rezerwowi to zapisana lista gry
+    (moze byc dluzsza niz lawka w meczu).
     """
     wybor, rezerwowi = {}, []
     for s in zapis.selections():
@@ -113,19 +129,26 @@ def taktyki_klubu(zapis, club_uid):
             rezerwowi.append((s.slot, zawodnik))
         else:
             wybor[s.slot] = zawodnik
-    wynik = []
+    taktyki = []
     for t in sorted((t for t in zapis.tactics() if t.club_uid == club_uid and (t.team_slot or 0) == 0),
                     key=lambda t: t.index):
         sloty = [(s.number, _bit(s.in_possession_positions), _bit(s.out_of_possession_positions),
                   s.in_possession_mask or 0) for s in t.slots]
+        taktyki.append((t, sloty))
+    if not taktyki:
+        return []
+    aktywna = max(range(len(taktyki)), key=lambda i: (dopasowanie(taktyki[i][1], wybor, oceny or {}), -i))
+    wynik = []
+    for i, (t, sloty) in enumerate(taktyki):
         na_boisku = sloty_na_boisku(sloty)
         for wpis in na_boisku:
-            zawodnik = wybor.get(wpis["numer"]) or {}
+            zawodnik = (wybor.get(wpis["numer"]) or {}) if i == aktywna else {}
             wpis["uid"], wpis["nazwa"] = zawodnik.get("uid"), zawodnik.get("nazwa")
         mentalnosc = getattr(t.mentality, "raw", None) if t.mentality is not None else None
         wynik.append({
             "nazwa": t.name, "styl": t.style_name, "mentalnosc": MENTALNOSCI.get(mentalnosc),
             "formacja": formacja(s[1] for s in sloty), "formacja_bez": formacja(s[2] for s in sloty),
             "sloty": na_boisku, "rezerwowi": [z for _, z in sorted(rezerwowi, key=lambda r: r[0])],
+            "aktywna": i == aktywna,
         })
-    return wynik
+    return [wynik[aktywna]] + [w for i, w in enumerate(wynik) if i != aktywna]

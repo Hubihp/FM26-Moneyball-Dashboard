@@ -208,7 +208,7 @@ export type Liga = {
   nazwa_auto?: boolean;
 };
 export type Ligi = {
-  ligi: Liga[]; znane_nazwy: string[]; mnozniki: Record<string, number>; mnoznik_nieznanej: number;
+  ligi: Liga[]; znane_nazwy: string[]; mnoznik_nieznanej: number;
   mnoznik_rezerw: number | null; nazwa_rezerw: string; mnoznik_rezerw_auto: number;
 };
 
@@ -245,6 +245,7 @@ export type SlotZGry = {
 export type TaktykaZGry = {
   nazwa: string; styl: string | null; mentalnosc: string | null; formacja: string; formacja_bez: string;
   sloty: SlotZGry[]; rezerwowi: { uid: string; nazwa: string | null }[];
+  aktywna: boolean;   // taktyka, do ktorej pasuje wybrana w grze XI (pierwsza na liscie)
 };
 
 export type MetrykaProfilu = {

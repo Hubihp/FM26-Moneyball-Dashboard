@@ -932,20 +932,24 @@ def komunikat_bledu(e):
 
 
 def menedzer_z_zapisu(zapis, zarzadzane):
-    """Imie i nazwisko menedzera (prowadzacego karierze) z rekordu personelu; zapasowo nazwa z klubu."""
+    """
+    Imie i nazwisko menedzera prowadzacego kariere: nazwa z podsumowania zapisu (managed_clubs), a gdy jej brak -
+    rekord personelu po manager_staff_uid. Personel tylko zapasowo: jego odczyt trwa kilkanascie sekund.
+    """
+    for m in zarzadzane:
+        if getattr(m, "manager_name", None):
+            return m.manager_name
     for m in zarzadzane:
         uid = getattr(m, "manager_staff_uid", None)
         if uid is None:
             continue
         try:
-            for osoba in zapis.staff():
-                if osoba.uid == uid:
-                    pelne = " ".join(x for x in (osoba.first_name, osoba.last_name) if x)
-                    return osoba.common_name or pelne or osoba.name or m.manager_name
-        except Exception:   # personel to dodatek - nazwa z klubu wystarczy
-            pass
-        if getattr(m, "manager_name", None):
-            return m.manager_name
+            osoba = zapis.staff().get_by_uid(uid)
+        except Exception:   # personel to dodatek - bez niego naglowek pokaze nazwe zapisu
+            return None
+        if osoba is not None:
+            pelne = " ".join(x for x in (osoba.first_name, osoba.last_name) if x)
+            return osoba.common_name or pelne or osoba.name or None
     return None
 
 
@@ -1020,7 +1024,10 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
                 ostrzezenia.append(f"Nie udało się odczytać tabel lig ({e}).")
                 tabele = {}
             try:
-                taktyki = {uid: taktyki_klubu(zapis, uid) for uid in moje_uidy}
+                # oceny pozycji wszystkich zawodnikow (w XI moga byc wypozyczeni z innego klubu)
+                oceny_xi = {z.uid: oceny_pozycji(z.positions) for z in zawodnicy
+                            if getattr(z, "positions", None) is not None}
+                taktyki = {uid: taktyki_klubu(zapis, uid, oceny_xi) for uid in moje_uidy}
             except Exception as e:   # taktyka to dodatek (tablica taktyczna)
                 ostrzezenia.append(f"Nie udało się odczytać taktyki z gry ({type(e).__name__}).")
                 taktyki = {}

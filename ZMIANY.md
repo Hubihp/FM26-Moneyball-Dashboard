@@ -3,6 +3,49 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 2.0.0
+
+Program czyta teraz tylko zapisy Football Managera 27.
+
+- Szybsze przełączanie kart. Odwiedzone karty zostają w pamięci, a dane pobierają się ponownie tylko po
+  wczytaniu nowego zapisu. Powrót na kartę trwa kilkadziesiąt milisekund (wcześniej do kilku sekund).
+  Po wczytaniu zapisu program liczy w tle SCORE wszystkich pozycji, więc pierwsze wejście w Moją kadrę trwa
+  ułamek sekundy zamiast kilkunastu sekund. Ranking i ciężkie widoki są zapamiętywane, a odczyt zapisu jest
+  szybszy o ok. 15 s.
+- Nagłówek pokazuje imię i nazwisko menedżera zamiast nazwy pliku (nazwa pliku jest w podpowiedzi).
+- Okno otwiera się zmaksymalizowane.
+- Powiększenie interfejsu: Ctrl + kółko myszy (albo Ctrl + „+” / „−”), Ctrl + 0 przywraca 100%. Skala jest
+  zapamiętywana.
+- Spójny wygląd: wszystkie pola, listy i przyciski mają tę samą wysokość, a pola formularzy jedną z trzech
+  szerokości.
+- Taktyka z gry (Moja kadra → Taktyka):
+  - „Wczytaj taktykę z gry” ustawia na tablicy formację i wybraną w grze jedenastkę;
+  - panel pokazuje nazwę taktyki, mentalność, zmiany pozycji bez piłki i rezerwowych;
+  - ról i instrukcji biblioteka fmsave jeszcze nie odczytuje.
+- Nazwy krajów i lig ustalają się same: kraje z tabeli numerów bazy gry (wszystkie kraje z zawodnikami,
+  m.in. poprawiona Argentyna), brakujące ligi nazwane (np. Saudi Pro League, 25 brazylijskich lig stanowych,
+  MLS / Liga MX). Liga spoza tabeli dostaje nazwę z kraju i liczby klubów zamiast „Rozgrywki #id”.
+- Nowy mnożnik lig oparty na danych z kariery FM27:
+  - zmiana gry tych samych zawodników po zmianie ligi, połączona z reputacją ligi z zapisu;
+  - Serie A nie jest już karana mocniej niż Premier League;
+  - słabsze ligi (Championship, ligi portugalska i belgijska, 2. Bundesliga, Ekstraklasa) są obniżone;
+  - nieznane ligi dostają mnożnik z reputacji zamiast stałego najniższego;
+  - własny mnożnik wpisany w „Ligach i krajach” zapisuje się po numerze ligi i nie ginie przy zmianie nazwy.
+- Minimum minut domyślnie automatyczne: osobno dla każdej ligi, 1/3 minut podstawowego zawodnika tej ligi
+  w danym momencie sezonu. Stałe 1000 minut ukrywało jesienią większość zawodników.
+- SCORE:
+  - statystyki, których zapis FM27 nie podaje (pressing), są ukryte w wagach i tabelach z informacją, że są
+    pominięte;
+  - minuty poniżej 900 są w rankingu oznaczone jako mała próba;
+  - prognoza za rok ma krzywą wieku i stabilność wyniku policzone z danych FM27 (młodzi rosną wolniej, niż
+    zakładał stary model).
+- Historia kariery ze starszych zapisów folderu:
+  - program w tle tworzy migawki ze starszych save'ów (po jednym na miesiąc w grze), więc Δ SCORE i wykresy
+    rozwoju działają od razu;
+  - historia FM27 jest osobno od dawnych karier FM26.
+- Komunikaty błędów odczytu po polsku, z radą, co zrobić; jedno jasne ostrzeżenie o wstępnej obsłudze FM27.
+- fmsave 0.12.3.
+
 ## 1.9.2
 
 - fmsave 0.12.1. Sprawdzone na zapisie FM27 w wersji poprawkowej 27.0.1: dane identyczne jak z poprzednim

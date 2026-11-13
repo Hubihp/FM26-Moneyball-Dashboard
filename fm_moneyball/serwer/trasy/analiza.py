@@ -47,7 +47,9 @@ def utworz(stan, obl):
 
     @router.post("/ranking")
     def ranking(z: RankingModel):
-        return obl.zapamietane("ranking", z.model_dump_json(), lambda: _ranking(z))
+        # w pamieci gotowy tekst JSON; obiekt Response nowy dla kazdego zapytania (nie dzielony miedzy zapytaniami)
+        return Response(obl.zapamietane("ranking", z.model_dump_json(), lambda: _ranking(z)),
+                        media_type="application/json")
 
     def _ranking(z):
         """
@@ -70,7 +72,7 @@ def utworz(stan, obl):
         })
         wiersze = analiza.do_json_tekst(widoczni, analiza.pola_wiersza(z.pozycja, policzona))
         tekst = json.dumps(reszta, ensure_ascii=False, allow_nan=False)
-        return Response(tekst[:-1] + ',"wiersze":' + wiersze + '}', media_type="application/json")
+        return tekst[:-1] + ',"wiersze":' + wiersze + '}'
 
     @router.post("/historia")
     def historia_zawodnika(z: HistoriaModel):

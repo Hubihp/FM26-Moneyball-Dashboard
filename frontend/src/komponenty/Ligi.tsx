@@ -7,11 +7,13 @@ import { SZEROKOSC } from '../wyglad';
 
 function WierszLigi({ liga, dane }: { liga: Liga; dane: DaneLig }) {
   const klient = useQueryClient();
-  const [nazwa, setNazwa] = useState(liga.nazwa ?? '');
+  // nazwa automatyczna (kraj i liczba klubow) nie jest wpisywana w pole - pusta nazwa ja zachowuje
+  const nazwaStartowa = liga.nazwa_auto ? '' : liga.nazwa ?? '';
+  const [nazwa, setNazwa] = useState(nazwaStartowa);
   const [mnoznik, setMnoznik] = useState<number | ''>(liga.mnoznik ?? '');
   const [blad, setBlad] = useState<string | null>(null);
   const [zapisuje, setZapisuje] = useState(false);
-  const zmieniona = nazwa.trim() !== (liga.nazwa ?? '') || (mnoznik === '' ? null : mnoznik) !== liga.mnoznik;
+  const zmieniona = nazwa.trim() !== nazwaStartowa || (mnoznik === '' ? null : mnoznik) !== (liga.mnoznik ?? null);
 
   const zapisz = async () => {
     if (liga.klucz === null) return;
@@ -53,7 +55,7 @@ function WierszLigi({ liga, dane }: { liga: Liga; dane: DaneLig }) {
           placeholder="auto" onChange={(v) => setMnoznik(v === '' ? '' : Number(v))} />
       </Table.Td>
       <Table.Td>
-        <Button onClick={zapisz} loading={zapisuje} disabled={!zmieniona || !nazwa.trim() || liga.klucz === null}>
+        <Button onClick={zapisz} loading={zapisuje} disabled={!zmieniona || liga.klucz === null}>
           Zapisz
         </Button>
         {blad && <Text size="xs" c="red">{blad}</Text>}

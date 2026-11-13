@@ -523,9 +523,12 @@ def test_tylko_fm27_i_komunikaty_bledow():
     assert komunikat_bledu(ZapisNieobslugiwany("To zapis FM26 - ...")) == "To zapis FM26 - ..."
     assert "dzienniku" in komunikat_bledu(ValueError("techniczny opis"))      # bez angielskich szczegolow
     # menedzer: imie i nazwisko z rekordu personelu, zapasowo nazwa z klubu
-    zapis = NS(staff=lambda: [NS(uid=7, first_name="Jan", last_name="Kowalski", common_name=None, name="J. Kowalski")])
-    assert menedzer_z_zapisu(zapis, [NS(manager_staff_uid=7, manager_name="Janek")]) == "Jan Kowalski"
-    assert menedzer_z_zapisu(zapis, [NS(manager_staff_uid=8, manager_name="Janek")]) == "Janek"
+    osoby = {7: NS(uid=7, first_name="Jan", last_name="Kowalski", common_name=None, name="J. Kowalski")}
+    zapis = NS(staff=lambda: NS(get_by_uid=osoby.get))
+    # nazwa z podsumowania zapisu ma pierwszenstwo (odczyt personelu trwa kilkanascie sekund)
+    assert menedzer_z_zapisu(zapis, [NS(manager_staff_uid=7, manager_name="Jan Kowalski")]) == "Jan Kowalski"
+    assert menedzer_z_zapisu(zapis, [NS(manager_staff_uid=7, manager_name=None)]) == "Jan Kowalski"
+    assert menedzer_z_zapisu(zapis, [NS(manager_staff_uid=8, manager_name=None)]) is None
     assert menedzer_z_zapisu(zapis, []) is None
 
 

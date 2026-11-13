@@ -14,6 +14,8 @@ from fm_moneyball.stale import MNOZNIKI_LIG
 
 PLIK_MNOZNIKOW = KATALOG_DANYCH / "mnozniki_lig.csv"
 PLIK_MNOZNIKOW_UZYTKOWNIKA = KATALOG_DOMOWY / "mnozniki_lig.csv"
+# reczne mnozniki zapisu gry po stalym numerze ligi w bazie (database_id) - nie gina przy zmianie nazwy ligi
+PLIK_MNOZNIKOW_KLUCZ = KATALOG_DOMOWY / "mnozniki_lig_klucz.csv"
 
 
 def wczytaj_mnozniki_uzytkownika(sciezka=PLIK_MNOZNIKOW_UZYTKOWNIKA):
@@ -47,6 +49,21 @@ def zapisz_mnoznik(nazwa, mnoznik, sciezka=PLIK_MNOZNIKOW_UZYTKOWNIKA):
         for n in sorted(mnozniki):
             pisarz.writerow([n, mnozniki[n]])
     return mnozniki
+
+
+def plik_mnoznikow_klucz(plik_mnoznikow):
+    """Plik recznych mnoznikow po numerze ligi - obok pliku mnoznikow po nazwie (ten sam katalog uzytkownika)."""
+    return Path(plik_mnoznikow).with_name(PLIK_MNOZNIKOW_KLUCZ.name)
+
+
+def wczytaj_mnozniki_klucz(sciezka):
+    """{database_id ligi: reczny mnoznik}."""
+    return {int(k): v for k, v in wczytaj_mnozniki_uzytkownika(sciezka).items() if k.lstrip("-").isdigit()}
+
+
+def zapisz_mnoznik_klucz(klucz, mnoznik, sciezka):
+    """Reczny mnoznik ligi po numerze; None usuwa wpis (wraca mnoznik automatyczny)."""
+    return zapisz_mnoznik(str(int(klucz)), mnoznik, sciezka)
 
 
 def wszystkie_mnozniki(sciezka=PLIK_MNOZNIKOW_UZYTKOWNIKA, domyslny=PLIK_MNOZNIKOW):

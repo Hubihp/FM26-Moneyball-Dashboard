@@ -51,3 +51,23 @@ def test_taktyki_klubu_z_wyborem_xi():
     assert {s["numer"]: s["uid"] for s in t["sloty"]}[10] == "110"
     assert {s["numer"]: s["nazwa"] for s in t["sloty"]}[0] == "Gracz 0"
     assert [r["nazwa"] for r in t["rezerwowi"]] == ["Rez A", "Rez B"]
+
+
+def test_aktywna_taktyka_wg_dopasowania_xi():
+    # dwie taktyki: 4-2-3-1 (indeks 0) i 3-5-2 (indeks 1); wybrani zawodnicy to obroncy z ocena na srodku obrony
+    t4231 = NS(club_uid=7, team_slot=0, index=0, name="4-2-3-1", style_name="", mentality=NS(raw=4),
+               slots=tuple(_slot(*s) for s in SLOTY_4231))
+    sloty_352 = [(0, 0, 0, 0x1), (1, 4, 4, 0x10), (2, 4, 4, 0x10), (3, 4, 4, 0x10), (4, 5, 5, 0x20), (5, 10, 10, 0x400),
+                 (6, 7, 7, 0x80), (7, 10, 10, 0x400), (8, 6, 6, 0x40), (9, 14, 14, 0x4000), (10, 14, 14, 0x4000)]
+    t352 = NS(club_uid=7, team_slot=0, index=1, name="3-5-2", style_name="", mentality=NS(raw=4),
+              slots=tuple(_slot(*s) for s in sloty_352))
+    wybor = [NS(club_uid=7, team_slot=0, substitute=False, slot=i, player_uid=100 + i, player_name=f"G{i}")
+             for i in range(11)]
+    zapis = NS(tactics=lambda: [t4231, t352], selections=lambda: wybor)
+    oceny = {101: {"dc": 20, "dr": 5}, 102: {"dc": 20}, 103: {"dc": 20, "dl": 5}}
+    wynik = taktyki_klubu(zapis, 7, oceny)
+    assert wynik[0]["nazwa"] == "3-5-2" and wynik[0]["aktywna"] and not wynik[1]["aktywna"]
+    assert wynik[0]["formacja"] == "5-1-2-2"        # wahadlowi w linii obrony (jak "5-3-2 WB" w grze)
+    assert all(s["uid"] is None for s in wynik[1]["sloty"])          # XI tylko w aktywnej taktyce
+    # bez ocen: pierwsza wg indeksu
+    assert taktyki_klubu(zapis, 7)[0]["nazwa"] == "4-2-3-1"

@@ -186,8 +186,30 @@ def test_ligi_edycja_nazwy_i_mnoznika(tmp_path, monkeypatch):
         assert k.put("/api/ligi/999", json={"nazwa": "X"}).status_code == 404
         wiersze = k.post("/api/ranking", json={"pozycja": "Napastnik"}).json()["wiersze"]
         assert {w["Liga"] for w in wiersze} == {"Liga Testowa"}
-    assert "Liga Testowa" in (tmp_path / "nazwy.csv").read_text(encoding="utf-8")
-    assert "0.7" in (tmp_path / "mnozniki.csv").read_text(encoding="utf-8")
+        # zmiana nazwy nie gubi recznego mnoznika (zapisany po numerze ligi); pusty mnoznik wraca do automatycznego
+        odp = k.put("/api/ligi/999011", json={"nazwa": "Liga Inna", "mnoznik": 0.7}).json()
+        assert odp["ligi"][0]["nazwa"] == "Liga Inna" and odp["ligi"][0]["mnoznik"] == 0.7
+        odp = k.put("/api/ligi/999011", json={"nazwa": "", "mnoznik": None}).json()
+        assert odp["ligi"][0]["nazwa"] == "Liga Inna" and odp["ligi"][0]["mnoznik"] is None
+    assert "Liga Inna" in (tmp_path / "nazwy.csv").read_text(encoding="utf-8")
+    assert "999011" not in (tmp_path / "mnozniki_lig_klucz.csv").read_text(encoding="utf-8")
+
+
+def test_reczny_mnoznik_po_numerze_ligi_bez_nazwy_automatycznej(tmp_path, monkeypatch):
+    plik = _sztuczny_zapis(tmp_path, monkeypatch, [])
+    stan = _stan(tmp_path)
+    stan.ustaw_zrodlo("plik", plik=str(plik), w_tle=False)
+    for df in stan.surowe.values():
+        df['Liga_klucz'] = 999011
+        df['Liga_domyslna'] = "Rozgrywki #999011"
+    with TestClient(utworz_aplikacje(stan)) as k:
+        k.get("/api/ligi")
+        # sam mnoznik (bez nazwy): nazwa zostaje automatyczna, mnoznik dziala w rankingu
+        odp = k.put("/api/ligi/999011", json={"nazwa": "", "mnoznik": 0.5}).json()
+        assert odp["ligi"][0]["nazwa_auto"] and odp["ligi"][0]["mnoznik"] == 0.5
+        wiersze = k.post("/api/ranking", json={"pozycja": "Napastnik", "filtry": {"min_minut": 0}}).json()["wiersze"]
+        assert {w["Mnożnik_Ligi"] for w in wiersze} == {0.5}
+    assert not (tmp_path / "nazwy.csv").exists() or "999011" not in (tmp_path / "nazwy.csv").read_text(encoding="utf-8")
 
 
 def test_moj_klub_i_moja_kadra(klient):

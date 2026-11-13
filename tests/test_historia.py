@@ -254,3 +254,31 @@ def test_migawki_do_uzupelnienia_z_folderu(tmp_path):
     wynik = historia.do_uzupelnienia(zapisy, katalog, date(2027, 11, 6))
     assert [p.sciezka.stem for p, _ in wynik] == ["a", "f"]     # przejrzany plik pominiety, zostaje inny z miesiaca
     assert historia.do_uzupelnienia(zapisy, katalog, date(2027, 11, 6), maks=1) == wynik[:1]
+
+
+def test_historia_z_folderu_bledy_przejsciowe_i_inna_kariera(tmp_path, monkeypatch):
+    import contextlib
+    from types import SimpleNamespace as NS
+
+    import fmsave
+
+    from fm_moneyball.serwer import stan as stan_mod
+    from fm_moneyball.zrodla.folder import PlikZapisu
+    pliki = {n: PlikZapisu(tmp_path / f"{n}.fm", 100, 1.0) for n in ("zablokowany", "obcy")}
+    daty = {"zablokowany": date(2027, 9, 1), "obcy": date(2027, 8, 1)}
+    monkeypatch.setattr(stan_mod.folder_zapisow, "lista_zapisow", lambda folder: list(pliki.values()))
+    monkeypatch.setattr(stan_mod.folder_zapisow, "czy_stabilny", lambda sciezka, odstep=0.5: True)
+    monkeypatch.setattr(fmsave, "open", lambda p: contextlib.nullcontext(NS(info=NS(game_date=daty[p.stem]))))
+
+    def wczytaj(sciezka, opcje):
+        if sciezka.stem == "zablokowany":
+            raise PermissionError("plik zablokowany")
+        return NS(menedzer="Inny Menedzer")
+    monkeypatch.setattr(stan_mod, "wczytaj_zapis", wczytaj)
+    monkeypatch.setattr(stan_mod, "PRZERWA_HISTORII_S", 0)
+    st = Stan(plik_ustawien=tmp_path / "u.json", sledzenie=False, katalog_cache=None, katalog_historii=tmp_path / "h")
+    katalog = tmp_path / "h" / "kariera"
+    st._historia_z_folderu(st.pokolenie, tmp_path, katalog, date(2027, 11, 6), "Jan Kowalski", None)
+    przejrzane = historia.przejrzane(katalog)
+    assert przejrzane == {historia.klucz_pliku(pliki["obcy"]): "inna kariera"}   # blad przejsciowy - do ponowienia
+    assert historia.migawki(katalog) == []
