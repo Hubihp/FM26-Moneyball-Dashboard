@@ -3,6 +3,26 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 2.1.0
+
+- Taktyka bez piłki: przełącznik „Z piłką / Bez piłki” na tablicy taktycznej. Żetony płynnie przechodzą
+  na pozycje bez piłki, a strzałki pokazują, kto zmienia miejsce. Linię obrony i linię pressingu
+  przeciągasz na boisku (gra zapisuje je w formie, której biblioteka fmsave jeszcze nie odczytuje).
+  Najechanie na zawodnika podświetla jego ruch; w rogu boiska jest podgląd drugiej fazy.
+- Poprawka: opis taktyki bez piłki przypisywał części zawodników cudze pozycje (np. Maldini „schodził na
+  skrzydło”, a gra jako napastnik). Zapis trzyma pozycje bez piłki w osobnej kolejności - program czyta
+  teraz przypisanie każdego zawodnika z zapisu.
+- Filtry kolumn tabeli (np. Klub: Torino) zostają przy zmianie pozycji i po ponownym uruchomieniu; filtry
+  statystyk są osobne dla każdej pozycji. Nad tabelą widać aktywne filtry (kliknięcie usuwa filtr).
+- Menu pod prawym przyciskiem na zawodniku: otwórz kartę, dodaj do porównania lub listy życzeń, kopiuj
+  imię i nazwisko - w rankingu, okazjach, liście życzeń, Mojej kadrze, taktyce, profilu drużyny,
+  porównaniu, wykresach i karcie zawodnika.
+- Ctrl+C kopiuje wartość zaznaczonego pola tabeli, Enter otwiera kartę zawodnika, a w karcie strzałki
+  w lewo i w prawo przechodzą do poprzedniego i następnego zawodnika z tabeli.
+- Kontrola jakości odczytu (Źródło danych): czy gole zawodników zgadzają się z tabelami lig. Przy
+  rozbieżnościach program ostrzega, w których ligach statystyki mogą być odczytane błędnie.
+- Starsze zapisy do historii kariery są czytane w osobnym procesie - program nie zwalnia w tym czasie.
+
 ## 2.0.0
 
 Program czyta teraz tylko zapisy Football Managera 27.

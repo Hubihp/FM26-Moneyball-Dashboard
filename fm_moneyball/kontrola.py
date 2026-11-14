@@ -15,7 +15,7 @@ from collections import defaultdict
 
 MIN_GOLI_TABELI = 8            # klub z mniejsza liczba goli w tabeli nie jest porownywany (za malo, by ocenic)
 MIN_MECZOW_TABELI = 3
-MIN_KLUBOW_OCENY = 4           # mniej porownywalnych klubow w lidze - "mało danych" zamiast oceny
+MIN_KLUBOW_OCENY = 6           # mniej porownywalnych klubow w lidze - "mało danych" zamiast oceny
 GOLE_ZAKRES = (0.85, 1.03)     # suma goli zawodnikow / gole w tabeli (samobojcze rywali obnizaja)
 MINUTY_ZAKRES = (0.86, 1.03)   # minuty / (mecze x 990)
 GOLE_XG_ZAKRES = (0.7, 1.4)    # gole / xG w calej lidze
