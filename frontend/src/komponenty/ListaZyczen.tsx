@@ -13,7 +13,7 @@ type Props = {
   wagi: Record<string, Record<string, number>>;
   ustawienia: Ustawienia;
   mojKlubUid: number | null | undefined;
-  naWybor: (pozycja: string, id: string, wiersz: Wiersz) => void;
+  naWybor: (pozycja: string, id: string, wiersz: Wiersz, kolejnosc?: Wiersz[]) => void;
   pozycja: string;
   zaznaczeni: string[];
   naZaznaczenie: (ids: string[], wszystkie: string[]) => void;
@@ -80,7 +80,7 @@ export default function ListaZyczen({ lista, setLista, wersja, wagi, ustawienia,
             kolumny={dane.data.kolumny}
             wiersze={dane.data.wiersze}
             mojKlubUid={mojKlubUid}
-            naWybor={(id, w) => w && naWybor(String(w['Pozycja na liście']), id, w)}
+            naWybor={(id, w, kolejnosc) => w && naWybor(String(w['Pozycja na liście']), id, w, kolejnosc)}
             ulubione={ulubione}
             przelaczUlubione={(w) => setLista(lista.filter((x) => x.klucz !== kluczZawodnika(w)))}
             zaznaczeni={zaznaczeni}

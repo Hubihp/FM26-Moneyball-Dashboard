@@ -11,7 +11,7 @@ type Props = {
   wersja: number;
   mojKlubUid: number | null | undefined;
   zamknij: () => void;
-  otworz: (pozycja: string, id: string, wiersz: Wiersz) => void;
+  otworz: (pozycja: string, id: string, wiersz: Wiersz, kolejnosc?: Wiersz[]) => void;
 };
 
 // Opis filtrow pozycji, ktore zawezaja wyszukiwanie nastepcy
@@ -54,7 +54,7 @@ export default function Nastepca({ zawodnik, zapytanie, wersja, mojKlubUid, zamk
               </Group>
               <Box style={{ height: 520 }}>
                 <TabelaRankingu kolumny={wynik.data.kolumny} wiersze={wynik.data.wiersze} mojKlubUid={mojKlubUid}
-                  naWybor={(id, w) => w && otworz(zawodnik.pozycja, id, w)} />
+                  pozycja={zawodnik.pozycja} naWybor={(id, w, kolejnosc) => w && otworz(zawodnik.pozycja, id, w, kolejnosc)} />
               </Box>
             </>
           )}

@@ -2,7 +2,7 @@ import { AllCommunityModule, colorSchemeDark, ModuleRegistry, themeQuartz, type 
   type ColumnState, type SelectionChangedEvent } from 'ag-grid-community';
 import { AG_GRID_LOCALE_PL } from '@ag-grid-community/locale';
 import { AgGridReact } from 'ag-grid-react';
-import { Button, Checkbox, Group, Popover, ScrollArea, Stack } from '@mantine/core';
+import { Badge, Button, Checkbox, Group, Popover, ScrollArea, Stack } from '@mantine/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Kolumna, Wiersz } from '../api';
@@ -10,6 +10,7 @@ import { formatuj, kolorNiedowartosciowania, kolorWyniku, kolorZmiany } from '..
 import { kluczZawodnika } from '../pamiec';
 import { czytaj, zapisz } from '../pamiecSerwera';
 import { PrzyciskGwiazdki } from './Gwiazdka';
+import { kopiuj, useMenuZawodnika } from './MenuZawodnika';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -59,7 +60,15 @@ type Props = {
   kolumny: Kolumna[];
   wiersze: Wiersz[];
   mojKlubUid: number | null | undefined;
-  naWybor: (id: string, wiersz?: Wiersz) => void;
+  // kolejnosc: wiersze tabeli w biezacej kolejnosci (po sortowaniu i filtrach) - do "poprzedni / nastepny" w karcie
+  naWybor: (id: string, wiersz?: Wiersz, kolejnosc?: Wiersz[]) => void;
+  // pozycja, w ktorej puli sa wiersze (menu kontekstowe: porownanie, karta); wiersz Listy zyczen ma wlasna
+  pozycja?: string;
+  // filtry kolumn zapamietane poza tabela (zostaja przy zmianie pozycji): model AG Grid {kolumna: filtr}
+  filtryKolumn?: ModelFiltrow;
+  naFiltryKolumn?: (model: ModelFiltrow) => void;
+  // po zamknieciu karty fokus wraca do wiersza ostatnio ogladanego zawodnika
+  fokusId?: string | null;
   // zaznaczanie do porownania: wspolny stan (zaznaczeni) dla Rankingu, Okazji i Listy zyczen;
   // naZaznaczenie dostaje zaznaczonych w tej tabeli i ID wszystkich jej wierszy
   zaznaczeni?: string[];
@@ -71,7 +80,24 @@ type Props = {
   kluczUkladu?: string;
 };
 
+export type ModelFiltrow = Record<string, unknown>;
+
 const PREFIKS_UKLADU = 'fm-uklad|';
+
+const OPERATORY: Record<string, string> = {
+  contains: 'zawiera', notContains: 'nie zawiera', equals: '=', notEqual: '≠', startsWith: 'zaczyna się od',
+  endsWith: 'kończy się na', lessThan: '<', lessThanOrEqual: '≤', greaterThan: '>', greaterThanOrEqual: '≥',
+  blank: 'puste', notBlank: 'niepuste',
+};
+
+// Filtr kolumny (model AG Grid) -> krotki opis, np. "zawiera Torino", "≤ 23", "18–23"
+function opisFiltru(f: unknown): string {
+  const m = f as { type?: string; filter?: unknown; filterTo?: unknown; operator?: string; conditions?: unknown[] };
+  if (m?.conditions?.length) return m.conditions.map(opisFiltru).join(m.operator === 'OR' ? ' lub ' : ' i ');
+  if (m?.type === 'inRange') return `${String(m.filter)}–${String(m.filterTo)}`;
+  const op = OPERATORY[m?.type ?? ''] ?? m?.type ?? '';
+  return m?.filter === undefined || m?.filter === null ? op : `${op} ${String(m.filter)}`;
+}
 // Stale obiekty (nie tworzone przy kazdym renderze): nowy obiekt kazal siatce przebudowac kolumny,
 // co przywracalo domyslne sortowanie SCORE obok sortowania wybranego przez uzytkownika
 const KOLUMNA_ZAZNACZENIA = { pinned: 'left' as const, width: 46, headerTooltip: 'Zaznacz do porównania' };
@@ -126,8 +152,44 @@ const czyMoj = (w: Wiersz | undefined, uid: number | null | undefined) =>
 const MALA_PROBA_MINUT = 900;
 
 export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, zaznaczeni, naZaznaczenie, ulubione,
-  przelaczUlubione, kluczUkladu }: Props) {
+  przelaczUlubione, kluczUkladu, pozycja, filtryKolumn, naFiltryKolumn, fokusId }: Props) {
   const siatka = useRef<AgGridReact<Wiersz>>(null);
+  const menu = useMenuZawodnika();
+
+  // wiersze w kolejnosci widocznej w tabeli (sortowanie i filtry kolumn)
+  const kolejnosc = () => {
+    const lista: Wiersz[] = [];
+    siatka.current?.api?.forEachNodeAfterFilterAndSort((n) => { if (n.data) lista.push(n.data); });
+    return lista;
+  };
+  const otworz = (w: Wiersz) => naWybor(String(w['ID']), w, kolejnosc());
+
+  // Filtry kolumn trzymane poza tabela: nalozenie po zbudowaniu kolumn i przy zmianie z zewnatrz
+  const filtryRef = useRef(filtryKolumn);
+  filtryRef.current = filtryKolumn;
+  const nalozFiltry = useCallback(() => {
+    const api = siatka.current?.api;
+    const model = filtryRef.current;
+    if (!api || !model) return;
+    const dostepne = Object.fromEntries(Object.entries(model).filter(([kol]) => api.getColumn(kol)));
+    if (JSON.stringify(api.getFilterModel()) !== JSON.stringify(dostepne)) api.setFilterModel(dostepne);
+  }, []);
+  useEffect(() => {
+    nalozFiltry();
+  }, [filtryKolumn, nalozFiltry]);
+
+  // po zamknieciu karty: fokus na wierszu ostatnio ogladanego zawodnika (dalsza nawigacja strzalkami)
+  const poprzedniFokus = useRef<string | null>(null);
+  useEffect(() => {
+    const api = siatka.current?.api;
+    const wczesniej = poprzedniFokus.current;
+    poprzedniFokus.current = fokusId ?? null;
+    if (!api || fokusId || !wczesniej) return;
+    const wezel = api.getRowNode(wczesniej);
+    if (wezel?.rowIndex === null || wezel?.rowIndex === undefined || !wezel.displayed) return;
+    api.ensureIndexVisible(wezel.rowIndex);
+    window.setTimeout(() => api.setFocusedCell(wezel.rowIndex!, 'Piłkarz', wezel.rowPinned), 60);
+  }, [fokusId]);
   const [ukryte, setUkryte] = useState<string[]>([]);
 
   // Uklad tabeli zapamietany w pamieci interfejsu: zapis po kazdej zmianie, odtworzenie po zbudowaniu kolumn
@@ -330,7 +392,20 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
 
   return (
     <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <Group gap="xs" justify="flex-end">
+      <Group gap="xs" justify="space-between" wrap="nowrap" align="center">
+        <Group gap={6} style={{ minWidth: 0 }}>
+          {Object.entries(filtryKolumn ?? {}).map(([kol, f]) => (
+            <Badge key={kol} variant="light" color="teal" tt="none" style={{ cursor: 'pointer' }}
+              title="Filtr kolumny - kliknij, aby usunąć"
+              onClick={() => {
+                const { [kol]: _usuniety, ...reszta } = filtryKolumn ?? {};
+                naFiltryKolumn?.(reszta);
+              }}>
+              {kolumny.find((k) => k.pole === kol)?.naglowek ?? kol}: {opisFiltru(f)} ×
+            </Badge>
+          ))}
+        </Group>
+        <Group gap="xs" wrap="nowrap">
         <Popover position="bottom-end" shadow="md" withArrow>
           <Popover.Target>
             <Button variant="subtle">
@@ -354,6 +429,7 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
             Przywróć układ
           </Button>
         )}
+        </Group>
       </Group>
       <div style={{ flex: 1, minHeight: 0 }}>
       <AgGridReact<Wiersz>
@@ -372,9 +448,38 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         }}
         onFirstDataRendered={synchronizuj}
         onCellClicked={(e) => {
-          if (e.colDef.field === 'Piłkarz' && e.data) naWybor(String(e.data['ID']), e.data);
+          if (e.colDef.field === 'Piłkarz' && e.data) otworz(e.data);
         }}
-        onRowDoubleClicked={(e) => e.data && naWybor(String(e.data['ID']), e.data)}
+        onRowDoubleClicked={(e) => e.data && otworz(e.data)}
+        // prawy przycisk: menu zawodnika zamiast menu przegladarki
+        preventDefaultOnContextMenu
+        onCellContextMenu={(e) => {
+          const w = e.data;
+          const zdarzenie = e.event as MouseEvent | null;
+          if (!w || !zdarzenie) return;
+          menu.otworzMenu(zdarzenie, { id: String(w['ID']), pozycja: String(w['Pozycja na liście'] ?? pozycja ?? ''),
+            pilkarz: String(w['Piłkarz'] ?? ''), wiersz: w });
+        }}
+        // Enter: karta zawodnika; Ctrl+C: wartosc pola z fokusem (zaznaczony tekst kopiuje sie po staremu)
+        onCellKeyDown={(e) => {
+          const k = e.event as KeyboardEvent | null;
+          if (!k || !e.data) return;
+          if (k.key === 'Enter' && !k.ctrlKey && !k.altKey) {
+            k.preventDefault();
+            otworz(e.data);
+          } else if ((k.ctrlKey || k.metaKey) && k.key.toLowerCase() === 'c' && 'column' in e && !window.getSelection()?.toString()) {
+            const wartosc = e.api.getCellValue({ rowNode: e.node, colKey: e.column, useFormatter: true });
+            const tekst = wartosc === null || wartosc === undefined ? '' : String(wartosc).replace(/^⚠ /, '');
+            if (tekst) {
+              k.preventDefault();
+              void kopiuj(tekst).then((ok) => menu.komunikat(ok ? `Skopiowano: ${tekst}` : 'Nie udało się skopiować'));
+            }
+          }
+        }}
+        onFilterChanged={(e) => {
+          if (!naFiltryKolumn || e.source === 'api') return;
+          naFiltryKolumn(e.api.getFilterModel() as ModelFiltrow);
+        }}
         selectionColumnDef={KOLUMNA_ZAZNACZENIA}
         // Stala wysokosc naglowka: autoHeaderHeight liczy ja tylko z wyrenderowanych kolumn (wirtualizacja),
         // wiec po przewinieciu do dlugich nazw caly naglowek rosl. Dluzsze nazwy sa ucinane (pelna w podpowiedzi).
@@ -382,8 +487,8 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         defaultColDef={DOMYSLNA_KOLUMNA}
         animateRows={false}
         tooltipShowDelay={300}
-        onNewColumnsLoaded={odtworzUklad}
-        onGridReady={odtworzUklad}
+        onNewColumnsLoaded={() => { odtworzUklad(); nalozFiltry(); }}
+        onGridReady={() => { odtworzUklad(); nalozFiltry(); }}
         onSortChanged={zapiszUklad}
         onColumnMoved={(e) => e.finished && zapiszUklad()}
         onColumnResized={(e) => e.finished && e.source !== 'flex' && zapiszUklad()}

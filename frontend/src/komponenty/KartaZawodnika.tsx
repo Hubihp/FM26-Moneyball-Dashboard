@@ -1,11 +1,13 @@
-import { Badge, Button, Drawer, Group, Loader, SimpleGrid, Stack, Table, Text, Title, Tooltip } from '@mantine/core';
+import { ActionIcon, Badge, Button, Drawer, Group, Loader, SimpleGrid, Stack, Table, Text, Title, Tooltip } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 import { api, type Wiersz, type ZapytanieRankingu } from '../api';
 import { eur, formatuj } from '../format';
 import HistoriaZawodnika from './HistoriaZawodnika';
 import NaTleMojego from './NaTleMojego';
 import RozbicieWyniku from './RozbicieWyniku';
+import { useMenuZawodnika } from './MenuZawodnika';
 import Wykres from './Wykres';
 
 type Props = {
@@ -20,6 +22,10 @@ type Props = {
   zamknij: () => void;
   otworz: (id: string) => void;
   dodajDoPorownania: (id: string) => void;
+  // nawigacja po tabeli, z ktorej otwarto karte (strzalki w lewo / prawo)
+  poprzedni?: () => void;
+  nastepny?: () => void;
+  licznik?: string;
 };
 
 const zmiana = (x: unknown) => (typeof x === 'number' ? `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(1).replace('.', ',')}` : '–');
@@ -34,7 +40,21 @@ function Pole({ etykieta, wartosc }: { etykieta: string; wartosc: string }) {
 }
 
 export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubUid, mojKlub, ulubiona, przelaczUlubiona, zamknij,
-  otworz, dodajDoPorownania }: Props) {
+  otworz, dodajDoPorownania, poprzedni, nastepny, licznik }: Props) {
+  const menu = useMenuZawodnika();
+  // strzalki w lewo / prawo: poprzedni i nastepny zawodnik z tabeli (nie w polach tekstowych)
+  useEffect(() => {
+    if (!id) return undefined;
+    const klawisz = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      const cel = e.target as HTMLElement | null;
+      if (cel && (cel.tagName === 'INPUT' || cel.tagName === 'TEXTAREA' || cel.isContentEditable)) return;
+      if (e.key === 'ArrowLeft' && poprzedni) { e.preventDefault(); poprzedni(); }
+      if (e.key === 'ArrowRight' && nastepny) { e.preventDefault(); nastepny(); }
+    };
+    window.addEventListener('keydown', klawisz);
+    return () => window.removeEventListener('keydown', klawisz);
+  }, [id, poprzedni, nastepny]);
   const radar = useQuery({
     queryKey: ['radar', wersja, zapytanie.pozycja, id, zapytanie.filtry.kandydaci],
     queryFn: () => api.radar(zapytanie.pozycja, [id!], zapytanie.filtry.kandydaci),
@@ -52,7 +72,21 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
   const okazje = typeof w['Okazje'] === 'string' && w['Okazje'] ? (w['Okazje'] as string).split('; ') : [];
 
   return (
-    <Drawer opened={!!id} onClose={zamknij} position="right" size="xl" title={<Title order={4}>{String(w['Piłkarz'] ?? id ?? '')}</Title>}>
+    <Drawer opened={!!id} onClose={zamknij} position="right" size="xl"
+      title={(
+        <Group gap="sm" wrap="nowrap">
+          <Title order={4}>{String(w['Piłkarz'] ?? id ?? '')}</Title>
+          {licznik && (
+            <Group gap={4} wrap="nowrap">
+              <ActionIcon variant="default" disabled={!poprzedni} onClick={poprzedni} aria-label="Poprzedni zawodnik"
+                title="Poprzedni zawodnik (strzałka w lewo)">‹</ActionIcon>
+              <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>{licznik}</Text>
+              <ActionIcon variant="default" disabled={!nastepny} onClick={nastepny} aria-label="Następny zawodnik"
+                title="Następny zawodnik (strzałka w prawo)">›</ActionIcon>
+            </Group>
+          )}
+        </Group>
+      )}>
       {id && (
         <Stack>
           <Group gap="xs">
@@ -176,6 +210,8 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
               <Table.Tbody>
                 {podobni.data.wiersze.map((p) => (
                   <Table.Tr key={String(p['ID'])} style={{ cursor: 'pointer' }} onClick={() => otworz(String(p['ID']))}
+                    onContextMenu={(e) => menu.otworzMenu(e, { id: String(p['ID']), pozycja: zapytanie.pozycja,
+                      pilkarz: String(p['Piłkarz'] ?? ''), wiersz: p })}
                     className={moj(p) ? 'wiersz-moj-klub' : undefined}>
                     <Table.Td fw={moj(p) ? 700 : undefined} c={moj(p) ? 'yellow' : undefined}>{String(p['Piłkarz'])}</Table.Td>
                     <Table.Td>{String(p['Klub'] ?? '–')}</Table.Td>

@@ -11,6 +11,7 @@ import {
   opisLinii, przesuniety, przypisz, slotyFormacji, wynikNa, zamienSloty, zBloku, zmienFormacje, zTaktykiGry,
   type Faza, type Linie, type Miejsce, type Slot, type Ustawienie,
 } from '../taktyka';
+import { useMenuZawodnika } from './MenuZawodnika';
 import type { Ustawienia } from './PanelBoczny';
 import { SZEROKOSC } from '../wyglad';
 
@@ -125,11 +126,12 @@ function Murawa() {
 }
 
 function Zeton({ slot, miejsce, faza, gracz, numer, wybrany, przygaszony, naKlik, naChwyt, przeciagany, naZmianePozycji,
-  naZdjecie, naKarte, naNajechanie }: {
+  naZdjecie, naKarte, naNajechanie, naMenu }: {
   slot: Slot; miejsce: Miejsce; faza: Faza; gracz: ZawodnikSkladu | undefined; numer: number; wybrany: boolean;
   przygaszony: boolean; naKlik: () => void;
   naChwyt: (e: React.PointerEvent) => void; przeciagany: { x: number; y: number } | null;
   naZmianePozycji: (p: string) => void; naZdjecie: () => void; naKarte: () => void; naNajechanie: (jest: boolean) => void;
+  naMenu: (e: React.MouseEvent) => void;
 }) {
   const pozycja = miejsce.pozycja;
   const wynik = wynikNa(gracz, pozycja);
@@ -142,6 +144,7 @@ function Zeton({ slot, miejsce, faza, gracz, numer, wybrany, przygaszony, naKlik
       className={`zeton${przeciagany ? ' zeton-przeciagany' : ''}${przygaszony ? ' zeton-przygaszony' : ''}`}
       onPointerDown={naChwyt}
       onClick={naKlik}
+      onContextMenu={naMenu}
       onPointerEnter={() => naNajechanie(true)}
       onPointerLeave={() => naNajechanie(false)}
       // przeciagany zeton sam podaza za kursorem (bez polprzezroczystej kopii) i nie zaslania celu upuszczenia
@@ -268,6 +271,7 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
     queryFn: () => api.sklad({ wagi, ignoruj_mnoznik: ustawienia.ignoruj_mnoznik, k_baza: ustawienia.k_baza,
       tylko_pierwsza: tylkoPierwsza }),
   });
+  const menu = useMenuZawodnika();
   const zGry = useQuery({ queryKey: ['taktyka-z-gry', wersja], queryFn: api.taktykaZGry, retry: false });
   const [biezace, setBiezace] = usePamiec<Ustawienie | null>('fm-taktyka', null);
   const [zapisane, setZapisane] = usePamiec<Record<string, Ustawienie>>('fm-taktyki', {});
@@ -356,6 +360,15 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
   const zGryUstawione = u.sloty.some((s) => s.id.startsWith('g'));
   const bez = faza === 'bez';
   const maBez = u.sloty.some((s) => s.bez);
+  // menu kontekstowe: zawodnik kadry w jego glownej puli; ze slotu - dodatkowo "Zdejmij z boiska"
+  const menuGracza = (e: React.MouseEvent, z: ZawodnikSkladu, slotId?: string) => {
+    const poz = (z.Pula_główna && z.id_w_pulach[z.Pula_główna] ? z.Pula_główna : Object.keys(z.id_w_pulach)[0]) ?? '';
+    menu.otworzMenu(e, {
+      id: String(z.id_w_pulach[poz] ?? z.ID), pozycja: poz, pilkarz: z.Piłkarz,
+      wiersz: { ID: z.ID, UID: /^\d+$/.test(z.klucz) ? Number(z.klucz) : null, 'Piłkarz': z.Piłkarz },
+      dodatkowe: slotId ? [{ etykieta: 'Zdejmij z boiska', akcja: () => zdejmij(slotId) }] : undefined,
+    });
+  };
   const slotGracza = (klucz: string) => Object.keys(u.przypisania).find((k) => u.przypisania[k] === klucz) ?? null;
   const naBoisku = new Set(Object.values(u.przypisania));
   const wSkladzie = u.sloty.map((s) => ({ s, z: wgKlucza[u.przypisania[s.id]] })).filter((x) => x.z);
@@ -484,6 +497,7 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
             <Zeton key={s.id} slot={s} miejsce={miejsce(s)} faza={faza} numer={i + 1} gracz={wgKlucza[u.przypisania[s.id]]}
               wybrany={wybranySlot === s.id}
               przygaszony={!!podswietlony && podswietlony !== s.id && !przeciaganie}
+              naMenu={(e) => { const z = wgKlucza[u.przypisania[s.id]]; if (z) menuGracza(e, z, s.id); else e.preventDefault(); }}
               naNajechanie={(jest) => setPodswietlony((stary) => (jest ? s.id : stary === s.id ? null : stary))}
               naKlik={() => !poPrzeciagnieciu.current && setWybranySlot(wybranySlot === s.id ? null : s.id)}
               naChwyt={(e) => chwyc(e, 'slot', s.id)}
@@ -597,6 +611,7 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
                 return (
                   <Group key={z.klucz} data-gracz={z.klucz} gap="xs" wrap="nowrap" justify="space-between"
                     onPointerDown={(e) => chwyc(e, 'gracz', z.klucz)}
+                    onContextMenu={(e) => menuGracza(e, z)}
                     onPointerEnter={() => setPodswietlony(slotGracza(z.klucz))}
                     onPointerLeave={() => setPodswietlony(null)}
                     onClick={() => !poPrzeciagnieciu.current && kliknijGracza(z)}

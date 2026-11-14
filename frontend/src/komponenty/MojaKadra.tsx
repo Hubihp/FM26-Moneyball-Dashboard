@@ -7,6 +7,7 @@ import { formatuj } from '../format';
 import { usePamiec } from '../pamiec';
 import Nastepca from './Nastepca';
 import type { Ustawienia } from './PanelBoczny';
+import { useMenuZawodnika } from './MenuZawodnika';
 
 const SprzedajDrogo = lazy(() => import('./SprzedajDrogo'));
 const Optymalizator = lazy(() => import('./Optymalizator'));
@@ -79,6 +80,7 @@ type PropsPozycji = Props & { kadra: UseQueryResult<Kadra> };
 
 // Kazda pozycja mojego klubu na tle puli, od bramkarza do napastnika
 function WidokPozycji({ wersja, szukajNastepcy, otworz, zapytanieDla, mojKlubUid, kadra }: PropsPozycji) {
+  const menu = useMenuZawodnika();
   const [nastepcaDla, setNastepcaDla] = useState<{ pozycja: string; id: string; pilkarz: string } | null>(null);
   if (kadra.isLoading) return <Loader m="md" />;
   if (kadra.error) return <Alert m="md" color="red">{(kadra.error as Error).message}</Alert>;
@@ -117,7 +119,8 @@ function WidokPozycji({ wersja, szukajNastepcy, otworz, zapytanieDla, mojKlubUid
                 </Table.Thead>
                 <Table.Tbody>
                   {p.zawodnicy.map((z) => (
-                    <Table.Tr key={String(z['ID'])} style={{ cursor: 'pointer' }} onClick={() => otworz(p.pozycja, String(z['ID']), z)}>
+                    <Table.Tr key={String(z['ID'])} style={{ cursor: 'pointer' }} onClick={() => otworz(p.pozycja, String(z['ID']), z)}
+                      onContextMenu={(e) => menu.otworzMenu(e, { id: String(z['ID']), pozycja: p.pozycja, pilkarz: String(z['Piłkarz'] ?? ''), wiersz: z })}>
                       <Table.Td>
                         <Text size="sm" fw={600}>
                           {String(z['Piłkarz'])}{' '}

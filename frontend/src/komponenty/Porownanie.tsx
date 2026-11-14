@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api, type Wiersz, type ZapytanieRankingu } from '../api';
 import HistoriaPorownania from './HistoriaPorownania';
 import Wykres from './Wykres';
+import { useMenuZawodnika } from './MenuZawodnika';
 
 type Props = {
   pozycja: string;
@@ -27,6 +28,7 @@ function koloryWiersza(percentyle: (number | null)[]): (string | undefined)[] {
 }
 
 export default function Porownanie({ pozycja, wersja, wiersze, wybrani, setWybrani, zapytanie }: Props) {
+  const menu = useMenuZawodnika();
   // zawodnicy spoza puli pozycji (kandydaci, lista zyczen) sa szukani wsrod wszystkich zawodnikow
   const radar = useQuery({
     queryKey: ['radar', wersja, pozycja, wybrani],
@@ -75,7 +77,13 @@ export default function Porownanie({ pozycja, wersja, wiersze, wybrani, setWybra
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Statystyka</Table.Th>
-                {radar.data.seria.map((s) => <Table.Th key={s.id}>{nazwa(s.id)}</Table.Th>)}
+                {radar.data.seria.map((s) => (
+                  <Table.Th key={s.id} style={{ cursor: 'context-menu' }}
+                    onContextMenu={(e) => menu.otworzMenu(e, { id: s.id, pozycja, pilkarz: nazwa(s.id),
+                      wiersz: wiersze.find((w) => String(w['ID']) === s.id) ?? { ID: s.id, 'Piłkarz': nazwa(s.id) } })}>
+                    {nazwa(s.id)}
+                  </Table.Th>
+                ))}
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>

@@ -15,12 +15,16 @@ import { useEffect, useRef } from 'react';
 echarts.use([BarChart, LineChart, RadarChart, ScatterChart, GridComponent, LegendComponent, RadarComponent,
   TooltipComponent, VisualMapComponent, CanvasRenderer]);
 
-type Props = { opcje: EChartsOption; wysokosc?: number | string; naKlik?: (dane: unknown) => void };
+type Props = {
+  opcje: EChartsOption; wysokosc?: number | string; naKlik?: (dane: unknown) => void;
+  // prawy przycisk na punkcie: dane punktu i zdarzenie myszy (menu zawodnika)
+  naMenu?: (dane: unknown, e: MouseEvent) => void;
+};
 
 // Cienka otoczka na ECharts: tworzy wykres raz, aktualizuje opcje i reaguje na zmiane rozmiaru.
 // Na ukrytej karcie (React Activity) efekty sa zdejmowane, ale DOM zostaje - wykres nie jest wtedy niszczony,
 // tylko podejmowany po powrocie (bez ponownego rysowania tysiecy punktow). Niszczony, gdy element znika z DOM.
-export default function Wykres({ opcje, wysokosc = 420, naKlik }: Props) {
+export default function Wykres({ opcje, wysokosc = 420, naKlik, naMenu }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const wykres = useRef<echarts.ECharts | null>(null);
   const narysowane = useRef<string | null>(null);     // klucz opcji obecnych na wykresie
@@ -79,6 +83,19 @@ export default function Wykres({ opcje, wysokosc = 420, naKlik }: Props) {
       w.off('click', obsluga);
     };
   }, [naKlik]);
+
+  useEffect(() => {
+    const w = wykres.current;
+    if (!w || !naMenu) return;
+    const obsluga = (e: { data?: unknown; event?: { event?: Event } }) => {
+      const mysz = e.event?.event as MouseEvent | undefined;
+      if (mysz) naMenu(e.data, mysz);
+    };
+    w.on('contextmenu', obsluga);
+    return () => {
+      w.off('contextmenu', obsluga);
+    };
+  }, [naMenu]);
 
   return <div ref={ref} style={{ width: '100%', height: wysokosc }} />;
 }

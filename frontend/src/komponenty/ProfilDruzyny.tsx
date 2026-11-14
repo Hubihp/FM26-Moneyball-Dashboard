@@ -5,6 +5,7 @@ import { api, type MetrykaProfilu, type ProfilDruzyny as Profil, type ZmianaOcen
 import { formatuj } from '../format';
 import type { Ustawienia } from './PanelBoczny';
 import Wykres from './Wykres';
+import { useMenuZawodnika } from './MenuZawodnika';
 
 type Props = {
   wersja: number;
@@ -107,6 +108,7 @@ function Rozklad({ m }: { m: MetrykaProfilu }) {
 function TabelaZmian({ tytul, wiersze, otworz }: {
   tytul: string; wiersze: ZmianaScore[]; otworz: Props['otworz'];
 }) {
+  const menu = useMenuZawodnika();
   return (
     <Card withBorder padding="sm">
       <Title order={6} mb={4}>{tytul}</Title>
@@ -114,7 +116,9 @@ function TabelaZmian({ tytul, wiersze, otworz }: {
         <Table fz="sm">
           <Table.Tbody>
             {wiersze.map((w) => (
-              <Table.Tr key={w.ID} style={{ cursor: 'pointer' }} onClick={() => otworz(w.pozycja, w.ID)}>
+              <Table.Tr key={w.ID} style={{ cursor: 'pointer' }} onClick={() => otworz(w.pozycja, w.ID)}
+                onContextMenu={(e) => menu.otworzMenu(e, { id: w.ID, pozycja: w.pozycja, pilkarz: w.Piłkarz,
+                  wiersz: { ID: w.ID, 'Piłkarz': w.Piłkarz } })}>
                 <Table.Td><Text size="sm" fw={600}>{w.Piłkarz}</Text><Text size="xs" c="dimmed">{w.pozycja}</Text></Table.Td>
                 <Table.Td ta="right" c="dimmed">{formatuj(w['SCORE wtedy'], 'score')} → {formatuj(w.SCORE, 'score')}</Table.Td>
                 <Table.Td ta="right" fw={700} c={w['Δ SCORE'] < 0 ? 'red' : 'teal'}>{formatuj(w['Δ SCORE'], 'zmiana')}</Table.Td>
@@ -151,6 +155,7 @@ function TabelaOcen({ tytul, wiersze }: { tytul: string; wiersze: ZmianaOceny[] 
 }
 
 function Atletyzm({ a, otworz }: { a: NonNullable<Profil['atletyzm']>; otworz: Props['otworz'] }) {
+  const menu = useMenuZawodnika();
   const polowa = Math.ceil(a.kluby.length / 2);
   return (
     <Stack gap="sm">
@@ -179,7 +184,9 @@ function Atletyzm({ a, otworz }: { a: NonNullable<Profil['atletyzm']>; otworz: P
             <Table.Tbody>
               {a.zawodnicy.map((z) => (
                 <Table.Tr key={`${z.Piłkarz}|${z.ID}`} style={{ cursor: z.ID && z.Pula ? 'pointer' : undefined }}
-                  onClick={() => z.ID && z.Pula && otworz(z.Pula, z.ID)}>
+                  onClick={() => z.ID && z.Pula && otworz(z.Pula, z.ID)}
+                  onContextMenu={(e) => z.ID && z.Pula && menu.otworzMenu(e, { id: z.ID, pozycja: z.Pula, pilkarz: z.Piłkarz,
+                    wiersz: { ID: z.ID, 'Piłkarz': z.Piłkarz } })}>
                   <Table.Td><Text size="sm" fw={600}>{z.Piłkarz}</Text><Text size="xs" c="dimmed">{z.Pula}</Text></Table.Td>
                   <Table.Td ta="right">{formatuj(z.Minuty, 'int')}</Table.Td>
                   <Table.Td ta="right">{z['Dystans (km)/90'] !== undefined ? `${z['Dystans (km)/90'].toFixed(1).replace('.', ',')} km` : '–'}</Table.Td>

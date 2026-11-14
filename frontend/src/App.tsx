@@ -30,7 +30,8 @@ import Okazje from './komponenty/Okazje';
 import PanelBoczny, { PUSTE_FILTRY, type Ustawienia } from './komponenty/PanelBoczny';
 import PanelZrodla from './komponenty/PanelZrodla';
 
-import TabelaRankingu from './komponenty/TabelaRankingu';
+import TabelaRankingu, { type ModelFiltrow } from './komponenty/TabelaRankingu';
+import { DostawcaMenuZawodnika, type AkcjeMenu, type CelMenu } from './komponenty/MenuZawodnika';
 // Komponenty z wykresami (ECharts) ladowane dopiero przy pierwszym uzyciu
 import { usePowiekszenie } from './powiekszenie';
 import { SZEROKOSC } from './wyglad';
@@ -167,7 +168,15 @@ export default function App() {
       setFiltryPozycji({ ...filtryPozycji, [pozycja]: { ...filtryPozycji[pozycja], kandydaci_z: kandydaciZ } });
     }
   };
+  // Filtry kolumn tabeli Rankingu: kolumny wspolne maja jeden filtr dla wszystkich pozycji (np. Klub: Torino zostaje
+  // po zmianie pozycji), kolumny statystyk - osobno dla pozycji
+  const [filtryKolWspolne, setFiltryKolWspolne] = usePamiec<ModelFiltrow>('fm-filtry-kolumn', {});
+  const [filtryKolPozycji, setFiltryKolPozycji] = usePamiec<Record<string, ModelFiltrow>>('fm-filtry-kolumn-pozycji', {});
+  const filtryKolumn = useMemo(() => ({ ...filtryKolWspolne, ...(filtryKolPozycji[pozycja] ?? {}) }),
+    [filtryKolWspolne, filtryKolPozycji, pozycja]);
   const [wybrani, setWybrani] = useState<Record<string, string[]>>({});
+  // wiersze tabeli, z ktorej otwarto karte (w jej kolejnosci) - "poprzedni / nastepny" w karcie
+  const [kolejnoscKarty, setKolejnoscKarty] = useState<Wiersz[]>([]);
   const [karta, setKarta] = useState<string | null>(null);
   const [kartaWiersz, setKartaWiersz] = useState<Wiersz | undefined>(undefined);
   const [zakladka, setZakladka] = useState<string | null>('ranking');
@@ -247,7 +256,8 @@ export default function App() {
     retry: false,
   });
   const wierszKarty = wierszLokalny ?? wierszZSerwera.data;
-  const otworzKarte = (id: string, wiersz?: Wiersz) => {
+  const otworzKarte = (id: string, wiersz?: Wiersz, kolejnosc?: Wiersz[]) => {
+    setKolejnoscKarty(kolejnosc ?? []);
     setKarta(id);
     setKartaWiersz(wiersz);
   };
@@ -257,6 +267,24 @@ export default function App() {
   const zaznacz = (ids: string[], wszystkie: string[]) => {
     const poza = wybraniPozycji.filter((id) => !wszystkie.includes(id));
     setWybrani({ ...wybrani, [pozycja]: [...poza, ...ids.filter((id) => !poza.includes(id))].slice(-4) });
+  };
+  const ustawFiltryKolumn = (model: ModelFiltrow) => {
+    const statystyki = new Set((rankingPozycji?.kolumny ?? []).filter((k) => k.statystyka).map((k) => k.pole));
+    const wTabeli = new Set((rankingPozycji?.kolumny ?? []).map((k) => k.pole));
+    const wspolne: ModelFiltrow = Object.fromEntries(Object.entries(filtryKolWspolne).filter(([k]) => !wTabeli.has(k)));
+    const pozycji: ModelFiltrow = {};
+    for (const [k, f] of Object.entries(model)) (statystyki.has(k) ? pozycji : wspolne)[k] = f;
+    setFiltryKolWspolne(wspolne);
+    setFiltryKolPozycji({ ...filtryKolPozycji, [pozycja]: pozycji });
+  };
+  // karta: poprzedni / nastepny zawodnik w kolejnosci tabeli, z ktorej ja otwarto
+  const indeksKarty = kolejnoscKarty.findIndex((w) => String(w['ID']) === karta);
+  const przejdzWKarcie = (krok: number) => {
+    const w = kolejnoscKarty[indeksKarty + krok];
+    if (indeksKarty < 0 || !w) return;
+    if (w['Pozycja na liście']) setPozycja(String(w['Pozycja na liście']));
+    setKarta(String(w['ID']));
+    setKartaWiersz(w);
   };
   const s = stan.data;
   const mojKlubUid = s?.meta.moj_klub_uid;
@@ -278,12 +306,39 @@ export default function App() {
       }]);
     }
   };
+  // menu kontekstowe zawodnika (prawy przycisk) - wspolne akcje dla wszystkich ekranow
+  const akcjeMenu: AkcjeMenu = {
+    otworz: (cel: CelMenu) => {
+      if (cel.pozycja && cel.pozycja !== pozycja) setPozycja(cel.pozycja);
+      otworzKarte(cel.id, cel.wiersz);
+    },
+    wPorownaniu: (cel) => (wybrani[cel.pozycja || pozycja] ?? []).includes(cel.id),
+    przelaczPorownanie: (cel) => {
+      const poz = cel.pozycja || pozycja;
+      const obecni = wybrani[poz] ?? [];
+      const inna = poz !== pozycja ? ` (${poz})` : '';
+      if (obecni.includes(cel.id)) {
+        setWybrani({ ...wybrani, [poz]: obecni.filter((x) => x !== cel.id) });
+        return `Usunięto z porównania${inna}: ${cel.pilkarz}`;
+      }
+      const nowi = [...obecni, cel.id].slice(-4);
+      setWybrani({ ...wybrani, [poz]: nowi });
+      return `Dodano do porównania${inna} ${nowi.length}/4: ${cel.pilkarz}`;
+    },
+    naLiscie: (cel) => ulubione.has(kluczZawodnika(cel.wiersz)),
+    przelaczListe: (cel) => {
+      const byl = ulubione.has(kluczZawodnika(cel.wiersz));
+      przelaczUlubione(cel.wiersz, cel.pozycja || pozycja);
+      return `${byl ? 'Usunięto z listy życzeń' : 'Dodano do listy życzeń'}: ${cel.pilkarz}`;
+    },
+  };
   const zmienMojKlub = async (uid: string | null) => {
     if (!uid) return;
     klient.setQueryData(['stan'], await api.mojKlub(Number(uid)));
   };
 
   return (
+    <DostawcaMenuZawodnika akcje={akcjeMenu}>
     <AppShell header={{ height: 56 }} navbar={{ width: 320, breakpoint: 'sm' }} padding={0}>
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
@@ -329,7 +384,13 @@ export default function App() {
           setPozycja={setPozycja}
           meta={meta.data}
           filtry={filtry}
-          setFiltry={ustawFiltry}
+          setFiltry={(f) => {
+            ustawFiltry(f);
+            if (f === PUSTE_FILTRY) {      // "Wyczysc filtry": takze filtry kolumn tabeli
+              setFiltryKolWspolne({});
+              setFiltryKolPozycji({});
+            }
+          }}
           wagi={wagi}
           setWagi={(w) => {
             const kopia = { ...wagiWlasne };
@@ -416,6 +477,10 @@ export default function App() {
                     wiersze={wiersze}
                     mojKlubUid={mojKlubUid}
                     naWybor={otworzKarte}
+                    pozycja={pozycja}
+                    filtryKolumn={filtryKolumn}
+                    naFiltryKolumn={ustawFiltryKolumn}
+                    fokusId={zakladka === 'ranking' ? karta : null}
                     zaznaczeni={wybraniPozycji}
                     naZaznaczenie={zaznacz}
                     kluczUkladu={`ranking|${pozycja}`}
@@ -440,9 +505,9 @@ export default function App() {
                 <ListaZyczen lista={lista} setLista={setLista} wersja={wersja} wagi={wagiWlasne} ustawienia={ustawienia}
                   mojKlubUid={mojKlubUid} pozycja={pozycja}
                   zaznaczeni={wybraniPozycji} naZaznaczenie={zaznacz}
-                  naWybor={(poz, id, wiersz) => {
+                  naWybor={(poz, id, wiersz, kolejnosc) => {
                     setPozycja(poz);
-                    otworzKarte(id, wiersz);
+                    otworzKarte(id, wiersz, kolejnosc);
                   }} />
               )}</Karta>
             </Tabs.Panel>
@@ -483,7 +548,7 @@ export default function App() {
               <Karta id="wykresy" {...stanKart}>{rankingPozycji && (
                 <Suspense fallback={<Loader m="md" />}>
                   <Wykresy wiersze={wiersze} kolumny={rankingPozycji.kolumny} modelWyceny={rankingPozycji.model_wyceny}
-                    mojKlubUid={mojKlubUid} naWybor={setKarta} />
+                    mojKlubUid={mojKlubUid} naWybor={setKarta} pozycja={pozycja} />
                 </Suspense>
               )}</Karta>
             </Tabs.Panel>
@@ -508,6 +573,9 @@ export default function App() {
         przelaczUlubiona={() => wierszKarty && przelaczUlubione(wierszKarty)}
         zamknij={() => setKarta(null)}
         otworz={setKarta}
+        poprzedni={indeksKarty > 0 ? () => przejdzWKarcie(-1) : undefined}
+        nastepny={indeksKarty >= 0 && indeksKarty < kolejnoscKarty.length - 1 ? () => przejdzWKarcie(1) : undefined}
+        licznik={indeksKarty >= 0 ? `${indeksKarty + 1} z ${kolejnoscKarty.length}` : undefined}
         dodajDoPorownania={(id) => {
           const nowi = wybraniPozycji.includes(id) ? wybraniPozycji : [...wybraniPozycji, id].slice(-4);
           setWybrani({ ...wybrani, [pozycja]: nowi });
@@ -516,5 +584,6 @@ export default function App() {
       </Suspense>
       )}
     </AppShell>
+    </DostawcaMenuZawodnika>
   );
 }

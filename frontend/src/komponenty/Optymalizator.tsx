@@ -7,6 +7,7 @@ import { eur, formatuj } from '../format';
 import { kluczZawodnika, usePamiec } from '../pamiec';
 import { PrzyciskGwiazdki } from './Gwiazdka';
 import { SZEROKOSC } from '../wyglad';
+import { useMenuZawodnika } from './MenuZawodnika';
 
 type Props = {
   zapytanie: ZapytanieKadry;
@@ -29,6 +30,7 @@ function Kontrakt({ w }: { w: Wiersz }) {
 
 // Optymalizator budzetu: najwiekszy przyrost SCORE za dany budzet (zestaw, nie jedna gwiazda)
 export default function Optymalizator({ zapytanie, wersja, pozycje, otworz, ulubione, przelaczUlubione, budzetGry }: Props) {
+  const menu = useMenuZawodnika();
   // budzet: domyslnie z finansow klubu w zapisie gry; wlasna kwota zastepuje go do czasu "Wartosci z gry"
   const zGry = {
     transfer: budzetGry?.transfer != null ? Math.round(budzetGry.transfer / 1e5) / 10 : null,
@@ -55,7 +57,8 @@ export default function Optymalizator({ zapytanie, wersja, pozycje, otworz, ulub
     return (
       <Table.Tr key={w.pozycja}>
         <Table.Td>{w.pozycja}</Table.Td>
-        <Table.Td style={{ cursor: 'pointer' }} onClick={() => otworz(w.pozycja, String(z['ID']), z)}>
+        <Table.Td style={{ cursor: 'pointer' }} onClick={() => otworz(w.pozycja, String(z['ID']), z)}
+          onContextMenu={(e) => menu.otworzMenu(e, { id: String(z['ID']), pozycja: w.pozycja, pilkarz: String(z['Piłkarz'] ?? ''), wiersz: z })}>
           <Text size="sm" fw={600}>{String(z['Piłkarz'])}</Text>
           <Text size="xs" c="dimmed">{String(z['Klub'] ?? '')} · {String(z['Liga'] ?? '')}</Text>
         </Table.Td>

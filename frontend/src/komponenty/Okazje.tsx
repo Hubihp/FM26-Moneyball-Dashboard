@@ -16,7 +16,7 @@ type Props = {
   okazje: string[];
   wersja: number;
   mojKlubUid: number | null | undefined;
-  naWybor: (id: string, wiersz?: Wiersz) => void;
+  naWybor: (id: string, wiersz?: Wiersz, kolejnosc?: Wiersz[]) => void;
   ulubione: Set<string>;
   przelaczUlubione: (wiersz: Wiersz) => void;
   // wybor okazji i "pomin moj klub" sa trzymane w App (wspolne dla pozycji, zapamietane)
@@ -79,7 +79,7 @@ export default function Okazje({ zapytanie, okazje, wersja, mojKlubUid, naWybor,
           </Text>
           <Box style={{ flex: 1, minHeight: 300 }}>
             <TabelaRankingu kolumny={ranking.data.kolumny} wiersze={ranking.data.wiersze} mojKlubUid={mojKlubUid}
-              naWybor={naWybor} ulubione={ulubione} przelaczUlubione={przelaczUlubione}
+              naWybor={naWybor} pozycja={zapytanie.pozycja} ulubione={ulubione} przelaczUlubione={przelaczUlubione}
               zaznaczeni={zaznaczeni} naZaznaczenie={naZaznaczenie} kluczUkladu={`okazje|${zapytanie.pozycja}`} />
           </Box>
         </>

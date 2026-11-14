@@ -5,6 +5,7 @@ import { api, type Wiersz, type ZapytanieKadry } from '../api';
 import { eur, formatuj } from '../format';
 import { kluczZawodnika } from '../pamiec';
 import { PrzyciskGwiazdki } from './Gwiazdka';
+import { useMenuZawodnika } from './MenuZawodnika';
 
 type Props = {
   zapytanie: ZapytanieKadry;
@@ -26,6 +27,7 @@ function Kontrakt({ w }: { w: Wiersz }) {
 
 // "Sprzedaj drogo": moi zawodnicy, za ktorych rynek placi wiecej, niz wynika z ich gry, i tanszy zastepca
 export default function SprzedajDrogo({ zapytanie, wersja, otworz, ulubione, przelaczUlubione }: Props) {
+  const menu = useMenuZawodnika();
   const dane = useQuery({
     queryKey: ['sprzedaj-drogo', wersja, zapytanie],
     queryFn: () => api.sprzedajDrogo(zapytanie),
@@ -73,7 +75,8 @@ export default function SprzedajDrogo({ zapytanie, wersja, otworz, ulubione, prz
               return (
                 <Table.Tr key={`${w.pozycja}|${String(m['ID'])}`}>
                   <Table.Td>{w.pozycja}</Table.Td>
-                  <Table.Td style={{ cursor: 'pointer' }} onClick={() => otworz(w.pozycja, String(m['ID']), m)}>
+                  <Table.Td style={{ cursor: 'pointer' }} onClick={() => otworz(w.pozycja, String(m['ID']), m)}
+                    onContextMenu={(e) => menu.otworzMenu(e, { id: String(m['ID']), pozycja: w.pozycja, pilkarz: String(m['Piłkarz'] ?? ''), wiersz: m })}>
                     <Text size="sm" fw={600}>
                       {String(m['Piłkarz'])} {m['U21'] ? <Badge size="xs" color="violet" variant="light">U21</Badge> : null}
                     </Text>
@@ -89,7 +92,8 @@ export default function SprzedajDrogo({ zapytanie, wersja, otworz, ulubione, prz
                   </Table.Td>
                   {z ? (
                     <>
-                      <Table.Td style={{ cursor: 'pointer' }} onClick={() => otworz(w.pozycja, String(z['ID']), z)}>
+                      <Table.Td style={{ cursor: 'pointer' }} onClick={() => otworz(w.pozycja, String(z['ID']), z)}
+                        onContextMenu={(e) => menu.otworzMenu(e, { id: String(z['ID']), pozycja: w.pozycja, pilkarz: String(z['Piłkarz'] ?? ''), wiersz: z })}>
                         <Text size="sm" fw={600}>{String(z['Piłkarz'])}</Text>
                         <Text size="xs" c="dimmed">
                           {String(z['Klub'] ?? '')} · {formatuj(z['Wiek'], 'int')} lat · SCORE {formatuj(z['SCORE'], 'score')}

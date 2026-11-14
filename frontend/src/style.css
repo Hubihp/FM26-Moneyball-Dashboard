@@ -258,3 +258,10 @@ body {
   display: flex; flex-direction: column; align-items: center; opacity: 0.85; transition: opacity 0.15s;
 }
 .miniatura-fazy:hover { opacity: 1; }
+
+/* krotkie potwierdzenie akcji (kopiowanie, porownanie, lista zyczen) */
+.powiadomienie {
+  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 4000; pointer-events: none;
+  padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; white-space: nowrap;
+  background: var(--mantine-color-dark-4); color: var(--mantine-color-gray-0); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}

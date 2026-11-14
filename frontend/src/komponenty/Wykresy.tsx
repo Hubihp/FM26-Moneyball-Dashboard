@@ -1,10 +1,11 @@
 import { Group, NumberInput, SegmentedControl, Stack, Text, Title } from '@mantine/core';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 
 import type { Kolumna, ModelWyceny, Wiersz } from '../api';
 import { eur } from '../format';
 import Wykres from './Wykres';
 import { SZEROKOSC } from '../wyglad';
+import { useMenuZawodnika } from './MenuZawodnika';
 
 type Props = {
   wiersze: Wiersz[];
@@ -12,6 +13,7 @@ type Props = {
   modelWyceny: ModelWyceny | undefined;
   mojKlubUid: number | null | undefined;
   naWybor: (id: string) => void;
+  pozycja: string;
 };
 
 const MAKS_PUNKTOW_WYCENY = 1500;
@@ -20,7 +22,14 @@ const procent = (x: number) => `${x > 0 ? '+' : ''}${Math.round(x)}%`;
 
 type Punkt = { value: number[]; id: string; name: string };
 
-export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naWybor }: Props) {
+export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naWybor, pozycja }: Props) {
+  const menu = useMenuZawodnika();
+  const naMenu = useCallback((d: unknown, e: MouseEvent) => {
+    if (!d || typeof d !== 'object' || !('id' in d)) return;
+    const id = String((d as { id: unknown }).id);
+    const w = wiersze.find((x) => String(x['ID']) === id);
+    if (w) menu.otworzMenu(e, { id, pozycja, pilkarz: String(w['Piłkarz'] ?? ''), wiersz: w });
+  }, [wiersze, pozycja, menu]);
   const [ile, setIle] = useState(60);
   const [os, setOs] = useState<'Koszt' | 'Wartość_Numeryczna'>('Koszt');
   const maRozwoj = kolumny.some((k) => k.pole === 'Δ SCORE');
@@ -116,6 +125,7 @@ export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naW
         </Text>
         <Wykres
           wysokosc={480}
+          naMenu={naMenu}
           naKlik={(d) => d && typeof d === 'object' && 'id' in d && naWybor(String((d as { id: unknown }).id))}
           opcje={{
             grid: { left: 60, right: 90, top: 30, bottom: 50 },
@@ -164,6 +174,7 @@ export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naW
           )}
           <Wykres
             wysokosc={480}
+            naMenu={naMenu}
             naKlik={(d) => d && typeof d === 'object' && 'id' in d && naWybor(String((d as { id: unknown }).id))}
             opcje={{
               grid: { left: 70, right: 90, top: 30, bottom: 50 },
@@ -203,6 +214,7 @@ export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naW
         </Text>
         <Wykres
           wysokosc={420}
+          naMenu={naMenu}
           naKlik={klik}
           opcje={{
             grid: { left: 60, right: 90, top: 20, bottom: 50 },
@@ -224,6 +236,7 @@ export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naW
           </Text>
           <Wykres
             wysokosc={380}
+            naMenu={naMenu}
             naKlik={klik}
             opcje={{
               grid: { left: 60, right: 90, top: 20, bottom: 50 },
