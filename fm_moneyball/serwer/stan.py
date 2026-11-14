@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from fm_moneyball import historia
+from fm_moneyball import historia, historia_proces
 from fm_moneyball.historia import KATALOG_HISTORII
 from fm_moneyball.kraje import PLIK_KRAJOW_UZYTKOWNIKA, nazwa_auto_ligi, nazwy_auto, wczytaj_nazwy_krajow
 from fm_moneyball.ligi import (KOREKTA_REZERW, PLIK_MNOZNIKOW_UZYTKOWNIKA, korekta_ligi, mnoznik_z_korekty,
@@ -46,6 +46,7 @@ WERSJA_CACHE = 21            # zmiana formatu wyniku = nowy klucz cache (21: poz
 ILE_W_CACHE = 3
 MAKS_ODCZYTOW_HISTORII_NA_RAZ = 6   # starsze zapisy folderu czytane na jedno wczytanie (historia z folderu)
 PRZERWA_HISTORII_S = 3.0            # przerwa miedzy nimi - serwer odpowiada w tym czasie bez opoznien
+HISTORIA_W_PROCESIE = True          # starsze zapisy czytane w procesie pomocniczym (False: w watku serwera)
 DEMO_DATA_GRY = date(2027, 1, 15)
 
 
@@ -549,33 +550,39 @@ class Stan:
             rozgrzewanie.join()      # najpierw obliczenia dla interfejsu, potem dlugi odczyt starszych zapisow
         przejrzane, dodane = historia.przejrzane(katalog), 0
         log.info("Historia z folderu: zapisy do odczytu: %d", len(lista))
-        for nr, (plik, dzien) in enumerate(lista):
-            if nr and self._zatrzymaj.wait(PRZERWA_HISTORII_S):
-                break        # przerwa miedzy odczytami: interfejs dostaje procesor; zatrzymanie programu konczy prace
-            if pokolenie != self.pokolenie:
-                break
-            if not folder_zapisow.czy_stabilny(plik.sciezka, odstep=0.5):
-                continue     # gra wlasnie zapisuje ten plik - sprobujemy przy kolejnym wczytaniu
-            try:
-                wynik = wczytaj_zapis(plik.sciezka, opcje)
-                if wynik.menedzer != menedzer:
-                    przejrzane[historia.klucz_pliku(plik)] = "inna kariera"
+        # odczyt w osobnym procesie - watek serwera nie traci procesora (GIL), interfejs nie zwalnia
+        pula = historia_proces.pula_procesow() if HISTORIA_W_PROCESIE else None
+        try:
+            for nr, (plik, dzien) in enumerate(lista):
+                if nr and self._zatrzymaj.wait(PRZERWA_HISTORII_S):
+                    break        # przerwa miedzy odczytami; zatrzymanie programu konczy prace
+                if pokolenie != self.pokolenie:
+                    break
+                if not folder_zapisow.czy_stabilny(plik.sciezka, odstep=0.5):
+                    continue     # gra wlasnie zapisuje ten plik - sprobujemy przy kolejnym wczytaniu
+                argumenty = (plik.sciezka, opcje, menedzer, katalog, self.plik_nazw, self.plik_mnoznikow,
+                             self.plik_krajow)
+                odp = historia_proces.w_procesie(pula, *argumenty) if pula is not None else None
+                if odp is None:
+                    if pula is not None:
+                        pula.shutdown(cancel_futures=True)
+                        pula = None
+                    odp = historia_proces.migawka_z_zapisu(*argumenty)
+                wynik, dodana, blad = odp
+                dodane += int(dodana)
+                if wynik == historia_proces.PRZEJSCIOWY:     # bez zapamietania - do ponowienia
+                    log.warning("Historia z folderu: %s na razie nieczytelny (%s)", plik.nazwa, blad)
                     continue
-                dane, _, _ = przygotuj_dane(wynik.dane, wynik.ligi, wynik.kraje_auto, wynik.kraje_baza,
-                                            self.plik_nazw, self.plik_mnoznikow, self.plik_krajow)
-                if historia.zapisz_migawke(katalog, dane, wynik.data_gry) is not None:
-                    dodane += 1
-                przejrzane[historia.klucz_pliku(plik)] = "ok"
-            except (OSError, MemoryError) as e:   # przejsciowe (plik zablokowany, brak pamieci) - bez zapamietania
-                log.warning("Historia z folderu: %s na razie nieczytelny (%s)", plik.nazwa, e)
-            except Exception as e:   # dodatek - uszkodzony albo obcy zapis nie blokuje reszty
-                log.warning("Historia z folderu: pominięto %s (%s)", plik.nazwa, e)
-                przejrzane[historia.klucz_pliku(plik)] = "błąd"
-            finally:
+                if wynik == historia_proces.BLAD:
+                    log.warning("Historia z folderu: pominięto %s (%s)", plik.nazwa, blad)
+                przejrzane[historia.klucz_pliku(plik)] = wynik
                 try:
                     historia.zapisz_przejrzane(katalog, przejrzane)
                 except OSError:
                     pass
+        finally:
+            if pula is not None:
+                pula.shutdown(cancel_futures=True)
         if dodane:
             log.info("Historia z folderu: dodane migawki: %d", dodane)
             with self._blokada:

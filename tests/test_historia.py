@@ -274,11 +274,27 @@ def test_historia_z_folderu_bledy_przejsciowe_i_inna_kariera(tmp_path, monkeypat
         if sciezka.stem == "zablokowany":
             raise PermissionError("plik zablokowany")
         return NS(menedzer="Inny Menedzer")
-    monkeypatch.setattr(stan_mod, "wczytaj_zapis", wczytaj)
+    from fm_moneyball.zrodla import zapis_fm
+    monkeypatch.setattr(zapis_fm, "wczytaj_zapis", wczytaj)
     monkeypatch.setattr(stan_mod, "PRZERWA_HISTORII_S", 0)
+    monkeypatch.setattr(stan_mod, "HISTORIA_W_PROCESIE", False)      # zamienniki dzialaja tylko w tym procesie
     st = Stan(plik_ustawien=tmp_path / "u.json", sledzenie=False, katalog_cache=None, katalog_historii=tmp_path / "h")
     katalog = tmp_path / "h" / "kariera"
     st._historia_z_folderu(st.pokolenie, tmp_path, katalog, date(2027, 11, 6), "Jan Kowalski", None)
     przejrzane = historia.przejrzane(katalog)
     assert przejrzane == {historia.klucz_pliku(pliki["obcy"]): "inna kariera"}   # blad przejsciowy - do ponowienia
     assert historia.migawki(katalog) == []
+
+
+def test_historia_w_procesie_pomocniczym():
+    # proces potomny ("spawn", jak w Windows) startuje i zwraca wynik; nieczytelny plik = blad przejsciowy
+    from fm_moneyball import historia_proces
+    from fm_moneyball.zrodla.zapis_fm import OpcjeZapisu
+    assert historia_proces.test_procesu() == 0
+    pula = historia_proces.pula_procesow()
+    try:
+        wynik, dodana, blad = historia_proces.w_procesie(pula, "/nie/ma/takiego.fm", OpcjeZapisu(), "Jan", None,
+                                                         None, None, None)
+    finally:
+        pula.shutdown()
+    assert wynik == historia_proces.PRZEJSCIOWY and not dodana and "FileNotFoundError" in blad

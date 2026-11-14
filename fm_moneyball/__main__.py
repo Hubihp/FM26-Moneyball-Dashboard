@@ -46,6 +46,12 @@ def _jest_pywebview():
 
 
 def main():
+    # proces pomocniczy (historia ze starszych zapisow) w pliku .exe: multiprocessing musi to rozpoznac na starcie
+    import multiprocessing
+    multiprocessing.freeze_support()
+    if "--test-procesu" in sys.argv:       # CI: czy proces pomocniczy startuje w zbudowanym programie
+        from fm_moneyball.historia_proces import test_procesu
+        sys.exit(test_procesu())
     if sys.version_info < (3, 12):
         _zakoncz(f"Potrzebny jest Python 3.12 lub nowszy (masz {sys.version.split()[0]}).")
     if importlib.util.find_spec("uvicorn") is None:

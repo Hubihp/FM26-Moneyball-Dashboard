@@ -79,6 +79,12 @@ jobs:
           if (-not $ok) { Write-Error "Program nie odpowiada"; exit 1 }
           Write-Host "Program odpowiada poprawnie"
 
+      - name: Test procesu pomocniczego (historia ze starszych zapisow)
+        run: |
+          $proces = Start-Process -FilePath "dist\FM27Dashboard\FM27Dashboard.exe" -ArgumentList "--test-procesu" -PassThru -Wait
+          if ($proces.ExitCode -ne 0) { Write-Error "Proces pomocniczy nie działa (kod $($proces.ExitCode))"; exit 1 }
+          Write-Host "Proces pomocniczy działa"
+
       - name: Instalator (Inno Setup)
         run: |
           choco install innosetup -y --no-progress
