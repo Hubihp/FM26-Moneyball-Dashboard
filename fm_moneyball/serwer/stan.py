@@ -42,7 +42,7 @@ log = logging.getLogger("fm_moneyball")
 CO_ILE_SPRAWDZAC = 15        # sekundy miedzy sprawdzeniami folderu zapisow
 # 2: domyslnie zawodnik we wszystkich pulach, w ktorych jest naturalny (wczesniej tylko glowna)
 WERSJA_USTAWIEN = 2
-WERSJA_CACHE = 20            # zmiana formatu wyniku = nowy klucz cache (20: aktywna taktyka z gry)
+WERSJA_CACHE = 21            # zmiana formatu wyniku = nowy klucz cache (21: pozycje i rozstawienie bez pilki)
 ILE_W_CACHE = 3
 MAKS_ODCZYTOW_HISTORII_NA_RAZ = 6   # starsze zapisy folderu czytane na jedno wczytanie (historia z folderu)
 PRZERWA_HISTORII_S = 3.0            # przerwa miedzy nimi - serwer odpowiada w tym czasie bez opoznien

@@ -240,6 +240,7 @@ export type ZawodnikSkladu = {
 
 export type SlotZGry = {
   numer: number; pozycja: string; pozycja_bez: string | null; x: number; y: number;
+  x_bez?: number | null; y_bez?: number | null;   // miejsce bez pilki w ukladzie formacji
   uid: string | null; nazwa: string | null;
 };
 export type TaktykaZGry = {

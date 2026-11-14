@@ -6,7 +6,10 @@ slotow). Potwierdzone sa pozycje i mentalnosc; role i instrukcje zapis trzyma ja
 potwierdzonego znaczenia, wiec ich nie tlumaczymy (lepiej nic niz zgadywanie).
 Bity pozycji (fmsave.TacticPosition): 0 BR, 2 D(P), 3 D(L), 4 D(Ś), 7 DP, 8 P(P), 9 P(L), 11 OP(P), 12 OP(L),
 13 OP(Ś), 14 N. Bity 1, 5, 6 i 10 fmsave oznacza jako nieznane; z ukladu (miedzy sasiednimi pozycjami)
-przyjmujemy: 1 = libero, 5/6 = wahadlowy prawy/lewy, 10 = srodkowy pomocnik.
+przyjmujemy: 1 = libero, 5/6 = wahadlowy prawy/lewy, 10 = srodkowy pomocnik. Bity 6 i 10 potwierdza zapis
+z asymetryczna taktyka: zawodnik z bitem 6 bez pilki jest lewym obronca, a z bitem 10 zostaje w srodku pomocy.
+Pozycje bez pilki sa przypisane do slotow przez indeks bloku - patrz bloki_bez_pilki.
+Linii obrony i pressingu (19 bajtow instrukcji druzynowych) nie da sie nazwac - tablica ustawia je recznie.
 """
 
 # bit pozycji -> (pozycja aplikacji, linia formacji, y w % boiska, x dla pozycji bocznych)
@@ -70,30 +73,60 @@ def strona(maska):
     return 0.5
 
 
-def sloty_na_boisku(sloty):
+def _rozstaw(wpisy):
     """
-    [(numer slotu, bit z pilka, bit bez pilki[, maska])] -> [{numer, pozycja, x, y, pozycja_bez}] we wspolrzednych
-    tablicy (x od lewej, y od bramki rywala). Pozycje srodkowe tego samego rzedu rozstawione od prawej do lewej:
-    wg flag strony w masce slotu (na zapisie FM27 srodkowy obronca obok prawego obroncy ma flage 0x200000),
-    a przy ich braku w kolejnosci numerow slotow (gra numeruje od prawej).
+    [(numer slotu, bit pozycji, maska)] -> {numer: (pozycja, x, y)} we wspolrzednych tablicy (x od lewej, y od
+    bramki rywala). Pozycje srodkowe tego samego rzedu rozstawione od prawej do lewej: wg flag strony w masce
+    (na zapisie FM27 srodkowy obronca obok prawego obroncy ma flage 0x200000), a przy ich braku w kolejnosci
+    numerow slotow (gra numeruje od prawej).
     """
-    wynik, srodek = [], {}
-    for numer, bit, bit_bez, *maska in sorted(sloty, key=lambda s: s[0]):
+    wynik, srodek = {}, {}
+    for numer, bit, maska in sorted(wpisy, key=lambda w: w[0]):
         if bit is None:
             continue
         pozycja, _, y, x = POZYCJE_BITOW[bit]
-        wpis = {"numer": numer, "_strona": strona(maska[0]) if maska else 0.5, "pozycja": pozycja, "x": x, "y": y,
-                "pozycja_bez": POZYCJE_BITOW[bit_bez][0] if bit_bez is not None else None}
         if x is None:
-            srodek.setdefault((pozycja, y), []).append(wpis)
-        wynik.append(wpis)
-    for wpisy in srodek.values():
-        wpisy.sort(key=lambda w: (w["_strona"], w["numer"]))
-        for wpis, x in zip(wpisy, SZEROKOSC_SRODKA.get(len(wpisy), [50] * len(wpisy))):
-            wpis["x"] = x
-    for wpis in wynik:
-        del wpis["_strona"]
+            srodek.setdefault((pozycja, y), []).append((strona(maska or 0), numer))
+        wynik[numer] = (pozycja, x, y)
+    for (pozycja, y), grupa in srodek.items():
+        for (_, numer), x in zip(sorted(grupa), SZEROKOSC_SRODKA.get(len(grupa), [50] * len(grupa))):
+            wynik[numer] = (pozycja, x, y)
     return wynik
+
+
+def sloty_na_boisku(sloty):
+    """
+    [(numer slotu, bit z pilka, bit bez pilki[, maska z pilka[, maska bez pilki]])] ->
+    [{numer, pozycja, x, y, pozycja_bez, x_bez, y_bez}]: dwa rozstawienia tej samej jedenastki - z pilka i bez
+    pilki, kazde z wlasnych pozycji i flag strony. Slot bez pozycji bez pilki broni tam, gdzie gra z pilka.
+    """
+    sloty = [tuple(s) + (0,) * (5 - len(s)) for s in sloty]
+    z_pilka = _rozstaw((numer, bit, maska) for numer, bit, _, maska, _ in sloty)
+    bez_pilki = _rozstaw((numer, bit_bez if bit_bez is not None else bit, maska_bez if bit_bez is not None else maska)
+                         for numer, bit, bit_bez, maska, maska_bez in sloty)
+    wynik = []
+    for numer in sorted(z_pilka):
+        pozycja, x, y = z_pilka[numer]
+        pozycja_bez, x_bez, y_bez = bez_pilki.get(numer, (pozycja, x, y))
+        wynik.append({"numer": numer, "pozycja": pozycja, "x": x, "y": y,
+                      "pozycja_bez": pozycja_bez, "x_bez": x_bez, "y_bez": y_bez})
+    return wynik
+
+
+def bloki_bez_pilki(sloty_taktyki):
+    """
+    Blok "bez pilki" kazdego slotu taktyki. Zapis trzyma pozycje bez pilki jako 11 blokow w osobnej kolejnosci,
+    a slot `i` ma indeks swojego bloku (fmsave: unknown["out_of_possession_position_index"]) - zawodnik ze slotu
+    `i` broni na pozycji bloku `indeks[i]`. Potwierdzone na zapisie FM27 z asymetryczna taktyka (permutacja
+    z cyklem dluzszym niz 2): tylko ten kierunek daje 11 sensownych pozycji (lewy wahadlowy -> lewy obronca,
+    prawy stoper -> prawy obronca); branie bloku o numerze slotu przypisywalo np. napastnika na skrzydlo.
+    Gdy indeksy nie sa permutacja 0..n-1 (albo ich nie ma) - blok o numerze slotu.
+    """
+    sloty_taktyki = list(sloty_taktyki)
+    indeksy = [(getattr(s, "unknown", None) or {}).get("out_of_possession_position_index") for s in sloty_taktyki]
+    if sorted(i for i in indeksy if isinstance(i, int)) != list(range(len(sloty_taktyki))):
+        return sloty_taktyki
+    return [sloty_taktyki[i] for i in indeksy]
 
 
 # bit pozycji -> kod pozycji w ocenach zawodnika z zapisu (Positions: gk, dc, ...)
@@ -132,8 +165,9 @@ def taktyki_klubu(zapis, club_uid, oceny=None):
     taktyki = []
     for t in sorted((t for t in zapis.tactics() if t.club_uid == club_uid and (t.team_slot or 0) == 0),
                     key=lambda t: t.index):
-        sloty = [(s.number, _bit(s.in_possession_positions), _bit(s.out_of_possession_positions),
-                  s.in_possession_mask or 0) for s in t.slots]
+        sloty = [(s.number, _bit(s.in_possession_positions), _bit(blok.out_of_possession_positions),
+                  s.in_possession_mask or 0, blok.out_of_possession_mask or 0)
+                 for s, blok in zip(t.slots, bloki_bez_pilki(t.slots))]
         taktyki.append((t, sloty))
     if not taktyki:
         return []
