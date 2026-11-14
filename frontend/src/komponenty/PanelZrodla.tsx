@@ -19,6 +19,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 import { api, wgrajZapis, type Opcje, type Stan } from '../api';
+import KontrolaOdczytu from './KontrolaOdczytu';
 
 type Props = { otwarty: boolean; zamknij: () => void; stan: Stan | undefined };
 
@@ -206,6 +207,15 @@ export default function PanelZrodla({ otwarty, zamknij, stan }: Props) {
                   </Button>
                 </Stack>
               </Accordion.Panel>
+            </Accordion.Item>
+          </Accordion>
+        )}
+
+        {stan?.status === 'gotowe' && !stan.meta.demo && stan.meta.nazwa_zapisu && (
+          <Accordion variant="contained">
+            <Accordion.Item value="kontrola">
+              <Accordion.Control>Kontrola jakości odczytu</Accordion.Control>
+              <Accordion.Panel><KontrolaOdczytu wersja={stan.wersja} /></Accordion.Panel>
             </Accordion.Item>
           </Accordion>
         )}

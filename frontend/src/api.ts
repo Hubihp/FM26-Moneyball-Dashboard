@@ -386,7 +386,16 @@ async function zadanie<T>(url: string, init?: RequestInit): Promise<T> {
 const post = <T,>(url: string, body: unknown) =>
   zadanie<T>(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
+export type LigaKontroli = {
+  competition_id: number; klucz: number | null; nazwa: string; kluby: number; nieporownywalne: number;
+  gole_niezgodne: number; gole_xg: number | null; status: string;
+};
+export type Kontrola = {
+  ligi: LigaKontroli[]; pola: { nazwa: string; opis: string; status: string; liczba: number }[]; blad: string | null;
+};
+
 export const api = {
+  kontrola: () => zadanie<Kontrola>('/api/kontrola'),
   system: () => zadanie<SystemInfo>('/api/system'),
   sprawdzAktualizacje: () => post<SystemInfo>('/api/aktualizacja/sprawdz', {}),
   instalujAktualizacje: () => post<SystemInfo>('/api/aktualizacja/instaluj', {}),

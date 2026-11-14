@@ -42,7 +42,7 @@ log = logging.getLogger("fm_moneyball")
 CO_ILE_SPRAWDZAC = 15        # sekundy miedzy sprawdzeniami folderu zapisow
 # 2: domyslnie zawodnik we wszystkich pulach, w ktorych jest naturalny (wczesniej tylko glowna)
 WERSJA_USTAWIEN = 2
-WERSJA_CACHE = 21            # zmiana formatu wyniku = nowy klucz cache (21: pozycje i rozstawienie bez pilki)
+WERSJA_CACHE = 22            # zmiana formatu wyniku = nowy klucz cache (22: kontrola jakosci odczytu)
 ILE_W_CACHE = 3
 MAKS_ODCZYTOW_HISTORII_NA_RAZ = 6   # starsze zapisy folderu czytane na jedno wczytanie (historia z folderu)
 PRZERWA_HISTORII_S = 3.0            # przerwa miedzy nimi - serwer odpowiada w tym czasie bez opoznien
@@ -146,6 +146,7 @@ class Stan:
         self.kraje_auto = {}           # nation_id -> nazwa z klubow-kotwic (z odczytu zapisu)
         self.kraje_baza = {}           # nation_id -> nazwa z tabeli po numerze bazy gry
         self.taktyki = {}              # club_uid -> taktyki pierwszej druzyny odczytane z zapisu
+        self.kontrola = {}             # kontrola jakosci odczytu zapisu (fm_moneyball/kontrola.py)
         self._watek_historii = None    # budowanie migawek ze starszych zapisow folderu
         self._wszyscy = None           # (wersja, zawodnicy wszystkich pul) - pamiec wszyscy_zawodnicy()
         self._watek_rozgrzewania = None
@@ -422,10 +423,11 @@ class Stan:
         }
         return self._zakoncz(pokolenie, klucz, wynik.dane, meta, wynik.ligi, sciezka_odczytu, wynik.kraje_auto,
                              getattr(wynik, "druzyny", {}), getattr(wynik, "tabele", {}),
-                             getattr(wynik, "kraje_baza", {}), getattr(wynik, "taktyki", {}))
+                             getattr(wynik, "kraje_baza", {}), getattr(wynik, "taktyki", {}),
+                             getattr(wynik, "kontrola", {}))
 
     def _zakoncz(self, pokolenie, klucz, dane, meta, ligi, sciezka_odczytu, kraje_auto, druzyny=None, tabele=None,
-                 kraje_baza=None, taktyki=None):
+                 kraje_baza=None, taktyki=None, kontrola=None):
         with self._blokada:
             if pokolenie != self.pokolenie:
                 return False
@@ -435,9 +437,11 @@ class Stan:
             self.kraje_auto = kraje_auto or {}
             self.kraje_baza = kraje_baza or {}
             self.taktyki = taktyki or {}
+            self.kontrola = kontrola or {}
             self._sciezka_odczytu = sciezka_odczytu
             self._uzupelnij_moj_klub()
             self._zastosuj_ligi()
+            self._ostrzezenie_kontroli()
             self._zapisz_historie()
             self.status, self.komunikat, self.etap = "gotowe", "", None
             self.wersja += 1
@@ -445,6 +449,21 @@ class Stan:
         self._uruchom_oceny(pokolenie, klucz)
         self._uruchom_historie_folderu(pokolenie)
         return True
+
+    def _ostrzezenie_kontroli(self):
+        """Ligi, w ktorych statystyki zawodnikow nie zgadzaja sie z tabela - jedno ostrzezenie z nazwami lig."""
+        k = self.kontrola or {}
+        nazwy = {l["klucz"]: l.get("nazwa") for l in self.ligi}
+        zle_ligi = [nazwy.get(x) or f"#{x}" for x in k.get("ostrzezenie_ligi", [])]
+        czesci = []
+        if zle_ligi:
+            czesci.append("w ligach " + ", ".join(zle_ligi) + " gole albo minuty zawodników nie zgadzają się z tabelą ligi")
+        if k.get("zle_pola"):
+            czesci.append("niespójne pola: " + ", ".join(k["zle_pola"]).lower())
+        if czesci:
+            self.meta["ostrzezenia"] = list(self.meta.get("ostrzezenia") or []) + [
+                "Kontrola odczytu: " + "; ".join(czesci) + ". Statystyki tych zawodników mogą być odczytane błędnie "
+                "- szczegóły w panelu „Źródło danych”."]
 
     def _rozgrzej(self):
         """Funkcje `po_wczytaniu` (np. liczenie SCORE wszystkich pozycji) w tle dla biezacej wersji danych."""

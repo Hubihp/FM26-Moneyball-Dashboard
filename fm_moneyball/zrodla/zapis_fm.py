@@ -18,6 +18,7 @@ from datetime import date, timedelta
 import numpy as np
 import pandas as pd
 
+from fm_moneyball.kontrola import kontrola
 from fm_moneyball.kraje import kraj_z_licznika, kraje_z_kotwic, narodowosci_lig, nazwy_z_bazy
 from fm_moneyball.mapy import KATALOG_DANYCH, KATALOG_DOMOWY, wczytaj_mape, zapisz_mape
 from fm_moneyball.parsery import fmt_eur
@@ -167,6 +168,7 @@ class WynikZapisu:
     menedzer: str | None = None                        # czlowiek prowadzacy kariere (klucz historii)
     menedzer_nazwa: str | None = None                  # imie i nazwisko menedzera (naglowek aplikacji)
     taktyki: dict = field(default_factory=dict)        # club_uid prowadzonego klubu -> taktyki pierwszej druzyny
+    kontrola: dict = field(default_factory=dict)       # kontrola jakosci odczytu (fm_moneyball/kontrola.py)
 
 
 # =============================================================================
@@ -1022,7 +1024,11 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
                           for m in zarzadzane if m.club_uid in liga_klubu}
             except Exception as e:   # tabela to dodatek (profil druzyny) - jej brak nie blokuje reszty
                 ostrzezenia.append(f"Nie udało się odczytać tabel lig ({e}).")
-                tabele = {}
+                tabele, wszystkie_tabele = {}, []
+            try:
+                kontrola_odczytu = kontrola(wszystkie_tabele, druzyny, liga_klubu, liczniki)
+            except Exception as e:   # kontrola to dodatek
+                kontrola_odczytu = {"blad": f"{type(e).__name__}: {e}"}
             try:
                 # oceny pozycji wszystkich zawodnikow (w XI moga byc wypozyczeni z innego klubu)
                 oceny_xi = {z.uid: oceny_pozycji(z.positions) for z in zawodnicy
@@ -1071,6 +1077,7 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
         tabele={uid: t for uid, t in tabele.items() if t is not None},
         budzety={uid: b for uid, b in budzety.items() if b is not None},
         taktyki={uid: t for uid, t in taktyki.items() if t},
+        kontrola=kontrola_odczytu,
     )
 
 

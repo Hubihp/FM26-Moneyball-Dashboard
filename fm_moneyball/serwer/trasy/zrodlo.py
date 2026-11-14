@@ -17,6 +17,14 @@ def utworz(stan):
     def pobierz_stan():
         return stan.migawka()
 
+    @router.get("/kontrola")
+    def kontrola_odczytu():
+        """Kontrola jakosci odczytu zapisu: zgodnosc z tabelami lig i testy pol (z nazwami lig)."""
+        k = stan.kontrola or {}
+        nazwy = {l["klucz"]: l.get("nazwa") for l in stan.ligi}
+        return {"ligi": [{**x, "nazwa": nazwy.get(x["klucz"]) or f"Rozgrywki #{x['klucz']}"} for x in k.get("ligi", [])],
+                "pola": k.get("pola", []), "blad": k.get("blad")}
+
     @router.get("/zapisy")
     def lista_zapisow(folder: str | None = None):
         domyslny = folder_zapisow.domyslny_folder()
