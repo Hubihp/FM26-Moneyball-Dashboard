@@ -283,9 +283,8 @@ def utworz(stan, obl):
         uid = _moj_klub()
         taktyki = stan.taktyki.get(uid) or stan.taktyki.get(str(uid)) or []
         return {"taktyki": taktyki,
-                "uwaga": "Pozycje z piłką i bez piłki, mentalność i wybrani zawodnicy pochodzą z zapisu. Ról, instrukcji "
-                         "oraz wysokości linii obrony i pressingu biblioteka fmsave jeszcze nie odczytuje - linie "
-                         "na boisku bez piłki ustawiasz sam."}
+                "uwaga": "Pozycje z piłką i bez piłki, mentalność i wybrani zawodnicy pochodzą z zapisu. Ról i instrukcji "
+                         "biblioteka fmsave jeszcze nie odczytuje."}
 
     @router.post("/profil-druzyny")
     def profil_druzyny(z: KadraModel):

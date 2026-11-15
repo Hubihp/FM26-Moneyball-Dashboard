@@ -3,6 +3,11 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 2.1.1
+
+- Boisko bez piłki pokazuje tylko ustawienie z zapisu gry: bez ręcznie ustawianych linii obrony i pressingu
+  (gra zapisuje je w formie, której biblioteka fmsave jeszcze nie odczytuje).
+
 ## 2.1.0
 
 - Taktyka bez piłki: przełącznik „Z piłką / Bez piłki” na tablicy taktycznej. Żetony płynnie przechodzą

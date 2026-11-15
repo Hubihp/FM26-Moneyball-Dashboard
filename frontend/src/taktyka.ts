@@ -5,69 +5,20 @@ import type { TaktykaZGry, ZawodnikSkladu } from './api';
 export type Miejsce = { pozycja: string; x: number; y: number };
 // bez: miejsce slotu bez pilki w ukladzie formacji (brak = broni tam, gdzie gra z pilka)
 export type Slot = { id: string; pozycja: string; x: number; y: number; bez?: Miejsce };
-// linie: wysokosc linii obrony i linii pressingu (y w % boiska) - ustawiane recznie na boisku bez pilki
-export type Linie = { obrona: number; pressing: number };
-export type Ustawienie = { formacja: string; sloty: Slot[]; przypisania: Record<string, string>; linie?: Linie };
+export type Ustawienie = { formacja: string; sloty: Slot[]; przypisania: Record<string, string> };
 export type Faza = 'z' | 'bez';
-
-export const LINIE_DOMYSLNE: Linie = { obrona: 72, pressing: 38 };
-export const ZAKRES_LINII = { obrona: [60, 86], pressing: [18, 52], odstep: 27 } as const;
-const Y_NAPAD = 15;     // rzad napastnikow w ukladzie formacji
-const Y_OBRONA = 76;    // rzad stoperow
 
 export const miejsceBez = (s: Slot): Miejsce => s.bez ?? { pozycja: s.pozycja, x: s.x, y: s.y };
 
-// Uklad formacji -> blok obronny: stoperzy na linii obrony, napastnicy na linii pressingu, reszta proporcjonalnie.
-// Bramkarz zostaje w bramce.
-export function naBlok(pozycja: string, y: number, linie: Linie): number {
-  if (pozycja === 'Bramkarz') return y;
-  const w = linie.pressing + ((y - Y_NAPAD) / (Y_OBRONA - Y_NAPAD)) * (linie.obrona - linie.pressing);
-  return Math.min(87, Math.max(5, w));
+// Miejsce zetonu na boisku w danej fazie (bez pilki - wprost z ustawienia z zapisu gry)
+export function miejsceWFazie(s: Slot, faza: Faza): Miejsce {
+  return faza === 'z' ? { pozycja: s.pozycja, x: s.x, y: s.y } : miejsceBez(s);
 }
-
-// odwrotnie: punkt boiska bez pilki -> y w ukladzie formacji (zapis po przeciagnieciu zetonu)
-export function zBloku(pozycja: string, y: number, linie: Linie): number {
-  if (pozycja === 'Bramkarz') return y;
-  return Y_NAPAD + ((y - linie.pressing) / (linie.obrona - linie.pressing)) * (Y_OBRONA - Y_NAPAD);
-}
-
-// Miejsce zetonu na boisku w danej fazie
-export function miejsceWFazie(s: Slot, faza: Faza, linie: Linie): Miejsce {
-  if (faza === 'z') return { pozycja: s.pozycja, x: s.x, y: s.y };
-  const m = miejsceBez(s);
-  return { pozycja: m.pozycja, x: m.x, y: naBlok(m.pozycja, m.y, linie) };
-}
-
-// "Duch": miejsce z pilka przeniesione do bloku obronnego - poczatek strzalki przesuniecia
-export const duchWBloku = (s: Slot, linie: Linie) => ({ x: s.x, y: naBlok(s.pozycja, s.y, linie) });
 
 // Zawodnik bez pilki gra na innej pozycji albo wyraznie gdzie indziej niz z pilka
 export function przesuniety(s: Slot): boolean {
   if (!s.bez) return false;
   return s.bez.pozycja !== s.pozycja || Math.abs(s.bez.x - s.x) > 4 || Math.abs(s.bez.y - s.y) > 4;
-}
-
-export function opisLinii(rodzaj: keyof Linie, y: number): string {
-  if (rodzaj === 'obrona') {
-    return y <= 65 ? 'bardzo wysoka' : y <= 70 ? 'wysoka' : y <= 76 ? 'standardowa' : y <= 81 ? 'niska' : 'bardzo niska';
-  }
-  return y <= 24 ? 'bardzo wysoka' : y <= 32 ? 'wysoka' : y <= 43 ? 'średnia' : 'niska';
-}
-
-// Linie w dozwolonym zakresie, z minimalnym odstepem (blok nie moze sie zapasc)
-export function ograniczLinie(l: Linie, ruszana: keyof Linie): Linie {
-  const o = ZAKRES_LINII;
-  let obrona = Math.min(o.obrona[1], Math.max(o.obrona[0], l.obrona));
-  let pressing = Math.min(o.pressing[1], Math.max(o.pressing[0], l.pressing));
-  if (obrona - pressing < o.odstep) {
-    if (ruszana === 'obrona') pressing = Math.max(o.pressing[0], obrona - o.odstep);
-    else obrona = Math.min(o.obrona[1], pressing + o.odstep);
-    if (obrona - pressing < o.odstep) {
-      if (ruszana === 'obrona') obrona = pressing + o.odstep;
-      else pressing = obrona - o.odstep;
-    }
-  }
-  return { obrona: Math.round(obrona * 10) / 10, pressing: Math.round(pressing * 10) / 10 };
 }
 
 export const SKROTY: Record<string, string> = {

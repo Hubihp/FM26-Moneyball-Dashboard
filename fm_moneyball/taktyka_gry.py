@@ -9,7 +9,7 @@ Bity pozycji (fmsave.TacticPosition): 0 BR, 2 D(P), 3 D(L), 4 D(Ś), 7 DP, 8 P(P
 przyjmujemy: 1 = libero, 5/6 = wahadlowy prawy/lewy, 10 = srodkowy pomocnik. Bity 6 i 10 potwierdza zapis
 z asymetryczna taktyka: zawodnik z bitem 6 bez pilki jest lewym obronca, a z bitem 10 zostaje w srodku pomocy.
 Pozycje bez pilki sa przypisane do slotow przez indeks bloku - patrz bloki_bez_pilki.
-Linii obrony i pressingu (19 bajtow instrukcji druzynowych) nie da sie nazwac - tablica ustawia je recznie.
+Instrukcji druzynowych (19 bajtow, m.in. linia obrony i pressing) nie da sie nazwac - nie sa pokazywane.
 """
 
 # bit pozycji -> (pozycja aplikacji, linia formacji, y w % boiska, x dla pozycji bocznych)

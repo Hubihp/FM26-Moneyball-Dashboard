@@ -7,9 +7,9 @@ import { formatuj, kolorWyniku } from '../format';
 import { usePamiec } from '../pamiec';
 import { skalaInterfejsu } from '../powiekszenie';
 import {
-  FORMACJE, LINIE_DOMYSLNE, SKROTY, duchWBloku, miejsceBez, miejsceWFazie, najlepszaXI, naturalny, ograniczLinie,
-  opisLinii, przesuniety, przypisz, slotyFormacji, wynikNa, zamienSloty, zBloku, zmienFormacje, zTaktykiGry,
-  type Faza, type Linie, type Miejsce, type Slot, type Ustawienie,
+  FORMACJE, SKROTY, miejsceBez, miejsceWFazie, najlepszaXI, naturalny, przesuniety, przypisz, slotyFormacji, wynikNa,
+  zamienSloty, zmienFormacje, zTaktykiGry,
+  type Faza, type Miejsce, type Slot, type Ustawienie,
 } from '../taktyka';
 import { useMenuZawodnika } from './MenuZawodnika';
 import type { Ustawienia } from './PanelBoczny';
@@ -30,7 +30,7 @@ const MALO_MINUT = 1000;
 // dx, dy: przesuniecie srodka przeciaganego elementu wzgledem kursora z chwili chwycenia (px),
 // dzieki ktoremu element jedzie za kursorem bez przeskoku srodkiem pod kursor
 type Przeciaganie = {
-  typ: 'slot' | 'gracz' | 'linia'; id: string; sx: number; sy: number; x: number; y: number; dx: number; dy: number; aktywne: boolean;
+  typ: 'slot' | 'gracz'; id: string; sx: number; sy: number; x: number; y: number; dx: number; dy: number; aktywne: boolean;
 };
 const MAKS_PRZESUNIECIA_PLAKIETKI = { x: 40, y: 10 };   // kursor zawsze zostaje na plakietce z nazwiskiem
 const nazwisko = (z: ZawodnikSkladu) => z.Piłkarz.split(' ').slice(-1)[0];
@@ -201,18 +201,12 @@ function Zeton({ slot, miejsce, faza, gracz, numer, wybrany, przygaszony, naKlik
 // boisko 74 x 111 jednostek (jak Murawa): % boiska -> jednostki rysunku bez znieksztalcen
 const naRysunek = (p: { x: number; y: number }) => ({ x: p.x * 0.74, y: p.y * 1.11 });
 
-// Warstwa fazy "bez pilki": blok miedzy liniami, linie obrony i pressingu, duchy i strzalki przesuniec
-function WarstwaBezPilki({ sloty, linie, podswietlony, tylkoPodglad }: {
-  sloty: Slot[]; linie: Linie; podswietlony: string | null; tylkoPodglad: boolean;
+// Warstwa przesuniec bez pilki: "duch" miejsca z pilka i strzalka do miejsca bez pilki (z zapisu gry)
+function WarstwaBezPilki({ sloty, podswietlony, tylkoPodglad }: {
+  sloty: Slot[]; podswietlony: string | null; tylkoPodglad: boolean;
 }) {
-  const yO = linie.obrona * 1.11;
-  const yP = linie.pressing * 1.11;
-  const ruchy = sloty.filter((s) => przesuniety(s) && (!tylkoPodglad || s.id === podswietlony)).map((s) => {
-    const cel = miejsceWFazie(s, 'bez', linie);
-    // w podgladzie (faza z pilka) strzalka zaczyna sie w miejscu z pilka, w fazie bez pilki - od "ducha" w bloku
-    const start = tylkoPodglad ? { x: s.x, y: s.y } : duchWBloku(s, linie);
-    return { id: s.id, a: naRysunek(start), b: naRysunek(cel) };
-  });
+  const ruchy = sloty.filter((s) => przesuniety(s) && (!tylkoPodglad || s.id === podswietlony)).map((s) => (
+    { id: s.id, a: naRysunek({ x: s.x, y: s.y }), b: naRysunek(miejsceWFazie(s, 'bez')) }));
   return (
     <svg viewBox="0 0 74 111" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1 }}>
       <defs>
@@ -220,13 +214,6 @@ function WarstwaBezPilki({ sloty, linie, podswietlony, tylkoPodglad }: {
           <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" />
         </marker>
       </defs>
-      {!tylkoPodglad && (
-        <>
-          <rect x={0} y={yP} width={74} height={Math.max(0, yO - yP)} fill="rgba(255,255,255,0.07)" />
-          <line x1={0} y1={yO} x2={74} y2={yO} stroke="#ffd43b" strokeWidth={0.45} strokeDasharray="1.6 1.2" />
-          <line x1={0} y1={yP} x2={74} y2={yP} stroke="#74c0fc" strokeWidth={0.45} strokeDasharray="1.6 1.2" />
-        </>
-      )}
       {ruchy.map(({ id, a, b }) => {
         const mocny = podswietlony === id;
         const d = Math.hypot(b.x - a.x, b.y - a.y) || 1;
@@ -245,7 +232,7 @@ function WarstwaBezPilki({ sloty, linie, podswietlony, tylkoPodglad }: {
 }
 
 // Miniatura drugiej fazy w rogu boiska - klikniecie przelacza faze
-function Miniatura({ sloty, faza, linie, naKlik }: { sloty: Slot[]; faza: Faza; linie: Linie; naKlik: () => void }) {
+function Miniatura({ sloty, faza, naKlik }: { sloty: Slot[]; faza: Faza; naKlik: () => void }) {
   const inna: Faza = faza === 'z' ? 'bez' : 'z';
   return (
     <button type="button" className="miniatura-fazy" onClick={naKlik}
@@ -255,7 +242,7 @@ function Miniatura({ sloty, faza, linie, naKlik }: { sloty: Slot[]; faza: Faza; 
         <rect x={3} y={3} width={68} height={105} fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth={0.8} />
         <line x1={3} y1={55.5} x2={71} y2={55.5} stroke="rgba(255,255,255,0.6)" strokeWidth={0.8} />
         {sloty.map((s) => {
-          const m = naRysunek(miejsceWFazie(s, inna, linie));
+          const m = naRysunek(miejsceWFazie(s, inna));
           return <circle key={s.id} cx={m.x} cy={m.y} r={3.6} fill={inna === 'bez' ? '#4dabf7' : '#ff6b6b'} stroke="white" strokeWidth={0.7} />;
         })}
       </svg>
@@ -386,16 +373,7 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
     return { x: Math.min(97, Math.max(3, ((x - r.left) / r.width) * 100)),
       y: Math.min(97, Math.max(3, ((y - r.top) / r.height) * 100)) };
   };
-  // linie obrony i pressingu: w trakcie przeciagania wartosc robocza, zapis po puszczeniu
-  const linieZapisane = u.linie ?? LINIE_DOMYSLNE;
-  const linieZRuchu = (p: Przeciaganie): Linie => {
-    const punkt = naBoiskuProcent(p.x + p.dx, p.y + p.dy);
-    if (!punkt) return linieZapisane;
-    const rodzaj = p.id as keyof Linie;
-    return ograniczLinie({ ...linieZapisane, [rodzaj]: punkt.y }, rodzaj);
-  };
-  const linie = przeciaganie?.aktywne && przeciaganie.typ === 'linia' ? linieZRuchu(przeciaganie) : linieZapisane;
-  const miejsce = (s: Slot) => miejsceWFazie(s, faza, linie);
+  const miejsce = (s: Slot) => miejsceWFazie(s, faza);
   // Upuszczenie: cel spod kursora (przeciagany element ma pointer-events: none, wiec go nie zaslania),
   // nowa pozycja - tam, gdzie widac srodek przeciaganego elementu
   upuscRef.current = (p: Przeciaganie) => {
@@ -405,10 +383,6 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
     const naBoisku = elementy.some((el) => el.closest('[data-boisko]'));
     const naLiscie = elementy.some((el) => el.closest('[data-lista]'));
     const punkt = naBoiskuProcent(p.x + p.dx, p.y + p.dy);
-    if (p.typ === 'linia') {
-      setBiezace({ ...u, linie: linieZRuchu(p) });
-      return;
-    }
     if (p.typ === 'gracz') {
       if (slotCel) setBiezace(przypisz(u, slotCel, p.id));
       else if (naBoisku && punkt) {
@@ -433,7 +407,7 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
       setBiezace({ ...u, sloty: u.sloty.map((s) => {
         if (s.id !== p.id) return s;
         const pozycja = miejsceBez(s).pozycja;
-        return { ...s, bez: { pozycja, x: punkt.x, y: zBloku(pozycja, punkt.y, linie) } };
+        return { ...s, bez: { pozycja, x: punkt.x, y: punkt.y } };
       }) });
     } else if (naBoisku && punkt) setBiezace({ ...u, sloty: u.sloty.map((s) => (s.id === p.id ? { ...s, ...punkt } : s)) });
     else if (naLiscie) zdejmij(p.id);
@@ -465,34 +439,15 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
         </div>
       )}
       <Stack gap={6} align="flex-start" style={{ flexShrink: 0 }}>
-        <Group gap="sm" wrap="nowrap">
-          <SegmentedControl value={faza} onChange={(v) => setFaza(v as Faza)}
-            data={[{ value: 'z', label: 'Z piłką' }, { value: 'bez', label: 'Bez piłki' }]} />
-          {bez && (
-            <Group gap={6} wrap="nowrap">
-              <Badge variant="filled" color="yellow.5" c="dark" title="Wysokość linii obrony - przeciągnij żółty uchwyt na boisku">
-                obrona: {opisLinii('obrona', linie.obrona)}
-              </Badge>
-              <Badge variant="filled" color="blue.3" c="dark" title="Wysokość linii pressingu - przeciągnij niebieski uchwyt na boisku">
-                pressing: {opisLinii('pressing', linie.pressing)}
-              </Badge>
-            </Group>
-          )}
-        </Group>
+        <SegmentedControl value={faza} onChange={(v) => setFaza(v as Faza)}
+          data={[{ value: 'z', label: 'Z piłką' }, { value: 'bez', label: 'Bez piłki' }]} />
         <div ref={boisko} data-boisko
           style={{ position: 'relative', height: 'min(calc(78vh / var(--skala, 1) - 42px), 900px)', aspectRatio: '74 / 111',
             borderRadius: 10, overflow: 'hidden', boxShadow: '0 4px 18px rgba(0,0,0,0.45)' }}>
           <Murawa />
           {(bez || (podswietlony && !przeciaganie)) && (
-            <WarstwaBezPilki sloty={u.sloty} linie={linie} podswietlony={podswietlony} tylkoPodglad={!bez} />
+            <WarstwaBezPilki sloty={u.sloty} podswietlony={podswietlony} tylkoPodglad={!bez} />
           )}
-          {bez && (['obrona', 'pressing'] as const).map((rodzaj) => (
-            <div key={rodzaj} className={`uchwyt-linii uchwyt-linii-${rodzaj}`} style={{ top: `${linie[rodzaj]}%` }}
-              onPointerDown={(e) => { e.stopPropagation(); chwyc(e, 'linia', rodzaj); }}
-              title={`${rodzaj === 'obrona' ? 'Linia obrony' : 'Linia pressingu'}: ${opisLinii(rodzaj, linie[rodzaj])} - przeciągnij w górę lub w dół`}>
-              ↕
-            </div>
-          ))}
           {u.sloty.map((s, i) => (
             <Zeton key={s.id} slot={s} miejsce={miejsce(s)} faza={faza} numer={i + 1} gracz={wgKlucza[u.przypisania[s.id]]}
               wybrany={wybranySlot === s.id}
@@ -527,7 +482,7 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
               </div>
             );
           })()}
-          <Miniatura sloty={u.sloty} faza={faza} linie={linieZapisane} naKlik={() => setFaza(bez ? 'z' : 'bez')} />
+          <Miniatura sloty={u.sloty} faza={faza} naKlik={() => setFaza(bez ? 'z' : 'bez')} />
         </div>
         {bez && (
           <Group gap="xs" wrap="nowrap" align="flex-start" maw={520}>
@@ -535,11 +490,10 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
             {maBez
               ? 'Pozycje bez piłki z zapisu gry (strzałka = zmiana względem ustawienia z piłką).'
               : 'Ustawienie bez piłki jak z piłką - wczytaj taktykę z gry albo przeciągnij żetony.'}
-            {' '}Linie obrony i pressingu ustawiasz sam: przeciągnij uchwyt ↕ przy prawej krawędzi.
           </Text>
-            <Button variant="subtle" color="gray" disabled={!maBez && !u.linie}
-              title="Ustawienie bez piłki takie jak z piłką, linie domyślne"
-              onClick={() => setBiezace({ ...u, linie: undefined, sloty: u.sloty.map(({ bez: _bez, ...s }) => s) })}>
+            <Button variant="subtle" color="gray" disabled={!maBez}
+              title="Ustawienie bez piłki takie jak z piłką"
+              onClick={() => setBiezace({ ...u, sloty: u.sloty.map(({ bez: _bez, ...s }) => s) })}>
               Jak z piłką
             </Button>
           </Group>
