@@ -6,9 +6,8 @@ Funkcje "FM-owe" liczone z danych zapisu gry (FM27):
 2. Wagi silnika meczowego: testy spolecznosci FM-Arena (zmiana atrybutu -> punkty druzyny w tysiacach meczow)
    pokazuja, ze szybkosc i przyspieszenie daja najwiecej, potem skocznosc, zwinnosc i drybling. Opcjonalnie
    mnozymy wagi tych atrybutow (zawodnicy z pola; bramkarz bez zmian).
-3. Szansa na transfer: czy zawodnik przyjdzie do mojego klubu - z roznicy reputacji mojego klubu i zawodnika.
-   Kalibracja na 13 153 transferach miedzy sezonami kariery FM27: do klubu o reputacji nizszej niz wlasna
-   o ponad 1000 przechodzi 11% zawodnikow, o ponad 1500 - 4%, o ponad 2000 - 1,4%.
+3. Szansa na transfer: czy zawodnik przyjdzie do mojego klubu - z reputacji mojego klubu wobec obecnego klubu
+   zawodnika i wobec niego samego oraz jego statusu w kadrze (kalibracja na transferach kariery FM27).
 4. Klauzula odstepnego: najnizsza kwota z klauzul kontraktu, ktora obowiazuje wobec mojego klubu (ogolna,
    dla klubow zagranicznych albo krajowych - wg kraju mojego klubu; krajowa tylko do daty wygasniecia).
 5. Home-grown: czy zawodnik jest wychowankiem kraju mojego klubu (wymog rejestracji, np. 8 z 25 w Lidze
@@ -194,33 +193,54 @@ def dolicz_role(df, pozycja, rola=None, silnik=True):
 
 
 # --- 3. Szansa na transfer ---------------------------------------------------------------------
-# Udzial transferow (kariera FM27, 2 sezony), w ktorych nowy klub mial reputacje nizsza od reputacji zawodnika
-# co najmniej o tyle: roznica -> udzial. Interpolacja liniowa miedzy punktami.
-UDZIAL_TRANSFEROW = ((-3000, 0.006), (-2000, 0.014), (-1500, 0.04), (-1000, 0.114), (-500, 0.255), (0, 0.50),
-                     (600, 0.75))
-# starsi schodza nizej chetniej, mlodzi rzadziej (10. percentyl roznicy: 15-23 lat -850, 31+ -1355)
-KOREKTA_WIEKU = ((23, -250), (30, 0), (99, 300))
-PROGI_SZANSY = ((0.40, "wysoka"), (0.15, "średnia"), (0.04, "niska"), (0.0, "bardzo niska"))
+# Gra liczy zainteresowanie zawodnika na biezaco (reputacja klubu kupujacego wobec obecnego klubu i wobec samego
+# zawodnika, status w kadrze, ambicja) - zapis nie trzyma tekstu "zainteresowany / niezainteresowany".
+# Przyblizenie z danych widocznych w grze, skalibrowane na 1 686 transferach z kariery FM27 (zawodnicy
+# z kontraktem i reputacja >= 3000, sezon 2027/28): udzial transferow, w ktorych nowy klub mial reputacje nizsza
+# (albo wyzsza) o co najmniej tyle wzgledem obecnego klubu i wzgledem zawodnika. Zawodnicy kluczowi (status
+# w kontrakcie: gwiazda, wazny, podstawowy, pierwszy bramkarz) prawie nie schodza do slabszego klubu: tylko 6%
+# ich transferow to krok w dol o 1000 reputacji, u rezerwowych i zbednych - 36%.
+STATUSY_KLUCZOWE = {1, 2, 3, 15}
+STATUSY_KADRY = {1: "gwiazda zespołu", 2: "ważny zawodnik", 3: "podstawowy zawodnik", 4: "zawodnik kadry",
+                 5: "rezerwowy wchodzący z ławki", 7: "zawodnik z marginesu", 9: "awaryjny rezerwowy",
+                 10: "wschodzący talent", 11: "perspektywiczny talent", 13: "młodzieżowiec",
+                 14: "podstawowy w drużynie B", 15: "pierwszy bramkarz", 16: "bramkarz pucharowy",
+                 17: "bramkarz krajowych pucharów", 18: "bramkarz pucharów międzynarodowych", 20: "rezerwowy",
+                 21: "awaryjny bramkarz", 22: "zbędny"}
+_PUNKTY = (-3000, -2000, -1500, -1000, -750, -500, -250, 0, 300, 600)
+# roznica reputacji (moj klub - obecny klub / zawodnik) -> udzial transferow z taka lub mniejsza roznica
+UDZIAL_KLUB = {"kluczowi": (0.011, 0.022, 0.029, 0.059, 0.074, 0.10, 0.14, 0.24, 0.33, 0.45),
+               "pozostali": (0.081, 0.183, 0.274, 0.359, 0.415, 0.499, 0.577, 0.656, 0.741, 0.808)}
+UDZIAL_ZAWODNIK = {"kluczowi": (0.008, 0.011, 0.023, 0.069, 0.111, 0.154, 0.227, 0.336, 0.504, 0.669),
+                   "pozostali": (0.010, 0.015, 0.029, 0.055, 0.093, 0.128, 0.20, 0.312, 0.459, 0.591)}
+PROGI_SZANSY = ((0.30, "wysoka"), (0.15, "średnia"), (0.06, "niska"), (0.0, "bardzo niska"))
 KOLEJNOSC_SZANSY = {"bardzo niska": 0, "niska": 1, "średnia": 2, "wysoka": 3}
 
 
-def udzial_transferow(roznica):
-    """Roznica reputacji (moj klub - zawodnik) -> udzial prawdziwych transferow z taka lub wieksza roznica."""
-    x = [p[0] for p in UDZIAL_TRANSFEROW]
-    y = [p[1] for p in UDZIAL_TRANSFEROW]
-    return np.interp(roznica, x, y)
+def _udzial(roznica, tabela):
+    return np.interp(roznica, _PUNKTY, tabela, left=tabela[0] / 2, right=tabela[-1])
 
 
-def szansa_transferu(reputacja, wiek, reputacja_mojego_klubu):
-    """Serie: (kategoria szansy, udzial transferow w %) dla kazdego zawodnika."""
-    roznica = reputacja_mojego_klubu - pd.to_numeric(reputacja, errors="coerce")
-    wiek = pd.to_numeric(wiek, errors="coerce")
-    korekta = pd.Series(0.0, index=roznica.index)
-    for do_wieku, k in reversed(KOREKTA_WIEKU):
-        korekta = korekta.where(~(wiek <= do_wieku), k)
-    udzial = pd.Series(udzial_transferow((roznica + korekta).fillna(-10_000).to_numpy()), index=roznica.index)
-    udzial = udzial.where(roznica.notna())
-    kategoria = pd.Series(None, index=roznica.index, dtype=object)
+def szansa_transferu(reputacja, reputacja_klubu, status, reputacja_mojego_klubu):
+    """
+    Serie: (kategoria szansy, wskaznik w %) dla kazdego zawodnika. Wskaznik to mniejszy z dwoch udzialow
+    transferow: wg roznicy reputacji mojego klubu i obecnego klubu zawodnika oraz mojego klubu i zawodnika
+    (krzywe osobno dla zawodnikow kluczowych i pozostalych). Wolny agent - tylko roznica wzgledem zawodnika.
+    """
+    rep = pd.to_numeric(reputacja, errors="coerce")
+    rep_klubu = pd.to_numeric(reputacja_klubu, errors="coerce") if reputacja_klubu is not None \
+        else pd.Series(np.nan, index=rep.index)
+    status = pd.to_numeric(status, errors="coerce") if status is not None else pd.Series(np.nan, index=rep.index)
+    kluczowy = status.isin(STATUSY_KLUCZOWE).to_numpy()
+    d_zaw = (reputacja_mojego_klubu - rep).to_numpy(dtype=float)
+    d_klub = (reputacja_mojego_klubu - rep_klubu).to_numpy(dtype=float)
+    u_zaw = np.where(kluczowy, _udzial(np.nan_to_num(d_zaw), UDZIAL_ZAWODNIK["kluczowi"]),
+                     _udzial(np.nan_to_num(d_zaw), UDZIAL_ZAWODNIK["pozostali"]))
+    u_klub = np.where(kluczowy, _udzial(np.nan_to_num(d_klub), UDZIAL_KLUB["kluczowi"]),
+                      _udzial(np.nan_to_num(d_klub), UDZIAL_KLUB["pozostali"]))
+    u_klub = np.where(np.isnan(d_klub), np.inf, u_klub)
+    udzial = pd.Series(np.minimum(u_zaw, u_klub), index=rep.index).where(rep.notna())
+    kategoria = pd.Series(None, index=rep.index, dtype=object)
     for prog, nazwa in reversed(PROGI_SZANSY):
         kategoria = kategoria.where(~(udzial >= prog), nazwa)
     return kategoria.where(udzial.notna()), (udzial * 100).round(1)
@@ -283,10 +303,13 @@ def dolicz_fm(df, moj_klub_uid, data_gry=None, kontekst=None):
     df = df.copy()
     kraj, rep = kontekst if kontekst is not None else kraj_i_reputacja_klubu(df, moj_klub_uid)
     if rep is not None:
-        szansa, udzial = szansa_transferu(df["Reputacja"], df.get("Wiek"), rep)
+        szansa, udzial = szansa_transferu(df["Reputacja"], df.get("Klub_reputacja"), df.get("Status_kadry"), rep)
         moi = df["Klub_UID"] == moj_klub_uid if "Klub_UID" in df.columns else False
         df["Szansa transferu"] = szansa.where(~moi)
         df["Szansa_udział"] = udzial.where(~moi)
+        df["Reputacja_mojego_klubu"] = rep
+    if "Status_kadry" in df.columns:
+        df["Status w kadrze"] = pd.to_numeric(df["Status_kadry"], errors="coerce").map(STATUSY_KADRY)
     df["Klauzula"] = klauzula_dla_klubu(df, kraj, data_gry)
     df["HG"] = home_grown(df, kraj, moj_klub_uid)
     return df

@@ -3,6 +3,21 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 2.3.0
+
+- Czy przyjdzie?: nowy model. Poprzedni porównywał tylko reputację Twojego klubu i zawodnika, więc np.
+  Buendía (Aston Villa) wychodził jako chętny do przejścia do Torino. Teraz liczy się też reputacja jego
+  obecnego klubu i status w kadrze: zawodnicy kluczowi prawie nie przechodzą do słabszego klubu (6% ich
+  transferów w karierze FM27), rezerwowi i zbędni dużo częściej. Gra liczy tekst „zainteresowany
+  dołączeniem” na bieżąco i nie zapisuje go w pliku, więc to nadal przybliżenie. Karta zawodnika pokazuje
+  status w kadrze i reputacje: zawodnika, jego klubu i Twojego klubu.
+- Rozwój atrybutów: karta zawodnika pokazuje, jak zmieniały się jego atrybuty między migawkami historii
+  (wykres i tabela zmian). Starsze migawki bez atrybutów są uzupełniane z zapisów w folderze gry.
+- Nowa karta Mecze. Analiza meczów: wyniki, xG za i przeciw, punkty oczekiwane, forma, wykres xG
+  i mecze wygrane lub przegrane wbrew xG. Raport o rywalu: miejsce w tabeli, forma i xG jego ostatnich
+  meczów na tle Twoich, wspólne mecze i kluczowi zawodnicy.
+- Szybsze wczytywanie zapisu: terminarz jest czytany raz zamiast dwóch razy.
+
 ## 2.2.0
 
 - Ocena pod rolę FM: kolumny Rola FM i Ocena roli (1-20) z atrybutów zawodnika, na wzór ról z gry

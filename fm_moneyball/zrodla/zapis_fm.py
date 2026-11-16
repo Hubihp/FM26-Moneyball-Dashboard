@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from fm_moneyball.kontrola import kontrola
+from fm_moneyball.mecze import zbierz_mecze
 from fm_moneyball.kraje import kraj_z_licznika, kraje_z_kotwic, narodowosci_lig, nazwy_z_bazy
 from fm_moneyball.mapy import KATALOG_DANYCH, KATALOG_DOMOWY, wczytaj_mape, zapisz_mape
 from fm_moneyball.parsery import fmt_eur
@@ -169,6 +170,7 @@ class WynikZapisu:
     menedzer_nazwa: str | None = None                  # imie i nazwisko menedzera (naglowek aplikacji)
     taktyki: dict = field(default_factory=dict)        # club_uid prowadzonego klubu -> taktyki pierwszej druzyny
     kontrola: dict = field(default_factory=dict)       # kontrola jakosci odczytu (fm_moneyball/kontrola.py)
+    mecze: dict = field(default_factory=dict)          # club_uid (tekst) -> mecze moich klubow i ich rywali (mecze.py)
 
 
 # =============================================================================
@@ -556,6 +558,8 @@ def dane_fm(zawodnik, kurs):
         ids = [str(int(i)) for i in (getattr(zawodnik, pole, None) or ()) if _liczba(i) is not None]
         wynik[kolumna] = ";".join(ids) or None
     kontrakt = getattr(zawodnik, "contract", None)
+    status = getattr(kontrakt, "squad_status", None) if kontrakt is not None else None
+    wynik["Status_kadry"] = _liczba(getattr(status, "raw", None)) if status is not None else None
     for kolumna in KLAUZULE_ODSTEPNEGO.values():
         wynik[kolumna] = np.nan
     wynik["Klauzula_krajowa_do"] = pd.NaT
@@ -882,14 +886,14 @@ def polacz_kandydatow(z_terminarza, z_tabel):
     return wynik
 
 
-def kandydaci_lig_lacznie(zapis, kluby, data_gry, ostrzezenia=None, statystyki=None):
+def kandydaci_lig_lacznie(zapis, kluby, data_gry, ostrzezenia=None, statystyki=None, terminarz=None):
     """Kandydaci lig z terminarza i (zapasowo) z tabel ligowych; bledy odczytu nie blokuja reszty."""
     ostrzezenia = [] if ostrzezenia is None else ostrzezenia
     drugorzedne = kluby_drugorzedne(kluby)
     rozgrywki = list(zapis.competitions())
     z_terminarza, z_tabel = {}, {}
     try:
-        z_terminarza = kandydaci_lig_z_terminarza(zapis.fixtures(), rozgrywki, kluby, data_gry,
+        z_terminarza = kandydaci_lig_z_terminarza(terminarz if terminarz is not None else zapis.fixtures(), rozgrywki, kluby, data_gry,
                                                   drugorzedne=drugorzedne, statystyki=statystyki)
     except Exception as e:
         ostrzezenia.append(f"Nie udało się odczytać terminarza ({e}); liga z tabel ligowych.")
@@ -1037,7 +1041,11 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
                 raise ZapisNieobslugiwany(f"To zapis FM{gra} - program obsługuje tylko zapisy Football Managera 27.")
             etap(1)
             kluby = list(zapis.clubs())
-            kandydaci = kandydaci_lig_lacznie(zapis, kluby, info.game_date, ostrzezenia)
+            try:     # terminarz czytany raz: ligi klubow, nazwy druzyn rezerw i mecze
+                terminarz = list(zapis.fixtures())
+            except Exception:
+                terminarz = None
+            kandydaci = kandydaci_lig_lacznie(zapis, kluby, info.game_date, ostrzezenia, terminarz=terminarz)
             liga_klubu = ligi_klubow([], [], kluby, nazwy, kandydaci=kandydaci)
             zarzadzane = list(zapis.managed_clubs())
             menedzer = menedzer_z_zapisu(zapis, zarzadzane)
@@ -1062,7 +1070,8 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
                 ostrzezenia.append(f"Nie udało się odczytać finansów klubu ({e}).")
                 budzety = {}
             try:
-                etykiety = etykiety_druzyn(zapis.fixtures(), list(zapis.competitions()),
+                etykiety = etykiety_druzyn(terminarz if terminarz is not None else zapis.fixtures(),
+                                           list(zapis.competitions()),
                                            {m.club_uid for m in zarzadzane}, nazwy)
             except Exception as e:   # nazwy druzyn rezerw to dodatek
                 ostrzezenia.append(f"Nie udało się ustalić nazw drużyn rezerw ({e}).")
@@ -1086,6 +1095,15 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
             except Exception as e:   # taktyka to dodatek (tablica taktyczna)
                 ostrzezenia.append(f"Nie udało się odczytać taktyki z gry ({type(e).__name__}).")
                 taktyki = {}
+            try:
+                ligi_rozgrywek = {liga.competition_id: liga.etykieta for liga in liga_klubu.values()}
+                mecze = zbierz_mecze(terminarz if terminarz is not None else list(zapis.fixtures()),
+                                     list(zapis.team_match_stats()), moje_uidy, info.game_date,
+                                     {k.uid: k.nation_id for k in kluby}, ligi_rozgrywek)
+            except Exception as e:   # analiza meczow to dodatek
+                ostrzezenia.append(f"Nie udało się odczytać meczów ({type(e).__name__}).")
+                mecze = {}
+            del terminarz
             etap(4)
             try:
                 kontuzje = policz_kontuzje(zapis.injuries(), info.game_date)
@@ -1127,6 +1145,7 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
         budzety={uid: b for uid, b in budzety.items() if b is not None},
         taktyki={uid: t for uid, t in taktyki.items() if t},
         kontrola=kontrola_odczytu,
+        mecze=mecze,
     )
 
 

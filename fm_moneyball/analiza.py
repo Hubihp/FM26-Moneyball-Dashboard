@@ -414,7 +414,8 @@ def pola_wiersza(pozycja, pula):
 def pola_karty(pozycja, pula):
     """Pola wiersza karty zawodnika: jak w tabeli + oceny we wszystkich rolach FM pozycji ('Rola|<nazwa>')."""
     return pola_wiersza(pozycja, pula) + [k for k in pula.columns if str(k).startswith('Rola|')] + \
-        [k for k in ('Szansa transferu', 'Klauzula_krajowa_do', 'Reputacja') if k in pula.columns]
+        [k for k in ('Szansa transferu', 'Klauzula_krajowa_do', 'Reputacja', 'Klub_reputacja', 'Status w kadrze',
+                     'Reputacja_mojego_klubu') if k in pula.columns]
 
 
 def kolejnosc_lig(ligi):

@@ -49,6 +49,12 @@ class MojKlubModel(BaseModel):
     uid: int
 
 
+class RywalModel(BaseModel):
+    uid: str                         # club_uid rywala
+    ignoruj_mnoznik: bool = False
+    k_baza: float = 5
+
+
 class KadraModel(BaseModel):
     wagi: dict[str, dict[str, float]] = Field(default_factory=dict)   # pozycja -> wagi (brak = domyslne)
     ignoruj_mnoznik: bool = False

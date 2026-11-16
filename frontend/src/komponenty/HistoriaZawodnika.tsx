@@ -1,7 +1,8 @@
-import { Alert, Group, Loader, Stack, Table, Text, Title } from '@mantine/core';
+import { Alert, Group, Loader, MultiSelect, Stack, Table, Text, Title } from '@mantine/core';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { api, type PunktHistorii, type Wiersz, type ZapytanieRankingu } from '../api';
+import { api, type Historia, type PunktHistorii, type Wiersz, type ZapytanieRankingu } from '../api';
 import { eur, formatuj, kolorZmiany } from '../format';
 import Wykres from './Wykres';
 
@@ -27,6 +28,86 @@ function ostatniePerSezon(punkty: PunktHistorii[]) {
     else wynik.push(p);
   }
   return wynik;
+}
+
+// Rozwoj atrybutow (1-20) miedzy migawkami: wykres wybranych atrybutow i tabela zmian od pierwszej migawki
+function RozwojAtrybutow({ dane }: { dane: Historia }) {
+  const punkty = dane.punkty.filter((p) => p.atrybuty && Object.keys(p.atrybuty).length > 0);
+  const nazwy = dane.nazwy_atrybutow ?? {};
+  const pierwszy = punkty[0];
+  const ostatni = punkty[punkty.length - 1];
+  const zmiany = punkty.length >= 2 ? Object.keys(nazwy)
+    .map((a) => {
+      const od = pierwszy.atrybuty?.[a] ?? null;
+      const doo = ostatni.atrybuty?.[a] ?? null;
+      return { a, od, doo, z: od === null || doo === null ? null : doo - od };
+    })
+    .filter((x) => x.od !== null || x.doo !== null) : [];
+  const kluczowe = (dane.atrybuty_kluczowe ?? []).filter((a) => zmiany.some((x) => x.a === a));
+  const [wybrane, setWybrane] = useState<string[] | null>(null);
+  const naWykresie = wybrane ?? kluczowe.slice(0, 6);
+  if (punkty.length < 2) {
+    return (
+      <Text size="xs" c="dimmed">
+        Rozwój atrybutów: potrzebne są co najmniej dwie migawki z atrybutami (zapisywane od wersji 2.3; starsze
+        migawki program uzupełnia w tle z zapisów w folderze gry).
+      </Text>
+    );
+  }
+  const zmienione = zmiany.filter((x) => x.z !== null && x.z !== 0).sort((a, b) => (b.z ?? 0) - (a.z ?? 0));
+  const suma = zmiany.reduce((acc, x) => acc + (x.z ?? 0), 0);
+  return (
+    <Stack gap="xs">
+      <Title order={6}>Rozwój atrybutów</Title>
+      <Text size="xs" c="dimmed">
+        Od {formatuj(pierwszy.data, 'data')} do {formatuj(ostatni.data, 'data')}: suma zmian {suma > 0 ? '+' : ''}{suma},
+        wzrosło {zmiany.filter((x) => (x.z ?? 0) > 0).length}, spadło {zmiany.filter((x) => (x.z ?? 0) < 0).length}.
+        Atrybuty z zapisu gry (w grze widoczne po skautingu).
+      </Text>
+      <MultiSelect size="xs" label="Atrybuty na wykresie" placeholder="Wybierz atrybuty" searchable clearable
+        data={zmiany.map((x) => ({ value: x.a, label: nazwy[x.a] ?? x.a }))}
+        value={naWykresie} onChange={setWybrane} />
+      <Wykres
+        wysokosc={240}
+        opcje={{
+          tooltip: { trigger: 'axis' },
+          legend: { top: 0, type: 'scroll' },
+          grid: { left: 40, right: 20, top: 35, bottom: 30 },
+          xAxis: { type: 'category', data: punkty.map((p) => formatuj(p.data, 'data')) },
+          yAxis: { type: 'value', min: 0, max: 20, interval: 5 },
+          series: naWykresie.map((a) => ({
+            name: nazwy[a] ?? a, type: 'line' as const, connectNulls: true,
+            data: punkty.map((p) => p.atrybuty?.[a] ?? null),
+          })),
+        }}
+      />
+      {zmienione.length > 0 ? (
+        <Table striped withTableBorder fz="xs">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Atrybut</Table.Th>
+              <Table.Th ta="right">{formatuj(pierwszy.data, 'data')}</Table.Th>
+              <Table.Th ta="right">Teraz</Table.Th>
+              <Table.Th ta="right">Zmiana</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {zmienione.map((x) => (
+              <Table.Tr key={x.a}>
+                <Table.Td>{nazwy[x.a] ?? x.a}{kluczowe.includes(x.a) ? ' ★' : ''}</Table.Td>
+                <Table.Td ta="right">{x.od ?? '–'}</Table.Td>
+                <Table.Td ta="right">{x.doo ?? '–'}</Table.Td>
+                <Table.Td ta="right" style={{ color: (x.z ?? 0) > 0 ? '#69db7c' : '#ff8787' }}>
+                  {(x.z ?? 0) > 0 ? '+' : ''}{x.z}
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      ) : <Text size="xs" c="dimmed">Bez zmian atrybutów w tym okresie.</Text>}
+      <Text size="xs" c="dimmed">★ - atrybut kluczowy którejś roli FM tej pozycji.</Text>
+    </Stack>
+  );
 }
 
 const etykietaSezonu = (p: PunktHistorii) => `${p.sezon}/${String((p.sezon + 1) % 100).padStart(2, '0')}`;
@@ -163,6 +244,7 @@ export default function HistoriaZawodnika({ id, wiersz, zapytanie, wersja }: Pro
           ⚠ / pusty punkt = okres z mniej niż {minMinut} minutami: statystyki /90 i SCORE opierają się na małej próbie.
         </Text>
       )}
+      {dane && <RozwojAtrybutow dane={dane} />}
       {(dane?.brak.length ?? 0) > 0 && (
         <Text size="xs" c="dimmed">
           Brak zawodnika w migawkach z: {dane!.brak.map((d) => formatuj(d, 'data')).join(', ')} (np. poniżej progu minut

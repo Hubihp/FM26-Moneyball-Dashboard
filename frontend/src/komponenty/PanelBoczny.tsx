@@ -202,12 +202,12 @@ export default function PanelBoczny(p: Props) {
 
         {p.maMojKlub && meta?.ma_reputacje && (
           <Select label="Czy przyjdzie? Szansa co najmniej" clearable placeholder="Dowolna"
-            description="Z reputacji zawodnika i mojego klubu: jak często zawodnicy (kariera FM27, 13 tys. transferów) przechodzili do klubu o takiej różnicy reputacji"
+            description="Z reputacji mojego klubu wobec obecnego klubu zawodnika i wobec niego samego oraz jego statusu w kadrze (kalibracja na transferach kariery FM27)"
             value={filtry.min_szansa} onChange={(v) => zmien('min_szansa', v)}
             data={[
-              { value: 'niska', label: 'niska (co najmniej 4%)' },
-              { value: 'średnia', label: 'średnia (co najmniej 15%)' },
-              { value: 'wysoka', label: 'wysoka (co najmniej 40%)' },
+              { value: 'niska', label: 'niska lub wyższa' },
+              { value: 'średnia', label: 'średnia lub wysoka' },
+              { value: 'wysoka', label: 'wysoka' },
             ]} />
         )}
 

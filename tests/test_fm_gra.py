@@ -40,15 +40,23 @@ def test_bez_atrybutow_bez_zmian():
 
 
 def test_szansa_transferu_z_roznicy_reputacji():
-    rep = pd.Series([3000, 5000, 6500, 8000])
-    wiek = pd.Series([27, 27, 27, 27])
-    kategoria, udzial = fm_gra.szansa_transferu(rep, wiek, 5000)
+    rep = pd.Series([3000, 5000, 5750, 8000])
+    rep_klubu = pd.Series([3000, 5000, 5750, 8000])
+    status = pd.Series([4, 4, 4, 4])
+    kategoria, udzial = fm_gra.szansa_transferu(rep, rep_klubu, status, 5000)
     assert list(kategoria) == ["wysoka", "wysoka", "niska", "bardzo niska"]
     assert udzial.is_monotonic_decreasing
-    # starszy zawodnik chetniej schodzi nizej
-    _, starszy = fm_gra.szansa_transferu(pd.Series([6000]), pd.Series([32]), 5000)
-    _, mlody = fm_gra.szansa_transferu(pd.Series([6000]), pd.Series([21]), 5000)
-    assert starszy[0] > mlody[0]
+
+
+def test_kluczowy_zawodnik_nie_schodzi_do_slabszego_klubu():
+    # jak Buendia: reputacja zawodnika podobna do mojego klubu, ale jego klub wyraznie silniejszy
+    kluczowy, _ = fm_gra.szansa_transferu(pd.Series([6923]), pd.Series([7849]), pd.Series([3]), 6751)
+    rezerwowy, _ = fm_gra.szansa_transferu(pd.Series([6923]), pd.Series([7849]), pd.Series([20]), 6751)
+    assert kluczowy[0] == "bardzo niska"
+    assert fm_gra.KOLEJNOSC_SZANSY[rezerwowy[0]] > fm_gra.KOLEJNOSC_SZANSY[kluczowy[0]]
+    # wolny agent (bez klubu): tylko reputacja zawodnika
+    wolny, _ = fm_gra.szansa_transferu(pd.Series([4000]), pd.Series([np.nan]), pd.Series([np.nan]), 6000)
+    assert wolny[0] == "wysoka"
 
 
 def test_klauzula_wg_kraju_i_daty():

@@ -147,9 +147,22 @@ Te kolumny i filtry liczy się z zapisu gry (przy CSV ich nie ma). Używane są 
 
 - **Rola FM i Ocena roli.** Ocena zawodnika w roli z gry, w skali atrybutów 1-20: średnia ważona atrybutów roli, kluczowe z wagą 1, zalecane z wagą 0,5 (na wzór ról z FM). Domyślnie kolumna pokazuje najlepszą rolę zawodnika na tej pozycji; w panelu można wybrać konkretną rolę (podpowiedź pokazuje jej atrybuty). Karta zawodnika ma oceny we wszystkich rolach pozycji. Uwaga: zapis ma dokładne atrybuty każdego zawodnika, a gra pokazuje je dopiero po skautingu.
 - **Wagi atrybutów wg testów silnika.** Społeczność FM-Arena testuje silnik meczowy: zmienia jeden atrybut całej drużyny i liczy punkty w tysiącach meczów. Najwięcej dają szybkość i przyspieszenie, potem skoczność, zwinność i drybling. Przełącznik (domyślnie włączony) mnoży wagi tych atrybutów w ocenie roli: szybkość i przyspieszenie ×1,6, skoczność ×1,3, zwinność ×1,2, drybling ×1,15, wytrzymałość, siła i przewidywanie ×1,1 (bez bramkarzy).
-- **Czy przyjdzie?** Szansa, że zawodnik zgodzi się na transfer do mojego klubu, z różnicy reputacji klubu i zawodnika. Skalibrowane na 13 153 transferach między sezonami kariery FM27: do klubu o reputacji niższej od własnej o ponad 1000 przeszło 11% zawodników, o ponad 1500 - 4%, o ponad 2000 - 1,4%. Starsi (31+) schodzą niżej chętniej, młodzi (do 23 lat) rzadziej. Kategorie: wysoka (co najmniej 40%), średnia (15%), niska (4%), bardzo niska. Gra bierze pod uwagę też ambicję zawodnika (atrybut ukryty), więc to tylko przybliżenie.
+- **Czy przyjdzie?** Przybliżenie tekstu „zainteresowany dołączeniem” z profilu zawodnika. Gra liczy go na bieżąco i nie zapisuje w pliku, więc program szacuje go z danych widocznych w grze: reputacji Twojego klubu wobec obecnego klubu zawodnika i wobec niego samego oraz statusu zawodnika w kontrakcie. Kalibracja na 1 686 transferach z kariery FM27: zawodnicy kluczowi (gwiazda, ważny, podstawowy, pierwszy bramkarz) prawie nie przechodzą do słabszego klubu - tylko 6% ich transferów to krok w dół o 1000 punktów reputacji klubu, a u rezerwowych i zbędnych 36%. Wskaźnik to mniejszy z dwóch odsetków transferów (względem klubu i względem zawodnika); kategorie: wysoka (co najmniej 30%), średnia (15%), niska (6%), bardzo niska. Ambicji (atrybut ukryty) program nie bierze pod uwagę, więc przy ważnej decyzji sprawdź zainteresowanie w grze.
 - **Klauzula.** Najniższa klauzula odstępnego z kontraktu, która obowiązuje wobec mojego klubu: ogólna, dla klubów zagranicznych albo dla klubów z tego samego kraju (ta ostatnia do daty wygaśnięcia). Okazja „klauzula ≤ wartość”: klub nie może odrzucić oferty w wysokości klauzuli, a jest ona nie wyższa niż wartość zawodnika.
 - **HG (home-grown).** „kraj” - wychowanek kraju mojego klubu, „klub” - wychowanek mojego klubu (3 sezony w klubach kraju lub klubu między 15. a 21. rokiem życia). Liczy się do limitów rejestracji, np. w Lidze Mistrzów (8 z 25). Filtr „Home-grown” w panelu.
+
+### Mecze: analiza i raport o rywalu
+
+Karta „Mecze” (przy zapisie gry z Twoim klubem):
+
+- **Analiza meczów.** Wszystkie mecze pierwszej drużyny z ostatnich ~13 miesięcy z wynikiem, xG obu drużyn, strzałami, posiadaniem i punktami oczekiwanymi (xPts: szansa wygranej, remisu i porażki z xG obu drużyn, rozkład Poissona). Podsumowanie sezonu: bilans, gole, xG za i przeciw, punkty wobec oczekiwanych i forma. Wykres średniej kroczącej xG (z 5 meczów) pokazuje, czy drużyna gra lepiej, czy gorzej. Mecze wygrane mimo xG niższego o co najmniej 0,6 są oznaczone jako „szczęśliwa wygrana”, a przegrane mimo wyższego - „pechowa porażka”. Gra zachowuje statystyki (xG) tylko części meczów.
+- **Raport o rywalu.** Domyślnie najbliższy rywal z terminarza (można wybrać innego albo kliknąć mecz w analizie): miejsce w tabeli, forma i xG z jego ostatnich 10 meczów na tle Twoich, nasze mecze z nim i kluczowi zawodnicy (najwyższy SCORE wśród grających co najmniej 900 minut, z rolą FM). Taktyki rywala zapis gry nie zawiera.
+
+Zapis nie ma nazw rozgrywek: liga ma nazwę z mapy lig, a pozostałe rozgrywki są opisane jako „Puchar krajowy” albo „Rozgrywki międzynarodowe”.
+
+### Rozwój atrybutów
+
+Migawki historii kariery zapisują też atrybuty zawodników. Karta zawodnika (sekcja „Historia i rozwój”) pokazuje wykres wybranych atrybutów w kolejnych migawkach (domyślnie kluczowe atrybuty ról FM pozycji) i tabelę zmian od pierwszej migawki. Migawki z wersji sprzed 2.3 nie mają atrybutów: przy źródle „Zapis gry (folder)” program odczytuje w tle ponownie zapisy z tych miesięcy.
 
 ### Windows krok po kroku
 

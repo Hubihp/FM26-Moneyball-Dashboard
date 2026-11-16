@@ -241,18 +241,23 @@ def test_migawki_do_uzupelnienia_z_folderu(tmp_path):
     from fm_moneyball.zrodla.folder import PlikZapisu
     katalog = tmp_path / "kariera"
     katalog.mkdir()
-    (katalog / "2027-09-15.csv.gz").write_bytes(b"")          # wrzesien juz jest
+    # wrzesien juz jest (z atrybutami); pazdziernik ma stara migawke bez atrybutow - do ponownego odczytu
+    pd.DataFrame({"UID": [1], "Atr|pace": [12]}).to_csv(katalog / "2027-09-15.csv.gz", index=False, compression="gzip")
+    pd.DataFrame({"UID": [1]}).to_csv(katalog / "2027-10-15.csv.gz", index=False, compression="gzip")
     pliki = {n: PlikZapisu(tmp_path / f"{n}.fm", 100, 1.0) for n in "abcdef"}
     zapisy = [(pliki["a"], date(2027, 8, 1)), (pliki["b"], date(2027, 8, 20)),   # sierpien: pozniejszy (b)
               (pliki["c"], date(2027, 9, 30)),                                    # wrzesien ma migawke
               (pliki["d"], date(2027, 11, 2)),                                    # biezacy miesiac
               (pliki["e"], date(2028, 1, 1)),                                     # pozniejszy niz biezacy
-              (pliki["f"], date(2027, 6, 1))]
+              (pliki["f"], date(2027, 6, 1)),
+              (PlikZapisu(tmp_path / "g.fm", 100, 1.0), date(2027, 10, 20))]                # stara migawka
     wynik = historia.do_uzupelnienia(zapisy, katalog, date(2027, 11, 6))
-    assert [p.sciezka.stem for p, _ in wynik] == ["b", "f"]
-    historia.zapisz_przejrzane(katalog, {historia.klucz_pliku(pliki["b"]): "inna kariera"})
+    assert [p.sciezka.stem for p, _ in wynik] == ["g", "b", "f"]
+    historia.zapisz_przejrzane(katalog, {historia.klucz_pliku(pliki["b"]): "inna kariera",
+                                         historia.klucz_pliku(zapisy[-1][0]): "ok"})
     wynik = historia.do_uzupelnienia(zapisy, katalog, date(2027, 11, 6))
-    assert [p.sciezka.stem for p, _ in wynik] == ["a", "f"]     # przejrzany plik pominiety, zostaje inny z miesiaca
+    # przejrzany plik innej kariery pominiety; "ok" przy migawce bez atrybutow - czytany ponownie
+    assert [p.sciezka.stem for p, _ in wynik] == ["g", "a", "f"]     # przejrzany plik pominiety, zostaje inny z miesiaca
     assert historia.do_uzupelnienia(zapisy, katalog, date(2027, 11, 6), maks=1) == wynik[:1]
 
 

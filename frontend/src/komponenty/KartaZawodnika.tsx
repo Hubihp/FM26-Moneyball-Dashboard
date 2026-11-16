@@ -76,10 +76,19 @@ function SekcjaFM({ id, w, zapytanie, wersja }: { id: string; w: Wiersz; zapytan
       )}
       <Group gap="lg">
         {udzial !== null && (
-          <Tooltip multiline w={320} label={'Z różnicy reputacji mojego klubu i zawodnika: tyle transferów (kariera FM27, 13 tys. przypadków) '
-            + 'trafiło do klubu o takiej lub większej różnicy. Gra bierze pod uwagę też ambicję (ukryta) i rolę w drużynie.'}>
+          <Tooltip multiline w={340} label={'Gra liczy zainteresowanie zawodnika na bieżąco (tekst „zainteresowany dołączeniem” '
+            + 'na jego profilu) i nie zapisuje go w pliku. To przybliżenie z reputacji Twojego klubu wobec obecnego klubu '
+            + 'zawodnika i wobec niego samego oraz jego statusu w kadrze. Wskaźnik: odsetek transferów w karierze FM27 '
+            + 'z taką różnicą reputacji. Ambicji (atrybut ukryty) program nie bierze pod uwagę - przy ważnej decyzji '
+            + 'sprawdź zainteresowanie w grze.'}>
             <div><Pole etykieta="Czy przyjdzie?" wartosc={`${szansaTransferu(udzial)} (${Math.round(udzial)}%)`} /></div>
           </Tooltip>
+        )}
+        {x['Status w kadrze'] ? <Pole etykieta="Status w kadrze" wartosc={String(x['Status w kadrze'])} /> : null}
+        {typeof x['Reputacja'] === 'number' && (
+          <Pole etykieta="Reputacja: zawodnik / jego klub / Twój klub"
+            wartosc={[x['Reputacja'], x['Klub_reputacja'], x['Reputacja_mojego_klubu']]
+              .map((v) => (typeof v === 'number' ? Math.round(v).toString() : '–')).join(' / ')} />
         )}
         {klauzula !== null && (
           <Pole etykieta={`Klauzula odstępnego${x['Klauzula_krajowa_do'] ? ` (krajowa do ${formatuj(x['Klauzula_krajowa_do'], 'data')})` : ''}`}

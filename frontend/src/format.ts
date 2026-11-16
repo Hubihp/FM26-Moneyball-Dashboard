@@ -9,9 +9,9 @@ export function eur(x: number | null | undefined): string {
 
 // Kategoria szansy transferu z udzialu transferow w % (progi jak fm_gra.PROGI_SZANSY)
 export function szansaTransferu(udzial: number): string {
-  if (udzial >= 40) return 'wysoka';
+  if (udzial >= 30) return 'wysoka';
   if (udzial >= 15) return 'średnia';
-  if (udzial >= 4) return 'niska';
+  if (udzial >= 6) return 'niska';
   return 'bardzo niska';
 }
 

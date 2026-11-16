@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fm_moneyball.serwer.obliczenia import Obliczenia
 from fm_moneyball.aktualizacje import Aktualizacje
 from fm_moneyball.pamiec import Pamiec
-from fm_moneyball.serwer.trasy import analiza, frontend, ligi, system, zrodlo
+from fm_moneyball.serwer.trasy import analiza, frontend, ligi, mecze, system, zrodlo
 
 KATALOG_STATIC = Path(__file__).resolve().parent / "static"
 
@@ -27,6 +27,7 @@ def utworz_aplikacje(stan, pamiec=None, aktualizacje=None, okno=None):
     app.include_router(zrodlo.utworz(stan))
     app.include_router(ligi.utworz(stan))
     app.include_router(analiza.utworz(stan, obl))
+    app.include_router(mecze.utworz(stan, obl))
     app.state.aktualizacje = aktualizacje or Aktualizacje()
     app.include_router(system.utworz(pamiec or Pamiec(), app.state.aktualizacje, okno))
     # na koncu: trasa interfejsu przechwytuje kazda inna sciezke

@@ -20,6 +20,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from fm_moneyball.fm_gra import PREFIKS_ATRYBUTU
 from fm_moneyball.mapy import KATALOG_DOMOWY
 from fm_moneyball.stale import CECHY, KOLUMNY_STATYSTYK
 
@@ -93,7 +94,9 @@ def zapisz_migawke(katalog, dane, data_gry):
         return None
     wszyscy = wszyscy.drop_duplicates('UID')
     statystyki = [c for c in dict.fromkeys(KOLUMNY_STATYSTYK + list(CECHY)) if c in wszyscy.columns]
-    kolumny = [c for c in POLA_MIGAWKI if c in wszyscy.columns] + statystyki
+    # atrybuty 1-20 (zapis gry) - krzywa rozwoju atrybutow na karcie zawodnika
+    atrybuty = [c for c in wszyscy.columns if str(c).startswith(PREFIKS_ATRYBUTU)]
+    kolumny = [c for c in POLA_MIGAWKI if c in wszyscy.columns] + statystyki + atrybuty
     katalog = Path(katalog)
     katalog.mkdir(parents=True, exist_ok=True)
     sciezka = katalog / f"{data_gry.isoformat()}.csv.gz"
@@ -115,6 +118,22 @@ def migawki(katalog):
         except ValueError:
             continue
     return sorted(wynik, key=lambda x: x[1])
+
+
+_pamiec_naglowkow = {}
+
+
+def ma_atrybuty(sciezka):
+    """Czy migawka ma atrybuty zawodnikow (migawki sprzed wersji 2.3 ich nie maja)."""
+    sciezka = Path(sciezka)
+    try:
+        mtime = sciezka.stat().st_mtime
+        if _pamiec_naglowkow.get(sciezka, (None,))[0] != mtime:
+            naglowek = pd.read_csv(sciezka, compression="gzip", nrows=0).columns
+            _pamiec_naglowkow[sciezka] = (mtime, any(str(k).startswith(PREFIKS_ATRYBUTU) for k in naglowek))
+        return _pamiec_naglowkow[sciezka][1]
+    except (OSError, ValueError):
+        return False
 
 
 def wczytaj(sciezka):
@@ -310,14 +329,15 @@ def do_uzupelnienia(zapisy, katalog, data_gry, maks=MAKS_MIGAWEK_Z_FOLDERU):
     if data_gry is None:
         return []
     biezacy = (data_gry.year, data_gry.month)
-    sa = {(d.year, d.month) for _, d in migawki(katalog)}
+    # migawka bez atrybutow (starsza wersja programu) jest uzupelniana ponownym odczytem zapisu z tego miesiaca
+    sa = {(d.year, d.month) for s, d in migawki(katalog) if ma_atrybuty(s)}
     juz = przejrzane(katalog) if katalog is not None else {}
     wg_miesiaca = {}
     for plik, dzien in zapisy:
         if dzien is None:
             continue
         miesiac = (dzien.year, dzien.month)
-        if miesiac >= biezacy or miesiac in sa or klucz_pliku(plik) in juz:
+        if miesiac >= biezacy or miesiac in sa or juz.get(klucz_pliku(plik)) not in (None, "ok"):
             continue
         if miesiac not in wg_miesiaca or dzien > wg_miesiaca[miesiac][1]:
             wg_miesiaca[miesiac] = (plik, dzien)

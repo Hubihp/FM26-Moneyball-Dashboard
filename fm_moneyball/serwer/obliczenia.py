@@ -213,9 +213,15 @@ class Obliczenia:
                 "Minuty": minuty, "mala_proba": minuty is None or minuty < historia.MIN_MINUT,
                 "Wartość": liczba(wiersz.get('Wartość_Numeryczna')),
                 "statystyki": {k: liczba(wiersz.get(k)) for k in statystyki},
+                # atrybuty 1-20 (migawki od wersji 2.3; starsze sa uzupelniane z folderu zapisow)
+                "atrybuty": {k[len(fm_gra.PREFIKS_ATRYBUTU):]: liczba(wiersz.get(k)) for k in wiersz.index
+                             if str(k).startswith(fm_gra.PREFIKS_ATRYBUTU) and liczba(wiersz.get(k)) is not None},
             })
+        # kluczowe atrybuty rol pozycji - domyslnie na wykresie rozwoju atrybutow
+        kluczowe = list(dict.fromkeys(a for r in fm_gra.ROLE_FM.get(pozycja, []) for a in r["kluczowe"]))
         return {"punkty": punkty, "statystyki": statystyki, "min_minut": historia.MIN_MINUT, "brak": brak,
-                "delta": _zmiana_sezonowa(punkty)}
+                "delta": _zmiana_sezonowa(punkty), "nazwy_atrybutow": fm_gra.ATRYBUTY,
+                "atrybuty_kluczowe": kluczowe}
 
     def wynik_i_filtr(self, z: RankingModel):
         """-> (policzona pula, widoczni po filtrach z Pareto, pominiete, model wyceny, ukryci z mojego klubu)"""

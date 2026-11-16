@@ -42,7 +42,7 @@ log = logging.getLogger("fm_moneyball")
 CO_ILE_SPRAWDZAC = 15        # sekundy miedzy sprawdzeniami folderu zapisow
 # 2: domyslnie zawodnik we wszystkich pulach, w ktorych jest naturalny (wczesniej tylko glowna)
 WERSJA_USTAWIEN = 2
-WERSJA_CACHE = 23            # zmiana formatu wyniku = nowy klucz cache (23: atrybuty, reputacja, klauzule, home-grown)
+WERSJA_CACHE = 24            # zmiana formatu wyniku = nowy klucz cache (24: status w kadrze, mecze z xG)
 ILE_W_CACHE = 3
 MAKS_ODCZYTOW_HISTORII_NA_RAZ = 6   # starsze zapisy folderu czytane na jedno wczytanie (historia z folderu)
 PRZERWA_HISTORII_S = 3.0            # przerwa miedzy nimi - serwer odpowiada w tym czasie bez opoznien
@@ -147,6 +147,7 @@ class Stan:
         self.kraje_baza = {}           # nation_id -> nazwa z tabeli po numerze bazy gry
         self.taktyki = {}              # club_uid -> taktyki pierwszej druzyny odczytane z zapisu
         self.kontrola = {}             # kontrola jakosci odczytu zapisu (fm_moneyball/kontrola.py)
+        self.mecze = {}                # club_uid (tekst) -> mecze moich klubow i rywali (fm_moneyball/mecze.py)
         self._watek_historii = None    # budowanie migawek ze starszych zapisow folderu
         self._wszyscy = None           # (wersja, zawodnicy wszystkich pul) - pamiec wszyscy_zawodnicy()
         self._watek_rozgrzewania = None
@@ -424,10 +425,10 @@ class Stan:
         return self._zakoncz(pokolenie, klucz, wynik.dane, meta, wynik.ligi, sciezka_odczytu, wynik.kraje_auto,
                              getattr(wynik, "druzyny", {}), getattr(wynik, "tabele", {}),
                              getattr(wynik, "kraje_baza", {}), getattr(wynik, "taktyki", {}),
-                             getattr(wynik, "kontrola", {}))
+                             getattr(wynik, "kontrola", {}), getattr(wynik, "mecze", {}))
 
     def _zakoncz(self, pokolenie, klucz, dane, meta, ligi, sciezka_odczytu, kraje_auto, druzyny=None, tabele=None,
-                 kraje_baza=None, taktyki=None, kontrola=None):
+                 kraje_baza=None, taktyki=None, kontrola=None, mecze=None):
         with self._blokada:
             if pokolenie != self.pokolenie:
                 return False
@@ -438,6 +439,7 @@ class Stan:
             self.kraje_baza = kraje_baza or {}
             self.taktyki = taktyki or {}
             self.kontrola = kontrola or {}
+            self.mecze = mecze or {}
             self._sciezka_odczytu = sciezka_odczytu
             self._uzupelnij_moj_klub()
             self._zastosuj_ligi()

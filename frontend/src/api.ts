@@ -66,6 +66,34 @@ export type MetaPozycji = {
   ma_hg?: boolean;                   // zapis gry: kraje i kluby wychowania (home-grown)
 };
 
+export type Mecz = {
+  data: string; sezon: number; rozgrywki_id: number; rozgrywki: string; u_siebie: boolean;
+  rywal_uid: string; rywal: string; rozegrany: boolean;
+  gole: number | null; gole_rywala: number | null; xg: number | null; xg_rywala: number | null;
+  strzaly: number | null; strzaly_rywala: number | null; celne: number | null; celne_rywala: number | null;
+  posiadanie: number | null; xpkt: number | null; ocena: string | null;
+};
+
+export type PodsumowanieMeczow = {
+  mecze: number; wygrane: number; remisy: number; porazki: number; gole: number; stracone: number;
+  mecze_z_xg: number; xg: number | null; xg_rywala: number | null; gole_z_xg: number; stracone_z_xg: number;
+  punkty_z_xg: number; xpkt: number | null; xg_mecz: number | null; xg_rywala_mecz: number | null;
+  forma: string; szczesliwe: number; pechowe: number;
+};
+
+export type WierszTabeli = { club_uid: number; klub: string; pozycja: number; mecze: number; wygrane: number;
+  remisy: number; porazki: number; gole: number; stracone: number; punkty: number };
+
+export type KluczowyZawodnik = { ID: string; pozycja_puli: string; Piłkarz: string; Klub_UID: number;
+  Wiek: number | null; Pozycja: string | null; SCORE: number; Minuty: number | null; 'Rola FM': string | null;
+  'Ocena roli': number | null; Wartość_Numeryczna: number | null };
+
+export type RaportRywala = {
+  uid: string; nazwa: string | null; mecze: Mecz[]; podsumowanie: PodsumowanieMeczow;
+  tabela: WierszTabeli | null; moja_tabela: WierszTabeli | null; liczba_w_tabeli: number;
+  z_nami: Mecz[]; kluczowi: KluczowyZawodnik[]; moje_podsumowanie: PodsumowanieMeczow;
+};
+
 export type PunktHistorii = {
   data: string;
   sezon: number;
@@ -77,6 +105,7 @@ export type PunktHistorii = {
   pozycje_wtedy?: string | null;
   Wartość: number | null;
   statystyki: Record<string, number | null>;
+  atrybuty?: Record<string, number | null>;   // atrybuty 1-20 z zapisu (migawki od wersji 2.3)
 };
 export type CechaPorownania = {
   nazwa: string;
@@ -106,6 +135,8 @@ export type Historia = {
   min_minut: number;
   brak: string[]; // daty migawek bez zawodnika (np. ponizej progu wczytywania)
   delta: ZmianaSezonowa | null;
+  nazwy_atrybutow?: Record<string, string>;   // atrybut fmsave -> nazwa polska
+  atrybuty_kluczowe?: string[];               // kluczowe atrybuty rol pozycji
 };
 export type HistoriaWielu = {
   zawodnicy: (Omit<Historia, 'statystyki' | 'min_minut'> & { id: string; pilkarz: string | null; statystyki?: string[] })[];
@@ -455,6 +486,9 @@ export const api = {
     k_baza: number }) => post<RozbicieWyniku>('/api/rozbicie', body),
   sklad: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number;
     tylko_pierwsza: boolean }) => post<{ zawodnicy: ZawodnikSkladu[]; pozycje: string[] }>('/api/sklad', body),
+  mecze: () => zadanie<{ mecze: Mecz[]; najblizsze: Mecz[]; podsumowanie: PodsumowanieMeczow; ma_dane: boolean;
+    prog_szczescia: number }>('/api/mecze'),
+  rywal: (body: { uid: string; ignoruj_mnoznik: boolean; k_baza: number }) => post<RaportRywala>('/api/rywal', body),
   taktykaZGry: () => zadanie<{ taktyki: TaktykaZGry[]; uwaga: string }>('/api/taktyka-z-gry'),
   profilDruzyny: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number;
     tylko_pierwsza?: boolean }) =>
