@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from fm_moneyball.kontrola import kontrola
+from fm_moneyball.finanse import miesiace_klubu
 from fm_moneyball.mecze import zbierz_mecze
 from fm_moneyball.kraje import kraj_z_licznika, kraje_z_kotwic, narodowosci_lig, nazwy_z_bazy
 from fm_moneyball.mapy import KATALOG_DANYCH, KATALOG_DOMOWY, wczytaj_mape, zapisz_mape
@@ -171,6 +172,7 @@ class WynikZapisu:
     taktyki: dict = field(default_factory=dict)        # club_uid prowadzonego klubu -> taktyki pierwszej druzyny
     kontrola: dict = field(default_factory=dict)       # kontrola jakosci odczytu (fm_moneyball/kontrola.py)
     mecze: dict = field(default_factory=dict)          # club_uid (tekst) -> mecze moich klubow i ich rywali (mecze.py)
+    finanse: dict = field(default_factory=dict)        # club_uid (tekst) -> miesiace finansow (finanse.py)
 
 
 # =============================================================================
@@ -539,7 +541,7 @@ def _liczba(x):
 
 def dane_fm(zawodnik, kurs):
     """
-    Dane do funkcji FM (fm_gra): widoczne atrybuty 1-20 ('Atr|<atrybut>'), reputacja zawodnika i klubu, kraj klubu,
+    Dane do funkcji FM (fm_gra): widoczne atrybuty 1-20 ('Atr|<atrybut>'), kraj klubu, status w kadrze,
     kraje i kluby wychowania (home-grown, tekst 'id;id') oraz klauzule odstepnego (kwoty w walucie aplikacji;
     krajowa z data wygasniecia - parametr klauzuli to dni od poczatku kontraktu).
     """
@@ -550,9 +552,6 @@ def dane_fm(zawodnik, kurs):
         for nazwa in ATRYBUTY:
             wartosc = _liczba(getattr(atrybuty, nazwa, None))
             wynik[PREFIKS_ATRYBUTU + nazwa] = wartosc if wartosc is not None and 1 <= wartosc <= 20 else None
-    rep = getattr(zawodnik, "reputation", None)
-    wynik["Reputacja"] = _liczba(getattr(rep, "current", None)) if rep is not None else None
-    wynik["Klub_reputacja"] = _liczba(getattr(zawodnik, "club_reputation", None))
     wynik["Klub_kraj_ID"] = _liczba(getattr(zawodnik, "club_nation_id", None))
     for kolumna, pole in (("HG_kraje", "home_grown_nation_ids"), ("HG_kluby", "home_grown_club_uids")):
         ids = [str(int(i)) for i in (getattr(zawodnik, pole, None) or ()) if _liczba(i) is not None]
@@ -1066,9 +1065,10 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
             try:
                 miesiace = list(zapis.finances())
                 budzety = {uid: budzet_klubu(miesiace, uid, opcje.kurs_waluty) for uid in moje_uidy}
+                finanse = {str(uid): miesiace_klubu(miesiace, uid, opcje.kurs_waluty) for uid in moje_uidy}
             except Exception as e:
                 ostrzezenia.append(f"Nie udało się odczytać finansów klubu ({e}).")
-                budzety = {}
+                budzety, finanse = {}, {}
             try:
                 etykiety = etykiety_druzyn(terminarz if terminarz is not None else zapis.fixtures(),
                                            list(zapis.competitions()),
@@ -1146,6 +1146,7 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
         taktyki={uid: t for uid, t in taktyki.items() if t},
         kontrola=kontrola_odczytu,
         mecze=mecze,
+        finanse=finanse,
     )
 
 

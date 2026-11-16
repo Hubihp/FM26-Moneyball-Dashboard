@@ -141,13 +141,12 @@ Kolumna „Prognoza SCORE” (i karta zawodnika) to model w stylu „Marcel” z
 
 Dośrodkowania, 100% sytuacje, sprinty, odbiory, wygrane główki, celność podań, asysty, kartki, błędy i obrony chwytem pochodzą tylko z zapisu gry. Przy imporcie CSV te wagi są pomijane, a pozostałe przeliczane do 100%. Zawodnik trafia do każdej puli, w której jest naturalny (ocena pozycji ≥ 18, jak „naturalna” w grze), np. środkowy i prawy obrońca jest i w ŚO, i w PO. Wyłączenie opcji „Zawodnik na wszystkich naturalnych pozycjach” zostawia tylko pozycję z najwyższą oceną.
 
-### Według gry: role FM, szansa transferu, klauzule, home-grown
+### Według gry: role FM, klauzule, home-grown
 
 Te kolumny i filtry liczy się z zapisu gry (przy CSV ich nie ma). Używane są tylko dane widoczne w grze: atrybuty z ekranu zawodnika, reputacja, kontrakt i miejsce wychowania.
 
 - **Rola FM i Ocena roli.** Ocena zawodnika w roli z gry, w skali atrybutów 1-20: średnia ważona atrybutów roli, kluczowe z wagą 1, zalecane z wagą 0,5 (na wzór ról z FM). Domyślnie kolumna pokazuje najlepszą rolę zawodnika na tej pozycji; w panelu można wybrać konkretną rolę (podpowiedź pokazuje jej atrybuty). Karta zawodnika ma oceny we wszystkich rolach pozycji. Uwaga: zapis ma dokładne atrybuty każdego zawodnika, a gra pokazuje je dopiero po skautingu.
 - **Wagi atrybutów wg testów silnika.** Społeczność FM-Arena testuje silnik meczowy: zmienia jeden atrybut całej drużyny i liczy punkty w tysiącach meczów. Najwięcej dają szybkość i przyspieszenie, potem skoczność, zwinność i drybling. Przełącznik (domyślnie włączony) mnoży wagi tych atrybutów w ocenie roli: szybkość i przyspieszenie ×1,6, skoczność ×1,3, zwinność ×1,2, drybling ×1,15, wytrzymałość, siła i przewidywanie ×1,1 (bez bramkarzy).
-- **Czy przyjdzie?** Przybliżenie tekstu „zainteresowany dołączeniem” z profilu zawodnika. Gra liczy go na bieżąco i nie zapisuje w pliku, więc program szacuje go z danych widocznych w grze: reputacji Twojego klubu wobec obecnego klubu zawodnika i wobec niego samego oraz statusu zawodnika w kontrakcie. Kalibracja na 1 686 transferach z kariery FM27: zawodnicy kluczowi (gwiazda, ważny, podstawowy, pierwszy bramkarz) prawie nie przechodzą do słabszego klubu - tylko 6% ich transferów to krok w dół o 1000 punktów reputacji klubu, a u rezerwowych i zbędnych 36%. Wskaźnik to mniejszy z dwóch odsetków transferów (względem klubu i względem zawodnika); kategorie: wysoka (co najmniej 30%), średnia (15%), niska (6%), bardzo niska. Ambicji (atrybut ukryty) program nie bierze pod uwagę, więc przy ważnej decyzji sprawdź zainteresowanie w grze.
 - **Klauzula.** Najniższa klauzula odstępnego z kontraktu, która obowiązuje wobec mojego klubu: ogólna, dla klubów zagranicznych albo dla klubów z tego samego kraju (ta ostatnia do daty wygaśnięcia). Okazja „klauzula ≤ wartość”: klub nie może odrzucić oferty w wysokości klauzuli, a jest ona nie wyższa niż wartość zawodnika.
 - **HG (home-grown).** „kraj” - wychowanek kraju mojego klubu, „klub” - wychowanek mojego klubu (3 sezony w klubach kraju lub klubu między 15. a 21. rokiem życia). Liczy się do limitów rejestracji, np. w Lidze Mistrzów (8 z 25). Filtr „Home-grown” w panelu.
 
@@ -159,6 +158,17 @@ Karta „Mecze” (przy zapisie gry z Twoim klubem):
 - **Raport o rywalu.** Domyślnie najbliższy rywal z terminarza (można wybrać innego albo kliknąć mecz w analizie): miejsce w tabeli, forma i xG z jego ostatnich 10 meczów na tle Twoich, nasze mecze z nim i kluczowi zawodnicy (najwyższy SCORE wśród grających co najmniej 900 minut, z rolą FM). Taktyki rywala zapis gry nie zawiera.
 
 Zapis nie ma nazw rozgrywek: liga ma nazwę z mapy lig, a pozostałe rozgrywki są opisane jako „Puchar krajowy” albo „Rozgrywki międzynarodowe”.
+
+### Klub: finanse i personel
+
+Karta „Klub” (przy zapisie gry z Twoim klubem):
+
+- **Finanse.** Miesięczne przychody, wydatki i płace (bez transferów) oraz saldo na wykresie z ostatnich ~2 lat. Wskaźniki z ostatnich 12 miesięcy: przychody, wydatki, średni wynik miesięczny bez transferów, prognoza salda za 12 miesięcy (saldo + 12 × średni wynik), transfery netto. Płace / przychody: roczne płace zawodników (tygodniowa lista płac × 52) wobec rocznych przychodów bez transferów; powyżej 70% (próg UEFA dla kosztów kadry) wskaźnik jest żółty, powyżej 90% czerwony. Do tego wolny budżet płacowy, budżet transferowy i kontrakty pierwszej drużyny wygasające w ciągu roku. Znaczenie części pól finansów fmsave oznacza jako niepotwierdzone (saldo, lista płac i budżety są potwierdzone).
+- **Personel.** Odczyt z zapisu na żądanie (ok. 20 s, potem z pamięci). Każda osoba sztabu dostaje oceny obszarów w skali 1-20 (średnia atrybutów obszaru): bramkarze, kondycja, obrona, atak, strzały, technika, taktyka, skauting, fizjoterapia, analiza danych, praca z młodzieżą. Tabela „Sztab na tle ligi” porównuje najlepszą osobę pierwszej drużyny w każdym obszarze z najlepszymi w klubach ligi (mediana, najlepszy, miejsce); obszar poniżej mediany ligi to luka. Dla luk program pokazuje kandydatów: najlepszych pracowników innych klubów na odpowiednich stanowiskach. Atrybuty personelu fmsave czyta w skali 1-100 i oznacza jako niepotwierdzone; program dzieli je przez 5.
+
+### Wartość za 2 lata
+
+Kolumny „Wartość za 2 lata” i „Zmiana wartości” (oraz karta zawodnika): obecna wartość × zmiana wyceny modelu (ten sam model co „Wycena wg wyniku”) po 2 latach - wiek o 2 lata wyższy i SCORE zmieniony o typowy rozwój w tym wieku (krzywa wieku z historii kariery), przy tym samym kontrakcie. Młodzi zwykle zyskują (18 lat: ok. +35-55%), starsi tracą (33 lata: ok. −30%). Powrót do średniej po słabym lub świetnym sezonie nie jest liczony, bo cena w grze nie zmienia się po jednym sezonie tak jak SCORE. Nowa okazja „kup teraz”: zawodnik z SCORE co najmniej 55, którego wartość za 2 lata ma wzrosnąć co najmniej 1,3 raza.
 
 ### Rozwój atrybutów
 

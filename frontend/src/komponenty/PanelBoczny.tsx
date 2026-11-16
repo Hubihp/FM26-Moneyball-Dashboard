@@ -45,7 +45,7 @@ export const PUSTE_FILTRY: Filtry = {
   min_minut: null,
   bez_mojego_klubu: false, okazje: [], min_rozwoj: null, kandydaci: false,
   min_score_kandydata: 60, min_niedowartosciowanie: null, kandydaci_z: [],
-  rola_fm: null, silnik_fm: true, min_szansa: null, home_grown: null,
+  rola_fm: null, silnik_fm: true, home_grown: null,
 };
 
 // Suwak ceny w skali pierwiastkowej: wiecej precyzji przy niskich kwotach
@@ -198,17 +198,6 @@ export default function PanelBoczny(p: Props) {
                 onChange={(e) => zmien('silnik_fm', e.currentTarget.checked)} />
             </Tooltip>
           </div>
-        )}
-
-        {p.maMojKlub && meta?.ma_reputacje && (
-          <Select label="Czy przyjdzie? Szansa co najmniej" clearable placeholder="Dowolna"
-            description="Z reputacji mojego klubu wobec obecnego klubu zawodnika i wobec niego samego oraz jego statusu w kadrze (kalibracja na transferach kariery FM27)"
-            value={filtry.min_szansa} onChange={(v) => zmien('min_szansa', v)}
-            data={[
-              { value: 'niska', label: 'niska lub wyższa' },
-              { value: 'średnia', label: 'średnia lub wysoka' },
-              { value: 'wysoka', label: 'wysoka' },
-            ]} />
         )}
 
         {p.maMojKlub && meta?.ma_hg && (

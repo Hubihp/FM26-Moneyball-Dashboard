@@ -14,7 +14,7 @@ from fastapi import HTTPException
 from fm_moneyball import analiza, fm_gra, historia, model
 from fm_moneyball.serwer.modele import RankingModel
 from fm_moneyball.stale import POZYCJE
-from fm_moneyball.wycena import wycen
+from fm_moneyball.wycena import prognoza_wartosci, wycen
 
 ILE_POLICZONYCH = 24        # tyle policzonych pul (pozycja x ustawienia) trzymamy w pamieci
 
@@ -90,15 +90,13 @@ class Obliczenia:
         tekst = self.stan.migawka()["meta"].get("data_gry")
         return date.fromisoformat(tekst) if tekst else None
 
-    def kontekst_fm(self):
-        """(kraj, reputacja) mojego klubu z wszystkich zawodnikow - pula pozycji moze nie miec moich."""
+    def kraj_mojego_klubu(self):
+        """Kraj mojego klubu z wszystkich zawodnikow - pula pozycji moze nie miec moich."""
         wersja = self.stan.wersja
-        if getattr(self, "_kontekst_fm", (None,))[0] != wersja:
-            wszyscy = self.stan.wszyscy_zawodnicy()
+        if getattr(self, "_kraj_fm", (None,))[0] != wersja:
             moj_klub = self.stan.migawka()["meta"].get("moj_klub_uid")
-            kontekst = fm_gra.kraj_i_reputacja_klubu(wszyscy, moj_klub) if wszyscy is not None else (None, None)
-            self._kontekst_fm = (wersja, kontekst)
-        return self._kontekst_fm[1]
+            self._kraj_fm = (wersja, fm_gra.kraj_mojego_klubu(self.stan.wszyscy_zawodnicy(), moj_klub))
+        return self._kraj_fm[1]
 
     def policz(self, pozycja, wagi, ignoruj_mnoznik, k_baza, kandydaci=False, kandydaci_z=()):
         """-> (policzona pula, pominiete cechy, opis modelu wyceny)"""
@@ -117,6 +115,7 @@ class Obliczenia:
             df, odniesienie = analiza.dolacz_kandydatow(df, self.stan.wszyscy_zawodnicy(), pozycja, kandydaci_z)
         policzona, pominiete = analiza.policz_wynik(df, wagi, ignoruj_mnoznik, k_baza, odniesienie)
         policzona, model_wyceny = wycen(policzona, odniesienie, self.data_gry())
+        model_ceny = policzona.attrs.get("model_ceny")
         porownanie = historia.migawka_porownania(historia.migawki(self.stan.katalog_kariery()), self.data_gry())
         if porownanie is not None:
             wtedy = self.pula_migawki(porownanie[0], pozycja, wagi, ignoruj_mnoznik, k_baza)
@@ -125,9 +124,10 @@ class Obliczenia:
         korekta = None if ignoruj_mnoznik or 'Mnożnik_Ligi' not in policzona.columns else \
             50.0 * (policzona['Mnożnik_Ligi'] - 1.0)
         policzona = historia.prognoza(policzona, korekta)
-        # funkcje FM: szansa transferu, klauzula, home-grown i ocena w najlepszej roli (z wagami silnika)
+        policzona = prognoza_wartosci(policzona, model_ceny)
+        # funkcje FM: klauzula, home-grown, status w kadrze i ocena w najlepszej roli (z wagami silnika)
         moj_klub = self.stan.migawka()["meta"].get("moj_klub_uid")
-        policzona = fm_gra.dolicz_fm(policzona, moj_klub, self.data_gry(), self.kontekst_fm())
+        policzona = fm_gra.dolicz_fm(policzona, moj_klub, self.data_gry(), self.kraj_mojego_klubu())
         policzona = fm_gra.dolicz_role(policzona, pozycja)
         wynik = (analiza.wzbogac(policzona, self.data_gry()), pominiete, model_wyceny)
         with self._blokada:

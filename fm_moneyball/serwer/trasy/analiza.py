@@ -43,11 +43,10 @@ def utworz(stan, obl):
             "ma_historie": porownanie is not None,
             "data_porownania": porownanie[1].isoformat() if porownanie is not None else None,
             "min_minut_rozwoju": historia.MIN_MINUT,
-            # funkcje FM z zapisu gry: role z atrybutow (atrybuty kluczowe i zalecane), reputacja, home-grown
+            # funkcje FM z zapisu gry: role z atrybutow (atrybuty kluczowe i zalecane), home-grown
             "role_fm": [{"nazwa": r["nazwa"], "kluczowe": [fm_gra.ATRYBUTY[a] for a in r["kluczowe"]],
                          "zalecane": [fm_gra.ATRYBUTY[a] for a in r["zalecane"]]}
                         for r in fm_gra.ROLE_FM.get(pozycja, [])] if fm_gra.ma_atrybuty(df) else [],
-            "ma_reputacje": bool('Reputacja' in df.columns and df['Reputacja'].notna().any()),
             "ma_hg": bool('HG_kraje' in df.columns and df['HG_kraje'].notna().any()),
         }
 

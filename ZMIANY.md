@@ -3,6 +3,18 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 2.4.0
+
+- Usunięte „Czy przyjdzie?” (kolumna, filtr i pole na karcie zawodnika): gra liczy zainteresowanie
+  zawodnika na bieżąco i nie zapisuje go w pliku, a przybliżenie z reputacji było zbyt niedokładne.
+- Nowa karta Klub - Finanse: miesięczne przychody, wydatki, płace i saldo na wykresie, prognoza salda
+  za 12 miesięcy, udział płac w przychodach, wolny budżet płacowy i transferowy, wygasające kontrakty.
+- Klub - Personel: oceny sztabu w obszarach pracy (trening, skauting, fizjoterapia, analiza, młodzież)
+  na tle ligi, luki w sztabie i kandydaci do ich uzupełnienia z innych klubów.
+- Wartość za 2 lata: prognoza ceny zawodnika z wieku i typowego rozwoju w tym wieku (kolumny w rankingu
+  i pole na karcie) oraz nowa okazja „kup teraz” dla dobrych zawodników, których wartość ma wyraźnie
+  wzrosnąć.
+
 ## 2.3.0
 
 - Czy przyjdzie?: nowy model. Poprzedni porównywał tylko reputację Twojego klubu i zawodnika, więc np.

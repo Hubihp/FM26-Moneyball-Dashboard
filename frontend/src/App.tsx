@@ -41,6 +41,7 @@ const Porownanie = lazy(() => import('./komponenty/Porownanie'));
 const Wykresy = lazy(() => import('./komponenty/Wykresy'));
 const ProfilDruzyny = lazy(() => import('./komponenty/ProfilDruzyny'));
 const Mecze = lazy(() => import('./komponenty/Mecze'));
+const Klub = lazy(() => import('./komponenty/Klub'));
 
 // kod leniwych kart pobierany w bezczynnosci po starcie - pierwsze wejscie w karte nie czeka na plik
 const LENIWE = [() => import('./komponenty/KartaZawodnika'), () => import('./komponenty/Porownanie'),
@@ -452,6 +453,7 @@ export default function App() {
               {mojKlubUid !== null && mojKlubUid !== undefined && <Tabs.Tab value="kadra">Moja kadra</Tabs.Tab>}
               {mojKlubUid !== null && mojKlubUid !== undefined && <Tabs.Tab value="profil">Profil drużyny</Tabs.Tab>}
               {mojKlubUid !== null && mojKlubUid !== undefined && <Tabs.Tab value="mecze">Mecze</Tabs.Tab>}
+              {mojKlubUid !== null && mojKlubUid !== undefined && <Tabs.Tab value="klub">Klub</Tabs.Tab>}
               <Tabs.Tab value="porownanie">Porównanie {wybraniPozycji.length ? `(${wybraniPozycji.length})` : ''}</Tabs.Tab>
               <Tabs.Tab value="wykresy">Wykresy</Tabs.Tab>
               <Tabs.Tab value="ligi">Ligi i kraje</Tabs.Tab>
@@ -546,6 +548,11 @@ export default function App() {
                       otworzKarte(id);
                     }} />
                 </Suspense>
+              )}</Karta>
+            </Tabs.Panel>
+            <Tabs.Panel value="klub" style={{ overflow: 'auto' }}>
+              <Karta id="klub" {...stanKart}>{(
+                <Suspense fallback={<Loader m="md" />}><Klub wersja={wersja} /></Suspense>
               )}</Karta>
             </Tabs.Panel>
             <Tabs.Panel value="ligi" style={{ overflow: 'auto' }}>

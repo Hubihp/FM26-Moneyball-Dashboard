@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 import { api, type Wiersz, type ZapytanieRankingu } from '../api';
-import { eur, formatuj, kolorWyniku, szansaTransferu } from '../format';
+import { eur, formatuj, kolorWyniku } from '../format';
 import HistoriaZawodnika from './HistoriaZawodnika';
 import NaTleMojego from './NaTleMojego';
 import RozbicieWyniku from './RozbicieWyniku';
@@ -39,7 +39,7 @@ function Pole({ etykieta, wartosc }: { etykieta: string; wartosc: string }) {
   );
 }
 
-// Funkcje FM z zapisu gry: oceny we wszystkich rolach pozycji (atrybuty 1-20), szansa transferu, klauzula, HG
+// Funkcje FM z zapisu gry: oceny we wszystkich rolach pozycji (atrybuty 1-20), klauzula, HG, status w kadrze
 function SekcjaFM({ id, w, zapytanie, wersja }: { id: string; w: Wiersz; zapytanie: ZapytanieRankingu; wersja: number }) {
   const silnik = zapytanie.filtry.silnik_fm ?? true;
   const dane = useQuery({
@@ -53,10 +53,9 @@ function SekcjaFM({ id, w, zapytanie, wersja }: { id: string; w: Wiersz; zapytan
   const role = Object.entries(d).filter(([k, v]) => k.startsWith('Rola|') && typeof v === 'number')
     .map(([k, v]) => [k.slice(5), v as number] as const).sort((a, b) => b[1] - a[1]);
   const x: Wiersz = { ...w, ...d };
-  const udzial = typeof x['Szansa_udział'] === 'number' ? x['Szansa_udział'] as number : null;
   const klauzula = typeof x['Klauzula'] === 'number' ? x['Klauzula'] as number : null;
   const hg = x['HG'] === 'klub' ? 'wychowanek mojego klubu' : x['HG'] === 'kraj' ? 'wychowanek kraju mojego klubu' : null;
-  if (!role.length && udzial === null && klauzula === null && !hg) return null;
+  if (!role.length && klauzula === null && !hg && !x['Status w kadrze']) return null;
   return (
     <Stack gap={6}>
       <Text fw={600} size="sm">Według gry (atrybuty i kontrakt z zapisu)</Text>
@@ -75,21 +74,7 @@ function SekcjaFM({ id, w, zapytanie, wersja }: { id: string; w: Wiersz; zapytan
         </Group>
       )}
       <Group gap="lg">
-        {udzial !== null && (
-          <Tooltip multiline w={340} label={'Gra liczy zainteresowanie zawodnika na bieżąco (tekst „zainteresowany dołączeniem” '
-            + 'na jego profilu) i nie zapisuje go w pliku. To przybliżenie z reputacji Twojego klubu wobec obecnego klubu '
-            + 'zawodnika i wobec niego samego oraz jego statusu w kadrze. Wskaźnik: odsetek transferów w karierze FM27 '
-            + 'z taką różnicą reputacji. Ambicji (atrybut ukryty) program nie bierze pod uwagę - przy ważnej decyzji '
-            + 'sprawdź zainteresowanie w grze.'}>
-            <div><Pole etykieta="Czy przyjdzie?" wartosc={`${szansaTransferu(udzial)} (${Math.round(udzial)}%)`} /></div>
-          </Tooltip>
-        )}
         {x['Status w kadrze'] ? <Pole etykieta="Status w kadrze" wartosc={String(x['Status w kadrze'])} /> : null}
-        {typeof x['Reputacja'] === 'number' && (
-          <Pole etykieta="Reputacja: zawodnik / jego klub / Twój klub"
-            wartosc={[x['Reputacja'], x['Klub_reputacja'], x['Reputacja_mojego_klubu']]
-              .map((v) => (typeof v === 'number' ? Math.round(v).toString() : '–')).join(' / ')} />
-        )}
         {klauzula !== null && (
           <Pole etykieta={`Klauzula odstępnego${x['Klauzula_krajowa_do'] ? ` (krajowa do ${formatuj(x['Klauzula_krajowa_do'], 'data')})` : ''}`}
             wartosc={eur(klauzula)} />
@@ -196,6 +181,13 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
               wartosc={formatuj(w['Niedowartościowanie'], 'mnoznik')} />
             {w['Kontuzje_2_lata'] !== undefined ? (
               <Pole etykieta="Kontuzje (2 lata)" wartosc={formatuj(w['Kontuzje_2_lata'], 'int')} />
+            ) : null}
+            {typeof w['Wartość za 2 lata'] === 'number' ? (
+              <Tooltip multiline w={330} label={'Obecna wartość × zmiana wyceny modelu po 2 latach: wiek o 2 lata wyższy '
+                + 'i SCORE zmieniony o typowy rozwój w tym wieku (krzywa wieku z historii kariery), przy tym samym '
+                + 'kontrakcie. Młodzi zwykle zyskują, starsi tracą.'}>
+                <div><Pole etykieta="Wartość za 2 lata" wartosc={`${eur(w['Wartość za 2 lata'] as number)} (${formatuj(w['Zmiana wartości'], 'mnoznik')})`} /></div>
+              </Tooltip>
             ) : null}
             {typeof w['Prognoza SCORE'] === 'number' ? (
               <Tooltip multiline w={330} label={`Wiek ${formatuj(w['Wiek'], 'int')} → ${zmiana(w['Prognoza_wiek'])} pkt `

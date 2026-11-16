@@ -98,6 +98,10 @@ def wycen(pula, odniesienie=None, data_gry=None):
         pula.loc[kompletne, 'Wycena_ograniczona'] = np.abs(wycena / surowa - 1) > 0.01
         z_cena = kompletne & (cena > 0)
         pula.loc[z_cena, 'Niedowartościowanie'] = pula.loc[z_cena, 'Wycena wg wyniku'] / cena[z_cena]
+        # model do prognozy wartosci (prognoza_wartosci): wspolczynniki i zakres danych uczacych
+        pula.attrs["model_ceny"] = {"beta": [float(b) for b in beta],
+                                    "zakres": {k: (float(uczace_cechy[k].min()), float(uczace_cechy[k].max()))
+                                               for k in ('SCORE', 'wiek')}}
         reszty = y[uzyte] - X[uzyte] @ beta
         wariancja = y[uzyte].var()
         wiek_sr = float(cechy.loc[uczace, 'wiek'].mean())
@@ -111,3 +115,43 @@ def wycen(pula, odniesienie=None, data_gry=None):
                 "zakres_score": [round(float(uczace_cechy['SCORE'].min()), 1),
                                  round(float(uczace_cechy['SCORE'].max()), 1)]}
     return pula, opis
+
+
+LAT_PROGNOZY_WARTOSCI = 2
+LATA_KONTRAKTU_PROGNOZY = 3.0     # obie wyceny przy tym samym kontrakcie - zmienia sie tylko wynik i wiek
+PROG_WZROSTU_WARTOSCI = 1.3       # okazja "kup teraz": prognoza co najmniej 1,3 x obecna wartosc...
+MIN_SCORE_WZROSTU = 55.0          # ...u zawodnika wyraznie powyzej przecietnej juz teraz
+
+
+def _log_wycena(model, score, wiek, lata):
+    beta = np.asarray(model["beta"])
+    (s_min, s_max), (w_min, w_max) = model["zakres"]["SCORE"], model["zakres"]["wiek"]
+    score, wiek = np.clip(score, s_min, s_max), np.clip(wiek, w_min, w_max)
+    cechy = np.column_stack([np.ones_like(score), score, wiek, (wiek - 25.0) ** 2, np.full_like(score, lata),
+                             np.full_like(score, max(lata - 1.0, 0.0)), np.full_like(score, max(lata - 2.0, 0.0))])
+    return cechy @ beta
+
+
+def prognoza_wartosci(pula, model, lat=LAT_PROGNOZY_WARTOSCI):
+    """
+    'Wartość za 2 lata' i 'Zmiana wartości' (mnoznik): obecna wartosc x stosunek wyceny modelu za 2 lata (SCORE
+    + typowy rozwoj w tym wieku z krzywej wieku historii kariery, wiek + 2) do wyceny dzis - obie przy tym samym
+    kontrakcie. Mnoznik pokazuje wplyw wieku i rozwoju: mlodzi zyskuja, starsi traca. Obecna wartosc zawiera to,
+    czego model nie widzi (reputacja, potencjal), wiec prognoza zaczyna od niej. Wymaga 'Rozwój_wiek_2'.
+    """
+    pula = pula.copy()
+    pula['Wartość za 2 lata'] = np.nan
+    pula['Zmiana wartości'] = np.nan
+    if not model or 'Rozwój_wiek_2' not in pula.columns:
+        return pula
+    cena = pula['Wartość_Numeryczna'].astype(float)
+    score = pula['SCORE'].astype(float).to_numpy()
+    s2 = score + pula['Rozwój_wiek_2'].astype(float).to_numpy()
+    wiek = pula['Wiek'].astype(float).to_numpy()
+    teraz = _log_wycena(model, score, wiek, LATA_KONTRAKTU_PROGNOZY)
+    potem = _log_wycena(model, s2, wiek + lat, LATA_KONTRAKTU_PROGNOZY)
+    mnoznik = pd.Series(np.exp(potem - teraz), index=pula.index)
+    ok = cena.gt(0) & mnoznik.notna()
+    pula.loc[ok, 'Zmiana wartości'] = mnoznik[ok]
+    pula.loc[ok, 'Wartość za 2 lata'] = cena[ok] * mnoznik[ok]
+    return pula

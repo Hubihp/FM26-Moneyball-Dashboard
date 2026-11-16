@@ -40,7 +40,7 @@ def test_okazje():
     assert "kontrakt ≤ 6 mies." not in okazje[2] and "kontrakt ≤ 12 mies." in okazje[2]
     assert okazje[1] == "" and okazje[3] == "" and okazje[4] == ""     # bez "wolny agent" i "talent bez minut"
     assert set(analiza.OKAZJE) == {"niedowartościowany", "kontrakt ≤ 6 mies.", "kontrakt ≤ 12 mies.", "szybki rozwój",
-                                  "klauzula ≤ wartość"}
+                                  "klauzula ≤ wartość", "kup teraz"}
     f = analiza.Filtry(okazje=["kontrakt ≤ 6 mies."], bez_ceny=True)
     assert list(analiza.filtruj(analiza.wzbogac(_pula(), DZIS), f, DZIS)['Piłkarz']) == ["Tani"]
 

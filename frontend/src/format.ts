@@ -2,17 +2,10 @@ import type { Format } from './api';
 
 export function eur(x: number | null | undefined): string {
   if (x === null || x === undefined || Number.isNaN(x)) return '–';
+  if (x < 0) return `-${eur(-x)}`;
   if (x >= 1_000_000) return `${(x / 1_000_000).toFixed(1).replace('.', ',').replace(',0', '')} mln €`;
   if (x >= 1_000) return `${Math.round(x / 1_000)} tys. €`;
   return `${Math.round(x)} €`;
-}
-
-// Kategoria szansy transferu z udzialu transferow w % (progi jak fm_gra.PROGI_SZANSY)
-export function szansaTransferu(udzial: number): string {
-  if (udzial >= 30) return 'wysoka';
-  if (udzial >= 15) return 'średnia';
-  if (udzial >= 6) return 'niska';
-  return 'bardzo niska';
 }
 
 export function formatuj(wartosc: unknown, format: Format): string {
@@ -38,9 +31,6 @@ export function formatuj(wartosc: unknown, format: Format): string {
       return `×${wartosc.toFixed(1).replace('.', ',')}`;
     case 'eur_tyg':
       return `${eur(wartosc / 52)} / tydz.`;
-    case 'szansa':
-      // udzial prawdziwych transferow z taka roznica reputacji (fm_gra.PROGI_SZANSY)
-      return `${szansaTransferu(wartosc)} · ${Math.round(wartosc)}%`;
     case 'zmiana':
       // ponizej dokladnosci wyswietlania (np. -0,04) to brak zmiany - bez "-0,0"
       if (Math.abs(wartosc) < 0.05) return '0,0';

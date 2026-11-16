@@ -39,26 +39,6 @@ def test_bez_atrybutow_bez_zmian():
     assert fm_gra.dolicz_role(df, "Napastnik") is df
 
 
-def test_szansa_transferu_z_roznicy_reputacji():
-    rep = pd.Series([3000, 5000, 5750, 8000])
-    rep_klubu = pd.Series([3000, 5000, 5750, 8000])
-    status = pd.Series([4, 4, 4, 4])
-    kategoria, udzial = fm_gra.szansa_transferu(rep, rep_klubu, status, 5000)
-    assert list(kategoria) == ["wysoka", "wysoka", "niska", "bardzo niska"]
-    assert udzial.is_monotonic_decreasing
-
-
-def test_kluczowy_zawodnik_nie_schodzi_do_slabszego_klubu():
-    # jak Buendia: reputacja zawodnika podobna do mojego klubu, ale jego klub wyraznie silniejszy
-    kluczowy, _ = fm_gra.szansa_transferu(pd.Series([6923]), pd.Series([7849]), pd.Series([3]), 6751)
-    rezerwowy, _ = fm_gra.szansa_transferu(pd.Series([6923]), pd.Series([7849]), pd.Series([20]), 6751)
-    assert kluczowy[0] == "bardzo niska"
-    assert fm_gra.KOLEJNOSC_SZANSY[rezerwowy[0]] > fm_gra.KOLEJNOSC_SZANSY[kluczowy[0]]
-    # wolny agent (bez klubu): tylko reputacja zawodnika
-    wolny, _ = fm_gra.szansa_transferu(pd.Series([4000]), pd.Series([np.nan]), pd.Series([np.nan]), 6000)
-    assert wolny[0] == "wysoka"
-
-
 def test_klauzula_wg_kraju_i_daty():
     df = pd.DataFrame({
         "Klub_kraj_ID": [1, 2, 1, 1],
@@ -84,14 +64,13 @@ def test_home_grown_i_filtr():
     assert list(widoczni["SCORE"]) == [2.0]
 
 
-def test_okazja_klauzuli_i_filtr_szansy():
+def test_okazja_klauzuli():
     df = pd.DataFrame({"SCORE": [60.0, 60.0], "Wygasa_Data": [pd.Timestamp("2031-01-01")] * 2,
                        "Wartość_Numeryczna": [10e6, 10e6], "Zarobki_Numeryczne": [1e5, 1e5], "Wiek": [25, 25],
-                       "Klauzula": [8e6, 15e6], "Szansa transferu": ["wysoka", "niska"]})
+                       "Klauzula": [8e6, 15e6]})
     wynik = analiza.wzbogac(df, "2028-01-01")
     assert "klauzula ≤ wartość" in wynik.loc[0, "Okazje"]
     assert "klauzula" not in wynik.loc[1, "Okazje"]
-    assert len(analiza.filtruj(wynik, analiza.Filtry(min_szansa="średnia"))) == 1
 
 
 def test_dane_fm_z_rekordu_zapisu():
@@ -104,6 +83,6 @@ def test_dane_fm_z_rekordu_zapisu():
         contract=SimpleNamespace(clauses=klauzule, start=pd.Timestamp("2027-01-01").date()))
     d = dane_fm(zawodnik, kurs=2.0)
     assert d["Atr|pace"] == 15 and d["Atr|acceleration"] is None and d["Atr|finishing"] is None
-    assert d["Reputacja"] == 4000 and d["HG_kraje"] == "137;150" and d["HG_kluby"] == "5"
+    assert d["HG_kraje"] == "137;150" and d["HG_kluby"] == "5"
     assert d["Klauzula_krajowa"] == 2000.0 and d["Klauzula_ogolna"] == 6000.0
     assert d["Klauzula_krajowa_do"] == pd.Timestamp("2028-01-01")

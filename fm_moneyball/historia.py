@@ -292,6 +292,10 @@ def prognoza(df, korekta=None, min_minut=MIN_MINUT_PROGNOZY):
     wynik['Prognoza_wiek'] = zmiana_wieku.astype(float)
     wynik['Prognoza_regresja'] = regresja
     wynik['Prognoza SCORE'] = wynik['SCORE'] + regresja + wynik['Prognoza_wiek']
+    # typowy rozwoj z wiekiem w ciagu 2 lat (bez powrotu do sredniej) - prognoza wartosci (wycena.prognoza_wartosci):
+    # cena w grze nie spada po jednym slabym sezonie, wiec nie odbija tez po nim; zmienia sie z wiekiem i rozwojem
+    zmiana_wieku_2 = (wiek + 2).round().clip(15, 40).map(lambda w: krzywa.get(int(w)) if pd.notna(w) else np.nan)
+    wynik['Rozwój_wiek_2'] = wynik['Prognoza_wiek'] + zmiana_wieku_2.astype(float)
     wynik.attrs["prognoza"] = {"b": round(model["b"], 3), "pary": model["pary"], "srednia": round(model["srednia"], 1)}
     return wynik
 

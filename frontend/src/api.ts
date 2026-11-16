@@ -62,7 +62,6 @@ export type MetaPozycji = {
   min_minut_auto: number;            // prog automatyczny calej puli (orientacyjnie; filtr liczy go wg ligi)
   statystyki_niedostepne: string[];  // cechy wag domyslnych, ktorych zapis nie podaje
   role_fm?: { nazwa: string; kluczowe: string[]; zalecane: string[] }[]; // role FM do oceny z atrybutow
-  ma_reputacje?: boolean;            // zapis gry: reputacja zawodnikow (szansa transferu)
   ma_hg?: boolean;                   // zapis gry: kraje i kluby wychowania (home-grown)
 };
 
@@ -92,6 +91,39 @@ export type RaportRywala = {
   uid: string; nazwa: string | null; mecze: Mecz[]; podsumowanie: PodsumowanieMeczow;
   tabela: WierszTabeli | null; moja_tabela: WierszTabeli | null; liczba_w_tabeli: number;
   z_nami: Mecz[]; kluczowi: KluczowyZawodnik[]; moje_podsumowanie: PodsumowanieMeczow;
+};
+
+export type MiesiacFinansow = {
+  miesiac: string; saldo: number | null; przychody: number | null; wydatki: number | null; place: number | null;
+  transfery: number | null; wynik: number | null; place_tydzien: number | null; budzet_plac_tydzien: number | null;
+  budzet_transferowy: number | null;
+};
+
+export type Finanse = {
+  ma_dane: boolean; miesiace: MiesiacFinansow[];
+  podsumowanie: {
+    miesiecy: number; saldo: number | null; przychody: number | null; wydatki: number | null; place: number | null;
+    transfery: number | null; wynik_operacyjny_miesiac: number | null; prognoza_salda_12: number | null;
+    udzial_plac: number | null; status_plac: 'ok' | 'uwaga' | 'błąd' | null; place_rocznie: number | null;
+    przychody_rocznie: number | null; place_tydzien: number | null; budzet_plac_tydzien: number | null;
+    budzet_transferowy: number | null; prog_plac: number;
+  } | null;
+  wygasajace: { Piłkarz: string; Wygasa: string; Płaca_tydzien: number | null; Wiek: number | null }[];
+};
+
+export type OsobaPersonelu = {
+  uid: string; nazwa: string; wiek: number | null; klub: string; stanowisko: string; druzyna: number;
+  placa_tydzien: number | null; kontrakt_do: string | null; oceny: Record<string, number | null>;
+  obszary: string[]; najlepszy_obszar: string | null; najlepsza_ocena: number | null;
+};
+
+export type Personel = {
+  sztab: OsobaPersonelu[];
+  obszary: { obszar: string; moja: number | null; kto: string | null; mediana_ligi: number | null;
+    najlepsza_ligi: number | null; miejsce: number | null; klubow: number; luka: boolean }[];
+  kandydaci: Record<string, OsobaPersonelu[]>;
+  obszary_opis: Record<string, string[]>;
+  liga_klubow: number;
 };
 
 export type PunktHistorii = {
@@ -164,7 +196,6 @@ export type Filtry = {
   kandydaci_z: string[]; // pozycje, z ktorych pochodza kandydaci (puste = wszystkie)
   rola_fm: string | null;     // rola FM do oceny z atrybutow (null = najlepsza rola pozycji)
   silnik_fm: boolean;         // wagi atrybutow wg testow silnika (FM-Arena)
-  min_szansa: string | null;  // minimalna szansa transferu: niska / średnia / wysoka
   home_grown: string | null;  // 'kraj' (wychowanek kraju mojego klubu) albo 'klub'
 };
 
@@ -176,7 +207,7 @@ export type ZapytanieRankingu = {
   filtry: Filtry;
 };
 
-export type Format = 'score' | 'pasek' | 'int' | 'dec1' | 'dec2' | 'eur' | 'eur_tyg' | 'data' | 'tekst' | 'mnoznik' | 'zmiana' | 'szansa';
+export type Format = 'score' | 'pasek' | 'int' | 'dec1' | 'dec2' | 'eur' | 'eur_tyg' | 'data' | 'tekst' | 'mnoznik' | 'zmiana';
 
 // Model ceny wg wyniku (fm_moneyball/wycena.py)
 export type ModelWyceny = {
@@ -488,6 +519,8 @@ export const api = {
     tylko_pierwsza: boolean }) => post<{ zawodnicy: ZawodnikSkladu[]; pozycje: string[] }>('/api/sklad', body),
   mecze: () => zadanie<{ mecze: Mecz[]; najblizsze: Mecz[]; podsumowanie: PodsumowanieMeczow; ma_dane: boolean;
     prog_szczescia: number }>('/api/mecze'),
+  finanse: () => zadanie<Finanse>('/api/finanse'),
+  personel: () => zadanie<Personel>('/api/personel'),
   rywal: (body: { uid: string; ignoruj_mnoznik: boolean; k_baza: number }) => post<RaportRywala>('/api/rywal', body),
   taktykaZGry: () => zadanie<{ taktyki: TaktykaZGry[]; uwaga: string }>('/api/taktyka-z-gry'),
   profilDruzyny: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number;

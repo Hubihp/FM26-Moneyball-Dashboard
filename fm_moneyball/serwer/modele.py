@@ -83,7 +83,6 @@ class FiltryModel(BaseModel):
     kandydaci_z: list[str] = Field(default_factory=list)
     rola_fm: str | None = None           # rola FM do oceny z atrybutow (None = najlepsza)
     silnik_fm: bool = True               # wagi atrybutow wg testow silnika
-    min_szansa: str | None = None        # "niska" / "średnia" / "wysoka"
     home_grown: str | None = None        # "kraj" / "klub"
 
 

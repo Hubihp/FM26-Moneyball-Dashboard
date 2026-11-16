@@ -10,4 +10,4 @@ Rdzen FM27 Dashboard - logika niezalezna od interfejsu.
   zrodla/folder.py    - folder zapisow gry: wyszukiwanie najnowszego zapisu, bezpieczna kopia
 """
 
-__version__ = "2.3.0"
+__version__ = "2.4.0"
