@@ -7,7 +7,7 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.encoders import jsonable_encoder
 
-from fm_moneyball import analiza, historia, optymalizator, profil
+from fm_moneyball import analiza, fm_gra, historia, optymalizator, profil
 from fm_moneyball.serwer.modele import HistoriaModel, HistoriaWieluModel, NastepcaModel, PorownanieZMoimModel, KadraModel, ListaZyczenModel, OptymalizatorModel, PodobniModel, RadarModel, RankingModel, SprzedajDrogoModel, ZawodnikModel
 from fm_moneyball.serwer.obliczenia import kandydat, wynik_na_wspolnych_cechach
 from fm_moneyball.stale import MERYTORYKA_WAG, POZYCJE, ROLE_POZYCJI
@@ -43,6 +43,12 @@ def utworz(stan, obl):
             "ma_historie": porownanie is not None,
             "data_porownania": porownanie[1].isoformat() if porownanie is not None else None,
             "min_minut_rozwoju": historia.MIN_MINUT,
+            # funkcje FM z zapisu gry: role z atrybutow (atrybuty kluczowe i zalecane), reputacja, home-grown
+            "role_fm": [{"nazwa": r["nazwa"], "kluczowe": [fm_gra.ATRYBUTY[a] for a in r["kluczowe"]],
+                         "zalecane": [fm_gra.ATRYBUTY[a] for a in r["zalecane"]]}
+                        for r in fm_gra.ROLE_FM.get(pozycja, [])] if fm_gra.ma_atrybuty(df) else [],
+            "ma_reputacje": bool('Reputacja' in df.columns and df['Reputacja'].notna().any()),
+            "ma_hg": bool('HG_kraje' in df.columns and df['HG_kraje'].notna().any()),
         }
 
     @router.post("/ranking")
@@ -235,7 +241,9 @@ def utworz(stan, obl):
             policzona, _, _ = obl.policz(z.pozycja, z.wagi, z.ignoruj_mnoznik, z.k_baza, kandydaci=kandydaci)
             wiersz = policzona[policzona['ID'] == z.id]
             if not wiersz.empty:
-                return analiza.do_json(wiersz.head(1), analiza.pola_wiersza(z.pozycja, policzona))[0]
+                if not z.silnik_fm:
+                    wiersz = fm_gra.dolicz_role(wiersz, z.pozycja, silnik=False)
+                return analiza.do_json(wiersz.head(1), analiza.pola_karty(z.pozycja, policzona))[0]
         raise HTTPException(404, "Nie znaleziono zawodnika.")
 
     @router.post("/rozbicie")

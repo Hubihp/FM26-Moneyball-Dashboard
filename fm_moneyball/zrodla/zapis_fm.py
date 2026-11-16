@@ -521,8 +521,57 @@ def wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje=0, liga_klubu=Non
     for grupa in POZYCJE:
         kody = [k for k, g in POZYCJA_Z_KODU.items() if g == grupa]
         wiersz[kolumna_oceny(grupa)] = max((oceny.get(k, 0) for k in kody), default=None) if oceny else None
+    wiersz.update(dane_fm(zawodnik, kurs))
     wiersz.update(statystyki_kanoniczne(liczniki))
     return wiersz
+
+
+# kody klauzul odstepnego (fmsave ClauseKind): ogolna, dla klubow zagranicznych, krajowych z wyzszej ligi, krajowych
+KLAUZULE_ODSTEPNEGO = {0x00: "Klauzula_ogolna", 0x10: "Klauzula_zagraniczna", 0x11: "Klauzula_wyzsza_liga",
+                       0x12: "Klauzula_krajowa"}
+
+
+def _liczba(x):
+    return x if isinstance(x, (int, float)) and not isinstance(x, bool) else None
+
+
+def dane_fm(zawodnik, kurs):
+    """
+    Dane do funkcji FM (fm_gra): widoczne atrybuty 1-20 ('Atr|<atrybut>'), reputacja zawodnika i klubu, kraj klubu,
+    kraje i kluby wychowania (home-grown, tekst 'id;id') oraz klauzule odstepnego (kwoty w walucie aplikacji;
+    krajowa z data wygasniecia - parametr klauzuli to dni od poczatku kontraktu).
+    """
+    wynik = {}
+    atrybuty = getattr(zawodnik, "attributes", None)
+    if atrybuty is not None:
+        from fm_moneyball.fm_gra import ATRYBUTY, PREFIKS_ATRYBUTU
+        for nazwa in ATRYBUTY:
+            wartosc = _liczba(getattr(atrybuty, nazwa, None))
+            wynik[PREFIKS_ATRYBUTU + nazwa] = wartosc if wartosc is not None and 1 <= wartosc <= 20 else None
+    rep = getattr(zawodnik, "reputation", None)
+    wynik["Reputacja"] = _liczba(getattr(rep, "current", None)) if rep is not None else None
+    wynik["Klub_reputacja"] = _liczba(getattr(zawodnik, "club_reputation", None))
+    wynik["Klub_kraj_ID"] = _liczba(getattr(zawodnik, "club_nation_id", None))
+    for kolumna, pole in (("HG_kraje", "home_grown_nation_ids"), ("HG_kluby", "home_grown_club_uids")):
+        ids = [str(int(i)) for i in (getattr(zawodnik, pole, None) or ()) if _liczba(i) is not None]
+        wynik[kolumna] = ";".join(ids) or None
+    kontrakt = getattr(zawodnik, "contract", None)
+    for kolumna in KLAUZULE_ODSTEPNEGO.values():
+        wynik[kolumna] = np.nan
+    wynik["Klauzula_krajowa_do"] = pd.NaT
+    for klauzula in (getattr(kontrakt, "clauses", None) or ()) if kontrakt is not None else ():
+        kod = getattr(getattr(klauzula, "kind", None), "raw", None)
+        kwota = _liczba(getattr(klauzula, "value", None))
+        kolumna = KLAUZULE_ODSTEPNEGO.get(kod)
+        if kolumna is None or not kwota or kwota <= 0:
+            continue
+        kwota = float(kwota) * kurs
+        if np.isnan(wynik[kolumna]) or kwota < wynik[kolumna]:
+            wynik[kolumna] = kwota
+            if kolumna == "Klauzula_krajowa":
+                dni, start = _liczba(getattr(klauzula, "parameter", None)), getattr(kontrakt, "start", None)
+                wynik["Klauzula_krajowa_do"] = pd.Timestamp(start) + pd.Timedelta(days=dni) if dni and start else pd.NaT
+    return wynik
 
 
 def zbuduj_ramki(zawodnicy, liczniki_po_uid, liga_klubu, opcje, moje_kluby=(), kontuzje=None):

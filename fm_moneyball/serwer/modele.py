@@ -75,6 +75,10 @@ class FiltryModel(BaseModel):
     min_niedowartosciowanie: float | None = None
     tylko_z_okazja: bool = False
     kandydaci_z: list[str] = Field(default_factory=list)
+    rola_fm: str | None = None           # rola FM do oceny z atrybutow (None = najlepsza)
+    silnik_fm: bool = True               # wagi atrybutow wg testow silnika
+    min_szansa: str | None = None        # "niska" / "średnia" / "wysoka"
+    home_grown: str | None = None        # "kraj" / "klub"
 
 
 class RankingModel(BaseModel):
@@ -137,3 +141,4 @@ class ZawodnikModel(BaseModel):
     wagi: dict[str, float] | None = None
     ignoruj_mnoznik: bool = False
     k_baza: float = 5
+    silnik_fm: bool = True               # oceny rol FM na karcie z wagami silnika

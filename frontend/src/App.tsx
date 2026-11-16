@@ -153,19 +153,21 @@ export default function App() {
     if (filtryWspolne.min_minut === 1000) setFiltryWspolne({ ...filtryWspolne, min_minut: null });
     setMinutyAuto(true);
   }, [minutyAuto, filtryWspolne, setFiltryWspolne, setMinutyAuto]);
+  // osobno dla pozycji: kandydaci z innych pozycji i rola FM (lista rol zalezy od pozycji)
   const filtryDla = (poz: string): Filtry => {
     const kandydaciZ = filtryPozycji[poz]?.kandydaci_z ?? [];
     return { ...PUSTE_FILTRY, ...filtryWspolne, kandydaci_z: kandydaciZ,
-      kandydaci: kandydaciZ.length > 0 && poz !== 'Bramkarz' };
+      kandydaci: kandydaciZ.length > 0 && poz !== 'Bramkarz', rola_fm: filtryPozycji[poz]?.rola_fm ?? null };
   };
   // wspolne filtry bez kandydatow - dla "Sprzedaj drogo" i optymalizatora budzetu
-  const filtryKadry = useMemo(() => ({ ...PUSTE_FILTRY, ...filtryWspolne, kandydaci_z: [], kandydaci: false }),
-    [filtryWspolne]);
+  const filtryKadry = useMemo(() => ({ ...PUSTE_FILTRY, ...filtryWspolne, kandydaci_z: [], kandydaci: false,
+    rola_fm: null }), [filtryWspolne]);
   const ustawFiltry = (f: Filtry) => {
-    const { kandydaci_z: kandydaciZ, ...reszta } = f;
-    setFiltryWspolne({ ...reszta, kandydaci_z: [], kandydaci: false });
-    if ((filtryPozycji[pozycja]?.kandydaci_z ?? []).join('|') !== kandydaciZ.join('|')) {
-      setFiltryPozycji({ ...filtryPozycji, [pozycja]: { ...filtryPozycji[pozycja], kandydaci_z: kandydaciZ } });
+    const { kandydaci_z: kandydaciZ, rola_fm: rolaFm, ...reszta } = f;
+    setFiltryWspolne({ ...reszta, kandydaci_z: [], kandydaci: false, rola_fm: null });
+    const dawne = filtryPozycji[pozycja] ?? {};
+    if ((dawne.kandydaci_z ?? []).join('|') !== kandydaciZ.join('|') || (dawne.rola_fm ?? null) !== rolaFm) {
+      setFiltryPozycji({ ...filtryPozycji, [pozycja]: { ...dawne, kandydaci_z: kandydaciZ, rola_fm: rolaFm } });
     }
   };
   // Filtry kolumn tabeli Rankingu: kolumny wspolne maja jeden filtr dla wszystkich pozycji (np. Klub: Torino zostaje

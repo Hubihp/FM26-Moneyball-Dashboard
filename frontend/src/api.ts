@@ -61,6 +61,9 @@ export type MetaPozycji = {
   min_minut_rozwoju: number;
   min_minut_auto: number;            // prog automatyczny calej puli (orientacyjnie; filtr liczy go wg ligi)
   statystyki_niedostepne: string[];  // cechy wag domyslnych, ktorych zapis nie podaje
+  role_fm?: { nazwa: string; kluczowe: string[]; zalecane: string[] }[]; // role FM do oceny z atrybutow
+  ma_reputacje?: boolean;            // zapis gry: reputacja zawodnikow (szansa transferu)
+  ma_hg?: boolean;                   // zapis gry: kraje i kluby wychowania (home-grown)
 };
 
 export type PunktHistorii = {
@@ -128,6 +131,10 @@ export type Filtry = {
   min_niedowartosciowanie: number | null;
   tylko_z_okazja?: boolean;
   kandydaci_z: string[]; // pozycje, z ktorych pochodza kandydaci (puste = wszystkie)
+  rola_fm: string | null;     // rola FM do oceny z atrybutow (null = najlepsza rola pozycji)
+  silnik_fm: boolean;         // wagi atrybutow wg testow silnika (FM-Arena)
+  min_szansa: string | null;  // minimalna szansa transferu: niska / średnia / wysoka
+  home_grown: string | null;  // 'kraj' (wychowanek kraju mojego klubu) albo 'klub'
 };
 
 export type ZapytanieRankingu = {
@@ -138,7 +145,7 @@ export type ZapytanieRankingu = {
   filtry: Filtry;
 };
 
-export type Format = 'score' | 'pasek' | 'int' | 'dec1' | 'dec2' | 'eur' | 'eur_tyg' | 'data' | 'tekst' | 'mnoznik' | 'zmiana';
+export type Format = 'score' | 'pasek' | 'int' | 'dec1' | 'dec2' | 'eur' | 'eur_tyg' | 'data' | 'tekst' | 'mnoznik' | 'zmiana' | 'szansa';
 
 // Model ceny wg wyniku (fm_moneyball/wycena.py)
 export type ModelWyceny = {
@@ -443,7 +450,7 @@ export const api = {
     tylko_pierwsza?: boolean }) =>
     post<Kadra>('/api/moja-kadra', body),
   zawodnik: (body: { pozycja: string; id: string; wagi: Record<string, number> | null; ignoruj_mnoznik: boolean;
-    k_baza: number }) => post<Wiersz>('/api/zawodnik', body),
+    k_baza: number; silnik_fm?: boolean }) => post<Wiersz>('/api/zawodnik', body),
   rozbicie: (body: { pozycja: string; id: string; wagi: Record<string, number> | null; ignoruj_mnoznik: boolean;
     k_baza: number }) => post<RozbicieWyniku>('/api/rozbicie', body),
   sklad: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number;

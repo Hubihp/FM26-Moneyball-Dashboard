@@ -3,6 +3,19 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 2.2.0
+
+- Ocena pod rolę FM: kolumny Rola FM i Ocena roli (1-20) z atrybutów zawodnika, na wzór ról z gry
+  (atrybuty kluczowe i zalecane). Domyślnie najlepsza rola na pozycji; w panelu można wybrać konkretną
+  rolę. Karta zawodnika pokazuje oceny we wszystkich rolach pozycji.
+- Wagi atrybutów wg testów silnika meczowego (FM-Arena): szybkość, przyspieszenie, skoczność, zwinność
+  i drybling liczą się w ocenie roli mocniej. Przełącznik w panelu.
+- Czy przyjdzie?: szansa, że zawodnik zgodzi się na transfer do Twojego klubu, z różnicy reputacji
+  (skalibrowana na transferach z kariery FM27). Kolumna, filtr w panelu i pole na karcie zawodnika.
+- Klauzule odstępnego z kontraktów: kolumna Klauzula (kwota obowiązująca wobec Twojego klubu) i nowa
+  okazja „klauzula ≤ wartość”.
+- Home-grown: kolumna HG i filtr wychowanków kraju Twojego klubu albo samego klubu.
+
 ## 2.1.1
 
 - Boisko bez piłki pokazuje tylko ustawienie z zapisu gry: bez ręcznie ustawianych linii obrony i pressingu

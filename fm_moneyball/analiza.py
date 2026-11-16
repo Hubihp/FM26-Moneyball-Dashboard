@@ -34,10 +34,14 @@ class Filtry:
     kandydaci: bool = False                      # pokaz kandydatow do przekwalifikowania z innych pozycji
     min_score_kandydata: float = 60.0
     kandydaci_z: list = field(default_factory=list)  # pozycje, z ktorych pochodza kandydaci (puste = wszystkie)
+    rola_fm: str | None = None           # rola FM do oceny z atrybutow (None = najlepsza rola pozycji)
+    silnik_fm: bool = True               # wagi atrybutow wg testow silnika meczowego (FM-Arena)
+    min_szansa: str | None = None        # minimalna szansa transferu: "niska", "średnia", "wysoka"
+    home_grown: str | None = None        # "kraj" - wychowanek kraju mojego klubu (albo klubu), "klub" - mojego klubu
 
 
 # --- Moneyball: koszt, okazje -------------------------------------------------------------------
-OKAZJE = ("niedowartościowany", "kontrakt ≤ 6 mies.", "kontrakt ≤ 12 mies.", "szybki rozwój")
+OKAZJE = ("niedowartościowany", "kontrakt ≤ 6 mies.", "kontrakt ≤ 12 mies.", "szybki rozwój", "klauzula ≤ wartość")
 PROG_NIEDOWARTOSCIOWANIA = 2.0   # wycena wg wyniku co najmniej 2x wyzsza niz cena...
 MIN_SCORE_NIEDOWARTOSCIOWANEGO = 55.0   # ...u zawodnika wyraznie powyzej przecietnej
 PROG_SZYBKIEGO_ROZWOJU = 5.0     # wzrost SCORE wzgledem poprzedniego sezonu (historia zapisow)...
@@ -80,6 +84,9 @@ def wzbogac(pula, data_gry=None, horyzont_lat=3):
         pelna = ~pula['Δ_mała_próba'].fillna(False).astype(bool) if 'Δ_mała_próba' in pula.columns else True
         znaczniki["szybki rozwój"] = ((pula['Δ SCORE'] >= PROG_SZYBKIEGO_ROZWOJU) & (pula['Wiek'] <= MAKS_WIEK_ROZWOJU)
                                       & pelna)
+    if 'Klauzula' in pula.columns:
+        # klauzula odstepnego obowiazujaca wobec mojego klubu nie wyzsza niz wartosc - klub nie moze odmowic
+        znaczniki["klauzula ≤ wartość"] = (pula['Klauzula'] > 0) & (pula['Klauzula'] <= wartosc) & ~wolny
     okazje = pd.Series("", index=pula.index, dtype=object)
     for znacznik, maska in znaczniki.items():
         maska = maska.fillna(False).astype(bool)
@@ -253,6 +260,13 @@ def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
         wynik = wynik[wynik['Δ SCORE'] >= filtry.min_rozwoj]
     if filtry.min_niedowartosciowanie and 'Niedowartościowanie' in wynik.columns:
         wynik = wynik[wynik['Niedowartościowanie'] >= filtry.min_niedowartosciowanie]
+    if filtry.min_szansa and 'Szansa transferu' in wynik.columns:
+        from fm_moneyball.fm_gra import KOLEJNOSC_SZANSY
+        prog = KOLEJNOSC_SZANSY.get(filtry.min_szansa, 0)
+        wynik = wynik[wynik['Szansa transferu'].map(KOLEJNOSC_SZANSY).fillna(-1) >= prog]
+    if filtry.home_grown and 'HG' in wynik.columns:
+        dozwolone = {"klub"} if filtry.home_grown == "klub" else {"klub", "kraj"}
+        wynik = wynik[wynik['HG'].isin(dozwolone)]
     if filtry.bez_mojego_klubu and moj_klub_uid is not None and 'Klub_UID' in wynik.columns:
         wynik = wynik[wynik['Klub_UID'] != moj_klub_uid]
     if filtry.szukaj:
@@ -269,17 +283,20 @@ def filtruj(pula, filtry, data_gry=None, moj_klub_uid=None):
 _FORMATY = {'SCORE': 'score', 'Percentyl': 'pasek', 'Wiek': 'int', 'Minuty': 'int',
             'Ocena na pozycji': 'int', 'Strata piłek na podanie': 'dec2', 'Asysty/90': 'dec2', 'Kartki/90': 'dec2',
             'Błędy prowadzące do gola/90': 'dec2', 'Prognoza SCORE': 'int',
-            'Niedowartościowanie': 'mnoznik', 'Wycena wg wyniku': 'eur', 'Δ SCORE': 'zmiana'}
+            'Niedowartościowanie': 'mnoznik', 'Wycena wg wyniku': 'eur', 'Δ SCORE': 'zmiana',
+            'Ocena roli': 'dec1', 'Klauzula': 'eur'}
 # Kolumny prezentowane z pol liczbowych (sortowanie po liczbie, nie po tekscie)
 _POLA = {'Cena': ('Wartość_Numeryczna', 'eur'), 'Płaca': ('Zarobki_Numeryczne', 'eur_tyg'),
-         'Wygasa': ('Wygasa_Data', 'data'), 'Koszt (3 lata)': ('Koszt', 'eur')}
+         'Wygasa': ('Wygasa_Data', 'data'), 'Koszt (3 lata)': ('Koszt', 'eur'),
+         'Szansa transferu': ('Szansa_udział', 'szansa')}
 _TEKSTOWE = {'Piłkarz', 'Klub', 'Liga', 'Pozycja', 'Kraj', 'Preferowana noga', 'Okazje', 'Pozycja na liście',
-             'Kandydat z pozycji'}
+             'Kandydat z pozycji', 'Rola FM', 'HG'}
 # Naglowki inne niz nazwa kolumny w danych
-_NAGLOWKI = {'Kraj': 'Narodowość', 'Pozycja': 'Pozycje', 'Δ SCORE': 'Δ SCORE'}
+_NAGLOWKI = {'Kraj': 'Narodowość', 'Pozycja': 'Pozycje', 'Δ SCORE': 'Δ SCORE', 'Szansa transferu': 'Czy przyjdzie?'}
 # Kolumny Moneyball (z wzbogac), nie sa statystykami meczowymi
 _MONEYBALL = {'Koszt (3 lata)', 'Okazje', 'Ocena na pozycji', 'Wycena wg wyniku',
-              'Niedowartościowanie', 'Δ SCORE', 'Prognoza SCORE'}
+              'Niedowartościowanie', 'Δ SCORE', 'Prognoza SCORE', 'Ocena roli', 'Rola FM', 'Szansa transferu',
+              'Klauzula', 'HG'}
 
 
 def _wstaw_po(lista, nowy, po):
@@ -309,6 +326,16 @@ def kolumny_tabeli(pozycja, pula):
     if 'Niedowartościowanie' in pula.columns and pula['Niedowartościowanie'].notna().any():
         _wstaw_po(nazwy, 'Wycena wg wyniku', 'Cena')
         _wstaw_po(nazwy, 'Niedowartościowanie', 'Wycena wg wyniku')
+    # funkcje FM (zapis gry): ocena w roli z atrybutow, klauzula, szansa transferu, home-grown
+    if 'Ocena roli' in pula.columns and pula['Ocena roli'].notna().any():
+        _wstaw_po(nazwy, 'Rola FM', 'Prognoza SCORE' if 'Prognoza SCORE' in nazwy else 'Percentyl')
+        _wstaw_po(nazwy, 'Ocena roli', 'Rola FM')
+    if 'Klauzula' in pula.columns and pula['Klauzula'].notna().any():
+        _wstaw_po(nazwy, 'Klauzula', 'Cena')
+    if 'Szansa_udział' in pula.columns and pula['Szansa_udział'].notna().any():
+        _wstaw_po(nazwy, 'Szansa transferu', 'Okazje' if 'Okazje' in nazwy else 'Cena')
+    if 'HG' in pula.columns and pula['HG'].notna().any():
+        _wstaw_po(nazwy, 'HG', 'Wiek')
     if 'Kandydat' in pula.columns and pula['Kandydat'].any():
         _wstaw_po(nazwy, 'Kandydat z pozycji', 'Piłkarz')
         if 'Ocena na pozycji' in pula.columns and pula['Ocena na pozycji'].notna().any():
@@ -377,11 +404,17 @@ POLA_WIERSZA = ['ID', 'UID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Kraj', 'Wi
                 'Okazje', 'Pareto', 'Kandydat', 'Kandydat z pozycji', 'Ocena na pozycji',
                 'Wycena wg wyniku', 'Niedowartościowanie', 'Kontuzje_2_lata', 'Δ SCORE', 'Δ percentyl',
                 'Δ minut', 'Nowe pozycje', 'Δ_mała_próba', 'U21', 'Wycena_ograniczona', 'Statystyki_niepełne',
-                'Prognoza_wiek', 'Prognoza_regresja', 'Mnożnik_ligi_klubu', 'Udział_poza_ligą_klubu', 'Ligi_gry']
+                'Prognoza_wiek', 'Prognoza_regresja', 'Rola FM', 'Ocena roli', 'HG', 'Szansa_udział', 'Klauzula', 'Mnożnik_ligi_klubu', 'Udział_poza_ligą_klubu', 'Ligi_gry']
 
 
 def pola_wiersza(pozycja, pula):
     return POLA_WIERSZA + [k['pole'] for k in kolumny_tabeli(pozycja, pula)]
+
+
+def pola_karty(pozycja, pula):
+    """Pola wiersza karty zawodnika: jak w tabeli + oceny we wszystkich rolach FM pozycji ('Rola|<nazwa>')."""
+    return pola_wiersza(pozycja, pula) + [k for k in pula.columns if str(k).startswith('Rola|')] + \
+        [k for k in ('Szansa transferu', 'Klauzula_krajowa_do', 'Reputacja') if k in pula.columns]
 
 
 def kolejnosc_lig(ligi):

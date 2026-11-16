@@ -141,6 +141,16 @@ Kolumna „Prognoza SCORE” (i karta zawodnika) to model w stylu „Marcel” z
 
 Dośrodkowania, 100% sytuacje, sprinty, odbiory, wygrane główki, celność podań, asysty, kartki, błędy i obrony chwytem pochodzą tylko z zapisu gry. Przy imporcie CSV te wagi są pomijane, a pozostałe przeliczane do 100%. Zawodnik trafia do każdej puli, w której jest naturalny (ocena pozycji ≥ 18, jak „naturalna” w grze), np. środkowy i prawy obrońca jest i w ŚO, i w PO. Wyłączenie opcji „Zawodnik na wszystkich naturalnych pozycjach” zostawia tylko pozycję z najwyższą oceną.
 
+### Według gry: role FM, szansa transferu, klauzule, home-grown
+
+Te kolumny i filtry liczy się z zapisu gry (przy CSV ich nie ma). Używane są tylko dane widoczne w grze: atrybuty z ekranu zawodnika, reputacja, kontrakt i miejsce wychowania.
+
+- **Rola FM i Ocena roli.** Ocena zawodnika w roli z gry, w skali atrybutów 1-20: średnia ważona atrybutów roli, kluczowe z wagą 1, zalecane z wagą 0,5 (na wzór ról z FM). Domyślnie kolumna pokazuje najlepszą rolę zawodnika na tej pozycji; w panelu można wybrać konkretną rolę (podpowiedź pokazuje jej atrybuty). Karta zawodnika ma oceny we wszystkich rolach pozycji. Uwaga: zapis ma dokładne atrybuty każdego zawodnika, a gra pokazuje je dopiero po skautingu.
+- **Wagi atrybutów wg testów silnika.** Społeczność FM-Arena testuje silnik meczowy: zmienia jeden atrybut całej drużyny i liczy punkty w tysiącach meczów. Najwięcej dają szybkość i przyspieszenie, potem skoczność, zwinność i drybling. Przełącznik (domyślnie włączony) mnoży wagi tych atrybutów w ocenie roli: szybkość i przyspieszenie ×1,6, skoczność ×1,3, zwinność ×1,2, drybling ×1,15, wytrzymałość, siła i przewidywanie ×1,1 (bez bramkarzy).
+- **Czy przyjdzie?** Szansa, że zawodnik zgodzi się na transfer do mojego klubu, z różnicy reputacji klubu i zawodnika. Skalibrowane na 13 153 transferach między sezonami kariery FM27: do klubu o reputacji niższej od własnej o ponad 1000 przeszło 11% zawodników, o ponad 1500 - 4%, o ponad 2000 - 1,4%. Starsi (31+) schodzą niżej chętniej, młodzi (do 23 lat) rzadziej. Kategorie: wysoka (co najmniej 40%), średnia (15%), niska (4%), bardzo niska. Gra bierze pod uwagę też ambicję zawodnika (atrybut ukryty), więc to tylko przybliżenie.
+- **Klauzula.** Najniższa klauzula odstępnego z kontraktu, która obowiązuje wobec mojego klubu: ogólna, dla klubów zagranicznych albo dla klubów z tego samego kraju (ta ostatnia do daty wygaśnięcia). Okazja „klauzula ≤ wartość”: klub nie może odrzucić oferty w wysokości klauzuli, a jest ona nie wyższa niż wartość zawodnika.
+- **HG (home-grown).** „kraj” - wychowanek kraju mojego klubu, „klub” - wychowanek mojego klubu (3 sezony w klubach kraju lub klubu między 15. a 21. rokiem życia). Liczy się do limitów rejestracji, np. w Lidze Mistrzów (8 z 25). Filtr „Home-grown” w panelu.
+
 ### Windows krok po kroku
 
 1. Pobierz kod jako ZIP (na GitHubie: przycisk *Code*, potem *Download ZIP*) i rozpakuj go.
@@ -190,7 +200,7 @@ Ograniczenia:
 - **Ceny.** Zapis zawiera rzeczywistą wartość transferową z gry. Gra pokazuje zamiast niej widełki zależne od wiedzy skautów (np. 80–325 tys. € przy wartości 315 tys. €). Dlatego ceny z zapisu są zwykle wyższe niż przy imporcie CSV, który brał środek widełek.
 - **Liga klubu** to rozgrywki, w których jego pierwsza drużyna gra najwięcej kolejek ligowych w bieżącym sezonie (z terminarza, łącznie z kolejkami zaplanowanymi). Dzięki temu np. kluby brazylijskie mają Série A także wtedy, gdy trwają jeszcze ligi stanowe. Drużyny kobiece (kluby o tej samej nazwie co męskie) i ich rozgrywki są pomijane.
 - **Ligi bez identyfikatora w bazie** (np. belgijska Jupiler Pro League) dostają w mapie nazw klucz zastępczy `-numer_kraju` (np. `-131,Jupiler Pro League`).
-- **Bez danych ukrytych.** Aplikacja nie odczytuje z zapisu danych niewidocznych w grze (CA/PA, atrybuty ukryte, osobowość).
+- **Bez danych ukrytych.** Aplikacja nie odczytuje z zapisu danych niewidocznych w grze (CA/PA, atrybuty ukryte, osobowość). Atrybuty widoczne (z ekranu zawodnika) są używane w ocenie ról FM.
 
 ## Diagnostyka zapisu
 

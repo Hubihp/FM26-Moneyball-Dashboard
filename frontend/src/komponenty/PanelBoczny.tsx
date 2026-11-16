@@ -45,6 +45,7 @@ export const PUSTE_FILTRY: Filtry = {
   min_minut: null,
   bez_mojego_klubu: false, okazje: [], min_rozwoj: null, kandydaci: false,
   min_score_kandydata: 60, min_niedowartosciowanie: null, kandydaci_z: [],
+  rola_fm: null, silnik_fm: true, min_szansa: null, home_grown: null,
 };
 
 // Suwak ceny w skali pierwiastkowej: wiecej precyzji przy niskich kwotach
@@ -174,6 +175,51 @@ export default function PanelBoczny(p: Props) {
             ) : null}
             onChange={(v) => zmien('min_minut', v === '' ? null : Number(v) || 0)} />
         ) : null}
+
+        {(meta?.role_fm ?? []).length > 0 && (
+          <div>
+            <Select label="Rola FM (ocena z atrybutów)" clearable placeholder="Najlepsza rola zawodnika"
+              description="Kolumna Ocena roli: średnia ważona atrybutów roli w skali 1-20 (kluczowe ×1, zalecane ×0,5)"
+              value={filtry.rola_fm && meta?.role_fm?.some((r) => r.nazwa === filtry.rola_fm) ? filtry.rola_fm : null}
+              onChange={(v) => zmien('rola_fm', v)}
+              renderOption={({ option }) => {
+                const r = meta?.role_fm?.find((x) => x.nazwa === option.value);
+                return (
+                  <Tooltip multiline w={280} withArrow position="right" openDelay={300}
+                    label={r ? `Kluczowe: ${r.kluczowe.join(', ')}. Zalecane: ${r.zalecane.join(', ')}.` : ''}>
+                    <span style={{ width: '100%' }}>{option.label}</span>
+                  </Tooltip>
+                );
+              }}
+              data={(meta?.role_fm ?? []).map((r) => r.nazwa)} />
+            <Tooltip multiline w={320} withArrow position="right"
+              label="Testy silnika meczowego społeczności FM-Arena: najwięcej punktów daje szybkość i przyspieszenie, potem skoczność, zwinność i drybling. Włączone - te atrybuty mają większą wagę w ocenie roli (bez bramkarzy).">
+              <Switch mt={6} label="Wagi atrybutów wg testów silnika" checked={filtry.silnik_fm}
+                onChange={(e) => zmien('silnik_fm', e.currentTarget.checked)} />
+            </Tooltip>
+          </div>
+        )}
+
+        {p.maMojKlub && meta?.ma_reputacje && (
+          <Select label="Czy przyjdzie? Szansa co najmniej" clearable placeholder="Dowolna"
+            description="Z reputacji zawodnika i mojego klubu: jak często zawodnicy (kariera FM27, 13 tys. transferów) przechodzili do klubu o takiej różnicy reputacji"
+            value={filtry.min_szansa} onChange={(v) => zmien('min_szansa', v)}
+            data={[
+              { value: 'niska', label: 'niska (co najmniej 4%)' },
+              { value: 'średnia', label: 'średnia (co najmniej 15%)' },
+              { value: 'wysoka', label: 'wysoka (co najmniej 40%)' },
+            ]} />
+        )}
+
+        {p.maMojKlub && meta?.ma_hg && (
+          <Select label="Home-grown" clearable placeholder="Dowolnie"
+            description="Wychowankowie: 3 lata w klubach kraju (lub klubu) między 15. a 21. rokiem życia - limity rejestracji, np. w Lidze Mistrzów"
+            value={filtry.home_grown} onChange={(v) => zmien('home_grown', v)}
+            data={[
+              { value: 'kraj', label: 'wychowanek kraju mojego klubu' },
+              { value: 'klub', label: 'wychowanek mojego klubu' },
+            ]} />
+        )}
 
         {p.maMojKlub && (
           <Switch label="Pomiń mój klub" checked={filtry.bez_mojego_klubu}

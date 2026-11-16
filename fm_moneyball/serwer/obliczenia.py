@@ -11,7 +11,7 @@ from datetime import date
 import pandas as pd
 from fastapi import HTTPException
 
-from fm_moneyball import analiza, historia, model
+from fm_moneyball import analiza, fm_gra, historia, model
 from fm_moneyball.serwer.modele import RankingModel
 from fm_moneyball.stale import POZYCJE
 from fm_moneyball.wycena import wycen
@@ -90,6 +90,16 @@ class Obliczenia:
         tekst = self.stan.migawka()["meta"].get("data_gry")
         return date.fromisoformat(tekst) if tekst else None
 
+    def kontekst_fm(self):
+        """(kraj, reputacja) mojego klubu z wszystkich zawodnikow - pula pozycji moze nie miec moich."""
+        wersja = self.stan.wersja
+        if getattr(self, "_kontekst_fm", (None,))[0] != wersja:
+            wszyscy = self.stan.wszyscy_zawodnicy()
+            moj_klub = self.stan.migawka()["meta"].get("moj_klub_uid")
+            kontekst = fm_gra.kraj_i_reputacja_klubu(wszyscy, moj_klub) if wszyscy is not None else (None, None)
+            self._kontekst_fm = (wersja, kontekst)
+        return self._kontekst_fm[1]
+
     def policz(self, pozycja, wagi, ignoruj_mnoznik, k_baza, kandydaci=False, kandydaci_z=()):
         """-> (policzona pula, pominiete cechy, opis modelu wyceny)"""
         df = self.pula(pozycja)
@@ -115,6 +125,10 @@ class Obliczenia:
         korekta = None if ignoruj_mnoznik or 'Mnożnik_Ligi' not in policzona.columns else \
             50.0 * (policzona['Mnożnik_Ligi'] - 1.0)
         policzona = historia.prognoza(policzona, korekta)
+        # funkcje FM: szansa transferu, klauzula, home-grown i ocena w najlepszej roli (z wagami silnika)
+        moj_klub = self.stan.migawka()["meta"].get("moj_klub_uid")
+        policzona = fm_gra.dolicz_fm(policzona, moj_klub, self.data_gry(), self.kontekst_fm())
+        policzona = fm_gra.dolicz_role(policzona, pozycja)
         wynik = (analiza.wzbogac(policzona, self.data_gry()), pominiete, model_wyceny)
         with self._blokada:
             self._policzone[klucz] = wynik
@@ -208,6 +222,8 @@ class Obliczenia:
         policzona, pominiete, model_wyceny = self.policz(z.pozycja, z.wagi, z.ignoruj_mnoznik, z.k_baza,
                                                          z.filtry.kandydaci, z.filtry.kandydaci_z)
         filtry = analiza.Filtry(**z.filtry.model_dump())
+        if filtry.rola_fm or not filtry.silnik_fm:
+            policzona = fm_gra.dolicz_role(policzona, z.pozycja, filtry.rola_fm, filtry.silnik_fm)
         moj_klub = self.stan.migawka()["meta"].get("moj_klub_uid")
         widoczni = analiza.filtruj(policzona, filtry, self.data_gry(), moj_klub)
         ukryci_moi = 0

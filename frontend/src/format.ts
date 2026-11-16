@@ -7,6 +7,14 @@ export function eur(x: number | null | undefined): string {
   return `${Math.round(x)} €`;
 }
 
+// Kategoria szansy transferu z udzialu transferow w % (progi jak fm_gra.PROGI_SZANSY)
+export function szansaTransferu(udzial: number): string {
+  if (udzial >= 40) return 'wysoka';
+  if (udzial >= 15) return 'średnia';
+  if (udzial >= 4) return 'niska';
+  return 'bardzo niska';
+}
+
 export function formatuj(wartosc: unknown, format: Format): string {
   if (wartosc === null || wartosc === undefined || wartosc === '') return '–';
   if (typeof wartosc !== 'number') {
@@ -30,6 +38,9 @@ export function formatuj(wartosc: unknown, format: Format): string {
       return `×${wartosc.toFixed(1).replace('.', ',')}`;
     case 'eur_tyg':
       return `${eur(wartosc / 52)} / tydz.`;
+    case 'szansa':
+      // udzial prawdziwych transferow z taka roznica reputacji (fm_gra.PROGI_SZANSY)
+      return `${szansaTransferu(wartosc)} · ${Math.round(wartosc)}%`;
     case 'zmiana':
       // ponizej dokladnosci wyswietlania (np. -0,04) to brak zmiany - bez "-0,0"
       if (Math.abs(wartosc) < 0.05) return '0,0';

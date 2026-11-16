@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 import { api, type Wiersz, type ZapytanieRankingu } from '../api';
-import { eur, formatuj } from '../format';
+import { eur, formatuj, kolorWyniku, szansaTransferu } from '../format';
 import HistoriaZawodnika from './HistoriaZawodnika';
 import NaTleMojego from './NaTleMojego';
 import RozbicieWyniku from './RozbicieWyniku';
@@ -35,6 +35,58 @@ function Pole({ etykieta, wartosc }: { etykieta: string; wartosc: string }) {
     <Stack gap={0}>
       <Text size="xs" c="dimmed">{etykieta}</Text>
       <Text size="sm" fw={600}>{wartosc}</Text>
+    </Stack>
+  );
+}
+
+// Funkcje FM z zapisu gry: oceny we wszystkich rolach pozycji (atrybuty 1-20), szansa transferu, klauzula, HG
+function SekcjaFM({ id, w, zapytanie, wersja }: { id: string; w: Wiersz; zapytanie: ZapytanieRankingu; wersja: number }) {
+  const silnik = zapytanie.filtry.silnik_fm ?? true;
+  const dane = useQuery({
+    queryKey: ['zawodnik-fm', wersja, zapytanie.pozycja, id, zapytanie.wagi, zapytanie.k_baza,
+      zapytanie.ignoruj_mnoznik, silnik],
+    queryFn: () => api.zawodnik({ pozycja: zapytanie.pozycja, id, wagi: zapytanie.wagi,
+      ignoruj_mnoznik: zapytanie.ignoruj_mnoznik, k_baza: zapytanie.k_baza, silnik_fm: silnik }),
+    retry: false,
+  });
+  const d = dane.data ?? {};
+  const role = Object.entries(d).filter(([k, v]) => k.startsWith('Rola|') && typeof v === 'number')
+    .map(([k, v]) => [k.slice(5), v as number] as const).sort((a, b) => b[1] - a[1]);
+  const x: Wiersz = { ...w, ...d };
+  const udzial = typeof x['Szansa_udział'] === 'number' ? x['Szansa_udział'] as number : null;
+  const klauzula = typeof x['Klauzula'] === 'number' ? x['Klauzula'] as number : null;
+  const hg = x['HG'] === 'klub' ? 'wychowanek mojego klubu' : x['HG'] === 'kraj' ? 'wychowanek kraju mojego klubu' : null;
+  if (!role.length && udzial === null && klauzula === null && !hg) return null;
+  return (
+    <Stack gap={6}>
+      <Text fw={600} size="sm">Według gry (atrybuty i kontrakt z zapisu)</Text>
+      {role.length > 0 && (
+        <Group gap={6}>
+          {role.map(([nazwa, ocena], i) => (
+            <Tooltip key={nazwa} label={`Średnia ważona atrybutów roli w skali 1-20${silnik ? ', z wagami silnika' : ''}`}>
+              <Badge variant={i === 0 ? 'filled' : 'light'} color="gray" radius="sm"
+                styles={{ root: { textTransform: 'none' } }}
+                leftSection={<span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 4,
+                  background: kolorWyniku(30 + (ocena - 6) * 4) }} />}>
+                {nazwa}: {formatuj(ocena, 'dec1')}
+              </Badge>
+            </Tooltip>
+          ))}
+        </Group>
+      )}
+      <Group gap="lg">
+        {udzial !== null && (
+          <Tooltip multiline w={320} label={'Z różnicy reputacji mojego klubu i zawodnika: tyle transferów (kariera FM27, 13 tys. przypadków) '
+            + 'trafiło do klubu o takiej lub większej różnicy. Gra bierze pod uwagę też ambicję (ukryta) i rolę w drużynie.'}>
+            <div><Pole etykieta="Czy przyjdzie?" wartosc={`${szansaTransferu(udzial)} (${Math.round(udzial)}%)`} /></div>
+          </Tooltip>
+        )}
+        {klauzula !== null && (
+          <Pole etykieta={`Klauzula odstępnego${x['Klauzula_krajowa_do'] ? ` (krajowa do ${formatuj(x['Klauzula_krajowa_do'], 'data')})` : ''}`}
+            wartosc={eur(klauzula)} />
+        )}
+        {hg && <Pole etykieta="Home-grown" wartosc={hg} />}
+      </Group>
     </Stack>
   );
 }
@@ -162,6 +214,8 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
               kontrakt), więc niedowartościowanie jest zaniżone - zawodnik może być tańszy, niż wynika z tej liczby.
             </Text>
           ) : null}
+
+          <SekcjaFM id={id} w={w} zapytanie={zapytanie} wersja={wersja} />
 
           {id && <RozbicieWyniku id={id} zapytanie={zapytanie} wersja={wersja} />}
 
