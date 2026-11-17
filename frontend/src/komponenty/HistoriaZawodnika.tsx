@@ -1,5 +1,4 @@
-import { Alert, Group, Loader, MultiSelect, Stack, Table, Text, Title } from '@mantine/core';
-import { useState } from 'react';
+import { Alert, Group, Loader, Stack, Table, Text, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 
 import { api, type Historia, type PunktHistorii, type Wiersz, type ZapytanieRankingu } from '../api';
@@ -44,8 +43,10 @@ function RozwojAtrybutow({ dane }: { dane: Historia }) {
     })
     .filter((x) => x.od !== null || x.doo !== null) : [];
   const kluczowe = (dane.atrybuty_kluczowe ?? []).filter((a) => zmiany.some((x) => x.a === a));
-  const [wybrane, setWybrane] = useState<string[] | null>(null);
-  const naWykresie = wybrane ?? kluczowe.slice(0, 6);
+  // tylko atrybuty, ktore zmienily sie miedzy migawkami (w dowolnym momencie, nie tylko pierwsza - ostatnia)
+  const zmienione = zmiany.filter((x) => new Set(punkty.map((p) => p.atrybuty?.[x.a] ?? null)
+    .filter((v) => v !== null)).size > 1).sort((a, b) => (b.z ?? 0) - (a.z ?? 0));
+  const naWykresie = zmienione.map((x) => x.a);
   if (punkty.length < 2) {
     return (
       <Text size="xs" c="dimmed">
@@ -54,7 +55,6 @@ function RozwojAtrybutow({ dane }: { dane: Historia }) {
       </Text>
     );
   }
-  const zmienione = zmiany.filter((x) => x.z !== null && x.z !== 0).sort((a, b) => (b.z ?? 0) - (a.z ?? 0));
   const suma = zmiany.reduce((acc, x) => acc + (x.z ?? 0), 0);
   return (
     <Stack gap="xs">
@@ -64,23 +64,20 @@ function RozwojAtrybutow({ dane }: { dane: Historia }) {
         wzrosło {zmiany.filter((x) => (x.z ?? 0) > 0).length}, spadło {zmiany.filter((x) => (x.z ?? 0) < 0).length}.
         Atrybuty z zapisu gry (w grze widoczne po skautingu).
       </Text>
-      <MultiSelect size="xs" label="Atrybuty na wykresie" placeholder="Wybierz atrybuty" searchable clearable
-        data={zmiany.map((x) => ({ value: x.a, label: nazwy[x.a] ?? x.a }))}
-        value={naWykresie} onChange={setWybrane} />
-      <Wykres
+      {zmienione.length > 0 && <Wykres
         wysokosc={240}
         opcje={{
           tooltip: { trigger: 'axis' },
           legend: { top: 0, type: 'scroll' },
           grid: { left: 40, right: 20, top: 35, bottom: 30 },
           xAxis: { type: 'category', data: punkty.map((p) => formatuj(p.data, 'data')) },
-          yAxis: { type: 'value', min: 0, max: 20, interval: 5 },
+          yAxis: { type: 'value', scale: true, minInterval: 1, min: (v: { min: number }) => Math.max(1, v.min - 1), max: (v: { max: number }) => Math.min(20, v.max + 1) },
           series: naWykresie.map((a) => ({
             name: nazwy[a] ?? a, type: 'line' as const, connectNulls: true,
             data: punkty.map((p) => p.atrybuty?.[a] ?? null),
           })),
         }}
-      />
+      />}
       {zmienione.length > 0 ? (
         <Table striped withTableBorder fz="xs">
           <Table.Thead>
@@ -97,8 +94,8 @@ function RozwojAtrybutow({ dane }: { dane: Historia }) {
                 <Table.Td>{nazwy[x.a] ?? x.a}{kluczowe.includes(x.a) ? ' ★' : ''}</Table.Td>
                 <Table.Td ta="right">{x.od ?? '–'}</Table.Td>
                 <Table.Td ta="right">{x.doo ?? '–'}</Table.Td>
-                <Table.Td ta="right" style={{ color: (x.z ?? 0) > 0 ? '#69db7c' : '#ff8787' }}>
-                  {(x.z ?? 0) > 0 ? '+' : ''}{x.z}
+                <Table.Td ta="right" style={{ color: (x.z ?? 0) > 0 ? '#69db7c' : (x.z ?? 0) < 0 ? '#ff8787' : undefined }}>
+                  {(x.z ?? 0) > 0 ? '+' : ''}{x.z ?? '–'}
                 </Table.Td>
               </Table.Tr>
             ))}

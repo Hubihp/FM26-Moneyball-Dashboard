@@ -66,7 +66,12 @@ function Podsumowanie({ p }: { p: PodsumowanieMeczow }) {
   );
 }
 
-function TabelaMeczow({ mecze, naRywala }: { mecze: Mecz[]; naRywala?: (uid: string) => void }) {
+const kluczMeczu = (m: Mecz) => `${m.data}|${m.rywal_uid}`;
+
+function TabelaMeczow({ mecze, naRywala, wybrany, naWskazanie }: {
+  mecze: Mecz[]; naRywala?: (uid: string) => void;
+  wybrany?: string | null; naWskazanie?: (klucz: string | null) => void;
+}) {
   return (
     <Table striped highlightOnHover withTableBorder fz="xs">
       <Table.Thead>
@@ -87,7 +92,11 @@ function TabelaMeczow({ mecze, naRywala }: { mecze: Mecz[]; naRywala?: (uid: str
         {[...mecze].reverse().map((m) => {
           const l = litera(m);
           return (
-            <Table.Tr key={`${m.data}-${m.rywal_uid}`} style={naRywala ? { cursor: 'pointer' } : undefined}
+            <Table.Tr key={kluczMeczu(m)} data-mecz={kluczMeczu(m)}
+              style={{ cursor: naRywala ? 'pointer' : undefined,
+                background: wybrany === kluczMeczu(m) ? 'var(--mantine-color-teal-light)' : undefined }}
+              onMouseEnter={naWskazanie ? () => naWskazanie(kluczMeczu(m)) : undefined}
+              onMouseLeave={naWskazanie ? () => naWskazanie(null) : undefined}
               onClick={naRywala ? () => naRywala(m.rywal_uid) : undefined}>
               <Table.Td>{formatuj(m.data, 'data')}</Table.Td>
               <Table.Td>{m.rozgrywki}</Table.Td>
@@ -115,9 +124,11 @@ function TabelaMeczow({ mecze, naRywala }: { mecze: Mecz[]; naRywala?: (uid: str
   );
 }
 
-// Srednia kroczaca xG za i przeciw (ostatnie OKNO_SREDNIEJ meczow z xG)
-function WykresXg({ mecze }: { mecze: Mecz[] }) {
+// Srednia kroczaca xG przeciw (ostatnie OKNO_SREDNIEJ meczow z xG); wskazany mecz podswietlony na wykresie,
+// klikniecie punktu wskazuje mecz w tabeli
+function WykresXg({ mecze, wybrany, naWybor }: { mecze: Mecz[]; wybrany: string | null; naWybor: (k: string) => void }) {
   const z = mecze.filter((m) => m.xg !== null && m.xg_rywala !== null);
+  const indeks = wybrany ? z.findIndex((m) => kluczMeczu(m) === wybrany) : -1;
   const srednia = (klucz: 'xg' | 'xg_rywala') => z.map((_, i) => {
     const okno = z.slice(Math.max(0, i - OKNO_SREDNIEJ + 1), i + 1);
     return Number((okno.reduce((a, m) => a + (m[klucz] ?? 0), 0) / okno.length).toFixed(2));
@@ -142,10 +153,12 @@ function WykresXg({ mecze }: { mecze: Mecz[] }) {
         xAxis: { type: 'category', data: z.map((m) => formatuj(m.data, 'data')) },
         yAxis: { type: 'value', min: 0 },
         series: [
-          { name: `xG za (średnia z ${OKNO_SREDNIEJ})`, type: 'line', data: srednia('xg'), color: '#69db7c', smooth: true },
-          { name: `xG przeciw (średnia z ${OKNO_SREDNIEJ})`, type: 'line', data: srednia('xg_rywala'), color: '#ff8787', smooth: true },
+          { name: `xG przeciw (średnia z ${OKNO_SREDNIEJ})`, type: 'line', data: srednia('xg_rywala'), color: '#ff8787',
+            smooth: true, emphasis: { focus: 'none', scale: 2 }, symbolSize: 6 },
         ],
       }}
+      podswietl={indeks >= 0 ? indeks : null}
+      naKlik={(_, i) => { if (i !== undefined && z[i]) naWybor(kluczMeczu(z[i])); }}
     />
   );
 }
@@ -259,6 +272,11 @@ export default function Mecze(props: Props) {
   const [widok, setWidok] = useState<'analiza' | 'rywal'>('analiza');
   const [sezon, setSezon] = useState<string | null>(null);
   const [rywal, setRywal] = useState<string | null>(null);
+  const [wskazany, setWskazany] = useState<string | null>(null);     // mecz wskazany w tabeli albo na wykresie
+  const wybierzNaWykresie = (k: string) => {
+    setWskazany(k);
+    document.querySelector(`[data-mecz="${k}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  };
   const mecze = dane.data?.mecze ?? [];
   const najblizsze = dane.data?.najblizsze ?? [];
   const sezony = useMemo(() => [...new Set(mecze.map((m) => m.sezon))].sort((a, b) => b - a), [mecze]);
@@ -305,14 +323,18 @@ export default function Mecze(props: Props) {
               </Text>
             )}
           </Card>
-          <WykresXg mecze={meczeSezonu} />
+          <WykresXg mecze={meczeSezonu} wybrany={wskazany} naWybor={wybierzNaWykresie} />
           {najblizsze.length > 0 && (
             <Text size="sm">
               Najbliższe mecze: {najblizsze.slice(0, 5).map((m) => `${formatuj(m.data, 'data')} ${m.u_siebie ? '' : '@ '}${m.rywal}`).join(' · ')}
             </Text>
           )}
-          <Text size="xs" c="dimmed">Kliknięcie meczu otwiera raport o rywalu. Gra zachowuje xG tylko części meczów.</Text>
-          <TabelaMeczow mecze={meczeSezonu} naRywala={(uid) => { setRywal(uid); setWidok('rywal'); }} />
+          <Text size="xs" c="dimmed">
+            Najechanie na mecz w tabeli podświetla go na wykresie, kliknięcie punktu na wykresie wskazuje mecz w tabeli.
+            Kliknięcie meczu w tabeli otwiera raport o rywalu. Gra zachowuje xG tylko części meczów.
+          </Text>
+          <TabelaMeczow mecze={meczeSezonu} naRywala={(uid) => { setRywal(uid); setWidok('rywal'); }}
+            wybrany={wskazany} naWskazanie={setWskazany} />
         </>
       ) : rywalWybrany ? (
         <RaportRywala uid={rywalWybrany} {...props} />

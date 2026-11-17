@@ -290,7 +290,7 @@ _FORMATY = {'SCORE': 'score', 'Percentyl': 'pasek', 'Wiek': 'int', 'Minuty': 'in
 _POLA = {'Cena': ('Wartość_Numeryczna', 'eur'), 'Płaca': ('Zarobki_Numeryczne', 'eur_tyg'),
          'Wygasa': ('Wygasa_Data', 'data'), 'Koszt (3 lata)': ('Koszt', 'eur')}
 _TEKSTOWE = {'Piłkarz', 'Klub', 'Liga', 'Pozycja', 'Kraj', 'Preferowana noga', 'Okazje', 'Pozycja na liście',
-             'Kandydat z pozycji', 'Rola FM', 'HG'}
+             'Kandydat z pozycji', 'Rola FM', 'HG', 'Sezon statystyk'}
 # Naglowki inne niz nazwa kolumny w danych
 _NAGLOWKI = {'Kraj': 'Narodowość', 'Pozycja': 'Pozycje', 'Δ SCORE': 'Δ SCORE'}
 # Kolumny Moneyball (z wzbogac), nie sa statystykami meczowymi
@@ -310,6 +310,9 @@ def kolumny_tabeli(pozycja, pula):
              if c in pula.columns and (c in NIE_STATYSTYKI or dostepna(pula, c))]
     if 'Minuty' in pula.columns and pula['Minuty'].notna().any():
         _wstaw_po(nazwy, 'Minuty', 'Klub')
+    if 'Sezon statystyk' in pula.columns and pula['Sezon statystyk'].notna().any():
+        # poczatek sezonu: statystyki czesci zawodnikow z ostatniego zakonczonego sezonu (archiwum gry)
+        _wstaw_po(nazwy, 'Sezon statystyk', 'Minuty' if 'Minuty' in nazwy else 'Klub')
     if 'Płaca' in pula.columns:
         _wstaw_po(nazwy, 'Płaca', 'Cena')
     if 'Wygasa' in pula.columns:
@@ -406,7 +409,7 @@ POLA_WIERSZA = ['ID', 'UID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Kraj', 'Wi
                 'Okazje', 'Pareto', 'Kandydat', 'Kandydat z pozycji', 'Ocena na pozycji',
                 'Wycena wg wyniku', 'Niedowartościowanie', 'Kontuzje_2_lata', 'Δ SCORE', 'Δ percentyl',
                 'Δ minut', 'Nowe pozycje', 'Δ_mała_próba', 'U21', 'Wycena_ograniczona', 'Statystyki_niepełne',
-                'Prognoza_wiek', 'Prognoza_regresja', 'Rola FM', 'Ocena roli', 'HG', 'Klauzula', 'Wartość za 2 lata', 'Zmiana wartości', 'Mnożnik_ligi_klubu', 'Udział_poza_ligą_klubu', 'Ligi_gry']
+                'Prognoza_wiek', 'Prognoza_regresja', 'Sezon statystyk', 'Rola FM', 'Ocena roli', 'HG', 'Klauzula', 'Wartość za 2 lata', 'Zmiana wartości', 'Mnożnik_ligi_klubu', 'Udział_poza_ligą_klubu', 'Ligi_gry']
 
 
 def pola_wiersza(pozycja, pula):

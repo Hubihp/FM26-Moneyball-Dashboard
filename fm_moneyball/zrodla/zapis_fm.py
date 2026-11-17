@@ -284,6 +284,65 @@ def sumuj_statystyki(wiersze, rodzaj):
     return wynik
 
 
+# --- Poczatek sezonu: statystyki z archiwum gry ---------------------------------------------------
+# Na poczatku sezonu (np. lipiec w ligach europejskich) statystyki biezacego sezonu sa wyzerowane i zawodnicy
+# odpadaja przy odczycie (prog minut) albo maja wynik z kilku meczow. Gra archiwizuje zakonczone sezony
+# (player_season_history: te same pola co biezacy sezon, season_year = rok rozpoczecia sezonu) - zawodnik
+# z mniej niz PROG_MINUT_SEZONU minutami dostaje statystyki ostatniego zakonczonego sezonu.
+PROG_MINUT_SEZONU = 450
+UDZIAL_GRAJACYCH_POCZATKU = 0.30   # (w trakcie sezonu ok. 47%, na poczatku lipca 20%) mniej zawodnikow z klubem z PROG_MINUT_SEZONU minutami - poczatek sezonu
+RODZAJE_ARCHIWUM = {"league": {"league"}, "overall": {"league", "cup", "continental"}}
+
+
+class _WierszArchiwum:
+    """Wiersz archiwum widziany jak wiersz biezacego sezonu wybranego rodzaju (overall = liga + puchary)."""
+    __slots__ = ("_w", "kind")
+
+    def __init__(self, wiersz, rodzaj):
+        self._w, self.kind = wiersz, rodzaj
+
+    def __getattr__(self, nazwa):
+        return getattr(self._w, nazwa)
+
+
+def poczatek_sezonu(liczniki, zawodnicy, prog=PROG_MINUT_SEZONU):
+    """Czy wiekszosc zawodnikow z klubem nie ma jeszcze minut w sezonie (wtedy warto czytac archiwum)."""
+    z_klubem = [z for z in zawodnicy if z.club_uid is not None]
+    if not z_klubem:
+        return False
+    grajacy = sum(1 for z in z_klubem if ((liczniki.get(z.uid) or {}).get("minutes") or 0) >= prog)
+    return grajacy / len(z_klubem) < UDZIAL_GRAJACYCH_POCZATKU
+
+
+def statystyki_z_archiwum(archiwum, liczniki, rodzaj, prog=PROG_MINUT_SEZONU):
+    """
+    Wiersze archiwum (PlayerSeasonHistory) -> ({player_uid: liczniki ostatniego zakonczonego sezonu}, {player_uid:
+    rok rozpoczecia tego sezonu}) dla zawodnikow z mniej niz `prog` minutami w biezacym sezonie i z wieksza liczba
+    minut w archiwum.
+    """
+    rodzaje = RODZAJE_ARCHIWUM.get(rodzaj, {rodzaj})
+    po_zawodniku = defaultdict(list)
+    for w in archiwum:
+        if str(getattr(w, "kind", "")) in rodzaje and (getattr(w, "minutes", None) or 0) > 0:
+            po_zawodniku[w.player_uid].append(w)
+    wybrane, sezony = [], {}
+    for uid, wiersze in po_zawodniku.items():
+        teraz = (liczniki.get(uid) or {}).get("minutes") or 0
+        if teraz >= prog:
+            continue
+        rok = max(w.season_year for w in wiersze)
+        ostatni = [w for w in wiersze if w.season_year == rok]
+        if sum(w.minutes or 0 for w in ostatni) <= teraz:
+            continue
+        wybrane += [_WierszArchiwum(w, rodzaj) for w in ostatni]
+        sezony[uid] = rok
+    return sumuj_statystyki(wybrane, rodzaj), sezony
+
+
+def etykieta_sezonu(rok):
+    return f"{rok}/{(rok + 1) % 100:02d}"
+
+
 def sumuj_druzyny(wiersze, rodzaj):
     """Wiersze PlayerSeasonStats -> {club_uid: {licznik: suma, "nazwa", "ocena", "sklad": {player_uid: minuty}}}
     - statystyki pierwszych druzyn (wiersz zawodnika liczy sie dla klubu, w ktorym gral, takze po transferze
@@ -577,7 +636,7 @@ def dane_fm(zawodnik, kurs):
     return wynik
 
 
-def zbuduj_ramki(zawodnicy, liczniki_po_uid, liga_klubu, opcje, moje_kluby=(), kontuzje=None):
+def zbuduj_ramki(zawodnicy, liczniki_po_uid, liga_klubu, opcje, moje_kluby=(), kontuzje=None, sezon_archiwalny=None):
     """
     Zawodnicy + liczniki + liga kazdego klubu -> {pozycja: kanoniczny DataFrame}.
     Pomija zawodnikow bez wieku, ponizej progu minut i (opcjonalnie) z klubow, ktorych nie udalo
@@ -608,6 +667,8 @@ def zbuduj_ramki(zawodnicy, liczniki_po_uid, liga_klubu, opcje, moje_kluby=(), k
         if not grupy:
             continue
         wiersz = wiersz_zawodnika(zawodnik, liczniki, liga, opcje, kontuzje.get(zawodnik.uid, 0), liga_klubu)
+        rok = (sezon_archiwalny or {}).get(zawodnik.uid)
+        wiersz["Sezon statystyk"] = etykieta_sezonu(rok) if rok is not None else None
         wiersz["Pula_główna"] = grupy[0]
         wiersz["Pule"] = "; ".join(grupy)
         # kolumna "Pozycje" zawiera kazda pule zawodnika (takze glowna, gdy nie jest naturalna)
@@ -1061,6 +1122,20 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
             liczniki = sumuj_statystyki(wiersze_sezonu, opcje.rodzaj_statystyk)
             druzyny = sumuj_druzyny(wiersze_sezonu, opcje.rodzaj_statystyk)
             del wiersze_sezonu
+            sezon_archiwalny = {}
+            if poczatek_sezonu(liczniki, zawodnicy):
+                try:      # poczatek sezonu: statystyki ostatniego zakonczonego sezonu z archiwum gry
+                    z_archiwum, sezon_archiwalny = statystyki_z_archiwum(
+                        zapis.player_season_history(), liczniki, opcje.rodzaj_statystyk)
+                    liczniki.update(z_archiwum)
+                    if sezon_archiwalny:
+                        lata = Counter(sezon_archiwalny.values()).most_common(1)[0][0]
+                        ostrzezenia.append(
+                            f"Początek sezonu: {len(sezon_archiwalny)} zawodników ma mniej niż {PROG_MINUT_SEZONU} minut "
+                            f"w bieżącym sezonie, więc ich statystyki pochodzą z ostatniego zakończonego sezonu "
+                            f"(najczęściej {etykieta_sezonu(lata)}) z archiwum gry - kolumna „Sezon statystyk”.")
+                except Exception as e:   # archiwum to dodatek
+                    ostrzezenia.append(f"Nie udało się odczytać archiwum sezonów ({type(e).__name__}).")
             moje_uidy = {m.club_uid for m in zarzadzane}
             try:
                 miesiace = list(zapis.finances())
@@ -1119,7 +1194,7 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
 
     etap(5)
     moje = [{"uid": m.club_uid, "nazwa": m.club_name} for m in zarzadzane]
-    dane = zbuduj_ramki(zawodnicy, liczniki, liga_klubu, opcje, [m["uid"] for m in moje], kontuzje)
+    dane = zbuduj_ramki(zawodnicy, liczniki, liga_klubu, opcje, [m["uid"] for m in moje], kontuzje, sezon_archiwalny)
     dane = dopisz_druzyny(dane, etykiety)
     etap(None)
     return WynikZapisu(

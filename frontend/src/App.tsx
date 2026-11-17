@@ -470,7 +470,7 @@ export default function App() {
                   {filtry.kandydaci && (
                     <><span className="legenda-kandydat" /> kandydaci do przekwalifikowania z innych pozycji · </>
                   )}
-                  kliknij nazwisko, aby otworzyć kartę · zaznacz do 4 zawodników do porównania
+                  kliknij nazwisko, aby otworzyć kartę · prawy przycisk na nagłówku kolumny - filtr · zaznacz do 4 zawodników do porównania
                 </Text>
                 {!rankingPozycji && !ranking.error && (
                   <Center style={{ flex: 1 }}><Loader /></Center>

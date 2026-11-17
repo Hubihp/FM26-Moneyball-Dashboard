@@ -23,6 +23,35 @@ def utworz(stan, obl):
             raise HTTPException(409, "Nie wiem, którym klubem grasz - wczytaj zapis kariery.")
         return uid
 
+    def _kluby_ligi(uid):
+        """Kluby ligi mojego klubu: z tabeli ligi, a gdy jej nie ma (poczatek sezonu) - kluby z ta sama liga
+        w danych zawodnikow."""
+        tabela = stan.tabele.get(uid) or stan.tabele.get(str(uid)) or {}
+        kluby = [w["club_uid"] for w in tabela.get("wiersze", []) if w.get("club_uid") is not None]
+        if len(kluby) > 1:
+            return kluby
+        wszyscy = stan.wszyscy_zawodnicy()
+        if wszyscy is None or 'Liga' not in wszyscy.columns:
+            return kluby
+        liga = wszyscy.loc[wszyscy['Klub_UID'] == uid, 'Liga'].dropna()
+        if liga.empty:
+            return kluby
+        return [int(k) for k in wszyscy.loc[wszyscy['Liga'] == liga.mode().iloc[0], 'Klub_UID'].dropna().unique()]
+
+    def _nazwy_druzyn(uid):
+        """{slot: nazwa druzyny} z danych zawodnikow klubu (np. 'Rezerwy / juniorzy (Primavera)')."""
+        wszyscy = stan.wszyscy_zawodnicy()
+        nazwy = {"0": "Pierwsza drużyna"}
+        if wszyscy is None or 'Drużyna_slot' not in wszyscy.columns or 'Drużyna' not in wszyscy.columns:
+            return nazwy
+        klubu = wszyscy[(wszyscy['Klub_UID'] == uid) & wszyscy['Drużyna_slot'].notna()]
+        for slot, grupa in klubu.groupby('Drużyna_slot'):
+            if int(slot) != 0:
+                nazwa = str(grupa['Drużyna'].mode().iloc[0])
+                nazwy[str(int(slot))] = nazwa.replace("Rezerwy / juniorzy (", "").rstrip(")") \
+                    if "(" in nazwa else f"Drużyna {int(slot) + 1}"
+        return nazwy
+
     @router.get("/finanse")
     def finanse():
         """Miesieczne finanse mojego klubu, wskazniki z ostatnich 12 miesiecy i wygasajace kontrakty."""
@@ -44,8 +73,7 @@ def utworz(stan, obl):
         with blokada:
             if klucz in pamiec:
                 return pamiec[klucz]
-            tabela = stan.tabele.get(uid) or stan.tabele.get(str(uid)) or {}
-            kluby_ligi = [w["club_uid"] for w in tabela.get("wiersze", []) if w.get("club_uid") is not None]
+            kluby_ligi = _kluby_ligi(uid)
             kurs = stan.konfig.opcje_zapisu().kurs_waluty
             argumenty = (sciezka, uid, kluby_ligi, kurs)
             pula = historia_proces.pula_procesow()
@@ -63,6 +91,7 @@ def utworz(stan, obl):
                 except Exception as e:
                     raise HTTPException(500, f"Nie udało się odczytać personelu z zapisu ({type(e).__name__}).")
             wynik["liga_klubow"] = len(kluby_ligi)
+            wynik["nazwy_druzyn"] = _nazwy_druzyn(uid)
             pamiec.clear()
             pamiec[klucz] = wynik
             return wynik

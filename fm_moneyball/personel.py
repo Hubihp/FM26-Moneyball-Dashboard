@@ -46,7 +46,7 @@ OBSZARY_STANOWISK = {
     "SPORTS_SCIENTIST": ("Fizjoterapia", "Kondycja"), "HEAD_OF_SPORTS_SCIENCE": ("Fizjoterapia", "Kondycja"),
     "PERFORMANCE_ANALYST": ("Analiza danych",), "HEAD_OF_YOUTH_DEVELOPMENT": ("Praca z młodzieżą",),
 }
-KANDYDATOW = 5
+KANDYDATOW = 10
 MAKS_WIEKU_KANDYDATA = 66
 
 
@@ -91,12 +91,30 @@ def opis_osoby(s, kurs):
             "oceny": o, "obszary": list(swoje), "najlepszy_obszar": najlepszy[0], "najlepsza_ocena": najlepszy[1]}
 
 
+def _obszary_druzyny(moi, slot, najlepsi_ligi):
+    """Oceny obszarow sztabu jednej druzyny (slot) na tle najlepszych w tej samej druzynie klubow ligi."""
+    wynik = []
+    for obszar in OBSZARY:
+        swoi = [m for m in moi if m["druzyna"] == slot and obszar in m["obszary"] and m["oceny"].get(obszar) is not None]
+        moja = max((m["oceny"][obszar] for m in swoi), default=None)
+        ligi = [k.get(obszar) for (klub, s), k in najlepsi_ligi.items() if s == slot and k.get(obszar) is not None]
+        mediana = round(median(ligi), 1) if ligi else None
+        miejsce = (1 + sum(1 for v in ligi if moja is not None and v > moja)) if moja is not None and ligi else None
+        kto = next((m for m in swoi if m["oceny"][obszar] == moja), None)
+        wynik.append({"obszar": obszar, "moja": moja, "kto": kto["nazwa"] if kto else None,
+                      "kto_uid": kto["uid"] if kto else None, "mediana_ligi": mediana,
+                      "najlepsza_ligi": max(ligi, default=None), "miejsce": miejsce, "klubow": len(ligi) + 1,
+                      "luka": moja is None or (mediana is not None and moja < mediana)})
+    return wynik
+
+
 def analiza_personelu(personel, moj_klub_uid, kluby_ligi, kurs):
     """
-    personel: rekordy fmsave Staff (wszystkie kluby). Zwraca {sztab, obszary, kandydaci}:
-    sztab - moj personel (bez zarzadu i lekarza) z ocenami obszarow; obszary - najlepsza ocena w sztabie na tle
-    najlepszych w klubach ligi (mediana, maksimum, miejsce); kandydaci - dla obszarow ponizej mediany ligi
-    najlepsi pracownicy innych klubow.
+    personel: rekordy fmsave Staff (wszystkie kluby). Zwraca {sztab, druzyny, obszary, kandydaci}:
+    sztab - moj personel (bez zarzadu i lekarza) z ocenami obszarow i druzyna (slot: 0 = pierwsza, inne = rezerwy
+    i mlodziez); druzyny - {slot: obszary}: najlepsza ocena sztabu tej druzyny w kazdym obszarze na tle najlepszych
+    w tej samej druzynie klubow ligi (mediana, maksimum, miejsce, luka = ponizej mediany); obszary - pierwsza
+    druzyna; kandydaci - dla kazdego obszaru najlepsi pracownicy innych klubow lepsi niz obecny w pierwszej druzynie.
     """
     moi, najlepsi_ligi = [], {}
     pula = []
@@ -110,34 +128,22 @@ def analiza_personelu(personel, moj_klub_uid, kluby_ligi, kurs):
         if s.club_uid == moj_klub_uid:
             moi.append(opis_osoby(s, kurs))
         elif s.club_uid in kluby_ligi:
-            najlepsze = najlepsi_ligi.setdefault(s.club_uid, {})
+            najlepsze = najlepsi_ligi.setdefault((s.club_uid, s.team_slot or 0), {})
             for obszar, v in o.items():
                 if v is not None and v > najlepsze.get(obszar, 0):
                     najlepsze[obszar] = v
         if s.club_uid != moj_klub_uid and (s.age or 0) <= MAKS_WIEKU_KANDYDATA and _stanowisko(s) in OBSZARY_STANOWISK:
             pula.append((s, o))
-    obszary = []
-    for obszar in OBSZARY:
-        moje = [m["oceny"].get(obszar) for m in moi if m["druzyna"] == 0 and obszar in m["obszary"]
-                and m["oceny"].get(obszar) is not None]
-        moja = max(moje, default=None)
-        ligi = [k.get(obszar) for k in najlepsi_ligi.values() if k.get(obszar) is not None]
-        mediana = round(median(ligi), 1) if ligi else None
-        miejsce = (1 + sum(1 for v in ligi if moja is not None and v > moja)) if moja is not None and ligi else None
-        kto = next((m["nazwa"] for m in moi if m["druzyna"] == 0 and obszar in m["obszary"]
-                    and m["oceny"].get(obszar) == moja), None)
-        obszary.append({"obszar": obszar, "moja": moja, "kto": kto, "mediana_ligi": mediana,
-                        "najlepsza_ligi": max(ligi, default=None), "miejsce": miejsce, "klubow": len(ligi) + 1,
-                        "luka": moja is None or (mediana is not None and moja < mediana)})
+    druzyny = {slot: _obszary_druzyny(moi, slot, najlepsi_ligi) for slot in sorted({m["druzyna"] for m in moi} | {0})}
+    obszary = druzyny[0]
     kandydaci = {}
     for o in obszary:
-        if not o["luka"]:
-            continue
         lepsi = sorted(((s, oc) for s, oc in pula if (oc.get(o["obszar"]) or 0) > (o["moja"] or 0)),
                        key=lambda x: -(x[1].get(o["obszar"]) or 0))[:KANDYDATOW]
         kandydaci[o["obszar"]] = [opis_osoby(s, kurs) for s, _ in lepsi]
     moi.sort(key=lambda m: -(m["najlepsza_ocena"] or 0))
-    return {"sztab": moi, "obszary": obszary, "kandydaci": kandydaci, "obszary_opis": {k: list(v) for k, v in OBSZARY.items()}}
+    return {"sztab": moi, "druzyny": {str(k): v for k, v in druzyny.items()}, "obszary": obszary,
+            "kandydaci": kandydaci, "obszary_opis": {k: list(v) for k, v in OBSZARY.items()}}
 
 
 def personel_z_zapisu(sciezka, moj_klub_uid, kluby_ligi, kurs):

@@ -11,6 +11,19 @@ const KROK = 0.1;
 export const ograniczSkale = (s: number) =>
   Math.round(Math.min(SKALA_MAX, Math.max(SKALA_MIN, s)) * 100) / 100;
 
+export const ZDARZENIE_SKALI = 'fm-skala';
+
+// Biezaca skala interfejsu jako stan komponentu (zmienia sie z powiekszeniem)
+export function useSkala(): number {
+  const [s, setS] = useState(skalaInterfejsu);
+  useEffect(() => {
+    const zmiana = () => setS(skalaInterfejsu());
+    window.addEventListener(ZDARZENIE_SKALI, zmiana);
+    return () => window.removeEventListener(ZDARZENIE_SKALI, zmiana);
+  }, []);
+  return s;
+}
+
 // Biezaca skala (do przeliczania wspolrzednych kursora na style elementow position: fixed)
 export const skalaInterfejsu = () => parseFloat(document.documentElement.style.zoom || '1') || 1;
 
@@ -27,6 +40,7 @@ export function usePowiekszenie(): [number, boolean] {
     document.documentElement.style.zoom = s;
     // jednostki vh/dvh rosna razem z zoomem - wysokosci "na caly ekran" dziela przez --skala (style.css)
     document.documentElement.style.setProperty('--skala', s);
+    window.dispatchEvent(new Event(ZDARZENIE_SKALI));      // wykresy przeliczaja skale (Wykres.tsx)
   }, [skala]);
 
   useEffect(() => {

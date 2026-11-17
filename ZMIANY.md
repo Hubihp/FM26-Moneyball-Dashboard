@@ -3,6 +3,24 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 2.5.0
+
+- Początek sezonu: w lipcu statystyki sezonu są w zapisie wyzerowane, więc zawodnicy lig europejskich
+  znikali z rankingu (np. bramkarz Osako, który miał SCORE 56). Program bierze wtedy statystyki ostatniego
+  zakończonego sezonu z archiwum gry. Kolumna „Sezon statystyk” pokazuje, skąd są dane.
+- Filtry w tabelach: bez ikonek w nagłówkach - filtr kolumny otwiera prawy przycisk myszy na nagłówku.
+  Kolumna z aktywnym filtrem ma wyróżniony nagłówek.
+- Karta zawodnika jest szersza i czytelniejsza.
+- Rozwój atrybutów pokazuje tylko atrybuty, które się zmieniły, i od razu wszystkie rysuje na wykresie.
+- Wykresy działają poprawnie przy każdym powiększeniu: podpowiedź jest pod kursorem, a wykres ostry.
+- Mecze: wykres pokazuje średnią xG przeciw; mecz wskazany w tabeli jest podświetlony na wykresie,
+  a kliknięcie punktu wskazuje mecz w tabeli.
+- Finanse: nowy wykres - przepływy miesiąca (przychody w górę, wydatki w dół, transfery, wynik)
+  i osobno saldo.
+- Personel: sztab podzielony na drużyny (pierwsza, rezerwy, młodzież) z oceną dla każdej drużyny
+  na tle ligi. „Wzmocnij obszar”: wybór obszaru i kandydaci z innych klubów zestawieni z obecnym
+  członkiem sztabu.
+
 ## 2.4.0
 
 - Usunięte „Czy przyjdzie?” (kolumna, filtr i pole na karcie zawodnika): gra liczy zainteresowanie

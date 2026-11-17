@@ -101,7 +101,9 @@ function opisFiltru(f: unknown): string {
 // Stale obiekty (nie tworzone przy kazdym renderze): nowy obiekt kazal siatce przebudowac kolumny,
 // co przywracalo domyslne sortowanie SCORE obok sortowania wybranego przez uzytkownika
 const KOLUMNA_ZAZNACZENIA = { pinned: 'left' as const, width: 46, headerTooltip: 'Zaznacz do porównania' };
-const DOMYSLNA_KOLUMNA = { wrapHeaderText: true, autoHeaderHeight: false, width: 120 };
+// Bez ikonek filtra i menu w naglowkach (zabieraly miejsce): filtr kolumny otwiera prawy przycisk na naglowku
+const DOMYSLNA_KOLUMNA = { wrapHeaderText: true, autoHeaderHeight: false, width: 120, suppressHeaderFilterButton: true,
+  suppressHeaderMenuButton: true };
 
 function wczytajUklad(klucz: string | undefined): ColumnState[] | null {
   if (!klucz) return null;
@@ -431,7 +433,9 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         )}
         </Group>
       </Group>
-      <div style={{ flex: 1, minHeight: 0 }}>
+      {/* prawy przycisk na naglowku otwiera filtr kolumny - bez menu przegladarki */}
+      <div style={{ flex: 1, minHeight: 0 }}
+        onContextMenu={(e) => { if ((e.target as HTMLElement).closest('.ag-header')) e.preventDefault(); }}>
       <AgGridReact<Wiersz>
         ref={siatka}
         theme={motywTabeli}
@@ -475,6 +479,11 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
               void kopiuj(tekst).then((ok) => menu.komunikat(ok ? `Skopiowano: ${tekst}` : 'Nie udało się skopiować'));
             }
           }
+        }}
+        // prawy przycisk na naglowku kolumny: jej filtr
+        onColumnHeaderContextMenu={(e) => {
+          if (!e.column || !('getColDef' in e.column) || !e.column.getColDef().filter) return;
+          e.api.showColumnFilter(e.column);
         }}
         onFilterChanged={(e) => {
           if (!naFiltryKolumn || e.source === 'api') return;

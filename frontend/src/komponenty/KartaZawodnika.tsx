@@ -33,8 +33,8 @@ const zmiana = (x: unknown) => (typeof x === 'number' ? `${x >= 0 ? '+' : '−'}
 function Pole({ etykieta, wartosc }: { etykieta: string; wartosc: string }) {
   return (
     <Stack gap={0}>
-      <Text size="xs" c="dimmed">{etykieta}</Text>
-      <Text size="sm" fw={600}>{wartosc}</Text>
+      <Text size="sm" c="dimmed">{etykieta}</Text>
+      <Text size="md" fw={600}>{wartosc}</Text>
     </Stack>
   );
 }
@@ -118,7 +118,7 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
   const okazje = typeof w['Okazje'] === 'string' && w['Okazje'] ? (w['Okazje'] as string).split('; ') : [];
 
   return (
-    <Drawer opened={!!id} onClose={zamknij} position="right" size="xl"
+    <Drawer opened={!!id} onClose={zamknij} position="right" size="min(1400px, 78%)"
       title={(
         <Group gap="sm" wrap="nowrap">
           <Title order={4}>{String(w['Piłkarz'] ?? id ?? '')}</Title>
@@ -165,7 +165,7 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
               </Tooltip>
             ) : null}
           </Group>
-          <SimpleGrid cols={4}>
+          <SimpleGrid cols={{ base: 3, lg: 5 }}>
             <Pole etykieta="SCORE" wartosc={formatuj(w['SCORE'], 'score')} />
             <Pole etykieta="Percentyl" wartosc={formatuj(w['Percentyl'], 'pasek')} />
             <Pole etykieta="Wiek" wartosc={formatuj(w['Wiek'], 'int')} />

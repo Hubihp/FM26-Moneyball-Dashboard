@@ -75,7 +75,7 @@ export default function Okazje({ zapytanie, okazje, wersja, mojKlubUid, naWybor,
         <>
           <Text size="sm">
             Znaleziono: {ranking.data.liczba}
-            <Text span size="xs" c="dimmed"> · kliknij nazwisko, aby otworzyć kartę · zaznacz do 4 zawodników do porównania</Text>
+            <Text span size="xs" c="dimmed"> · kliknij nazwisko, aby otworzyć kartę · prawy przycisk na nagłówku - filtr · zaznacz do 4 zawodników do porównania</Text>
           </Text>
           <Box style={{ flex: 1, minHeight: 300 }}>
             <TabelaRankingu kolumny={ranking.data.kolumny} wiersze={ranking.data.wiersze} mojKlubUid={mojKlubUid}

@@ -24,6 +24,7 @@ def test_oceny_obszarow_i_luki():
     skauting = next(o for o in wynik["obszary"] if o["obszar"] == "Skauting")
     assert skauting["moja"] == 12.0 and skauting["mediana_ligi"] == 17.0 and skauting["luka"] and skauting["miejsce"] == 3
     assert [k["uid"] for k in wynik["kandydaci"]["Skauting"]] == ["5", "3", "4"]   # bez dzialacza o nieznanym stanowisku
+    assert list(wynik["druzyny"]) == ["0"] and wynik["druzyny"]["0"] == wynik["obszary"]
     fizjo = next(m for m in wynik["sztab"] if m["uid"] == "2")
     assert fizjo["najlepszy_obszar"] == "Fizjoterapia"          # nie praca z mlodzieza - nie jego obszar
 

@@ -568,3 +568,24 @@ def test_mnozniki_wg_klucza_i_reczne():
     assert list(w["Mnożnik_Ligi"]) == [0.92, 0.6, 0.92] and list(w["Liga_bez_mnoznika"]) == [False, True, False]
     w = ustaw_ligi(df, {11: "Premier League"}, {"Premier League": 0.8}, mnoznik_nieznanej=0.6, mnozniki_klucz={11: 0.92})
     assert w["Mnożnik_Ligi"].iloc[0] == 0.8                              # reczny mnoznik uzytkownika wygrywa
+
+
+def test_poczatek_sezonu_statystyki_z_archiwum():
+    from types import SimpleNamespace
+
+    from fm_moneyball.zrodla.zapis_fm import poczatek_sezonu, statystyki_z_archiwum
+
+    def wiersz(uid, rok, minuty, rodzaj="league", gole=0):
+        return SimpleNamespace(player_uid=uid, season_year=rok, minutes=minuty, kind=rodzaj, goals=gole,
+                               club_uid=7, team_slot=0, distance_km=None, passes_attempted=None)
+    archiwum = [wiersz(1, 2026, 900, gole=1), wiersz(1, 2027, 3330, gole=5), wiersz(1, 2027, 300, "cup", gole=2),
+                wiersz(2, 2027, 2000), wiersz(3, 2027, 100)]
+    liczniki = {1: {"minutes": 0}, 2: {"minutes": 900}, 3: {"minutes": 200}}
+    z_archiwum, sezony = statystyki_z_archiwum(archiwum, liczniki, "league")
+    assert sezony == {1: 2027}                    # 2: dosc minut w sezonie; 3: archiwum nie ma wiecej minut
+    assert z_archiwum[1]["minutes"] == 3330 and z_archiwum[1]["goals"] == 5
+    z_archiwum, _ = statystyki_z_archiwum(archiwum, liczniki, "overall")      # liga + puchary
+    assert z_archiwum[1]["minutes"] == 3630 and z_archiwum[1]["goals"] == 7
+    zawodnicy = [SimpleNamespace(uid=u, club_uid=7) for u in (1, 2, 3, 4)]
+    assert poczatek_sezonu({1: {"minutes": 0}, 2: {"minutes": 500}}, zawodnicy)        # 1 z 4 grajacych
+    assert not poczatek_sezonu({u: {"minutes": 900} for u in (1, 2, 3)}, zawodnicy)

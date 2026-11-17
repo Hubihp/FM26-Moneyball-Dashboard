@@ -117,10 +117,14 @@ export type OsobaPersonelu = {
   obszary: string[]; najlepszy_obszar: string | null; najlepsza_ocena: number | null;
 };
 
+export type ObszarSztabu = { obszar: string; moja: number | null; kto: string | null; kto_uid: string | null;
+  mediana_ligi: number | null; najlepsza_ligi: number | null; miejsce: number | null; klubow: number; luka: boolean };
+
 export type Personel = {
   sztab: OsobaPersonelu[];
-  obszary: { obszar: string; moja: number | null; kto: string | null; mediana_ligi: number | null;
-    najlepsza_ligi: number | null; miejsce: number | null; klubow: number; luka: boolean }[];
+  obszary: ObszarSztabu[];                       // pierwsza druzyna
+  druzyny: Record<string, ObszarSztabu[]>;       // slot druzyny -> obszary jej sztabu
+  nazwy_druzyn: Record<string, string>;
   kandydaci: Record<string, OsobaPersonelu[]>;
   obszary_opis: Record<string, string[]>;
   liga_klubow: number;
