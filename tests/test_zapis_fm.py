@@ -589,3 +589,18 @@ def test_poczatek_sezonu_statystyki_z_archiwum():
     zawodnicy = [SimpleNamespace(uid=u, club_uid=7) for u in (1, 2, 3, 4)]
     assert poczatek_sezonu({1: {"minutes": 0}, 2: {"minutes": 500}}, zawodnicy)        # 1 z 4 grajacych
     assert not poczatek_sezonu({u: {"minutes": 900} for u in (1, 2, 3)}, zawodnicy)
+
+
+def test_wybrany_sezon_z_archiwum():
+    from types import SimpleNamespace
+
+    from fm_moneyball.zrodla.zapis_fm import statystyki_z_archiwum
+
+    def wiersz(uid, rok, minuty):
+        return SimpleNamespace(player_uid=uid, season_year=rok, minutes=minuty, kind="league", club_uid=7, team_slot=0,
+                               distance_km=None, passes_attempted=None)
+    archiwum = [wiersz(1, 2026, 900), wiersz(1, 2027, 3000), wiersz(2, 2027, 1500)]
+    l1, s1 = statystyki_z_archiwum(archiwum, {1: {"minutes": 2000}}, "league", ktory=1)
+    assert s1 == {1: 2027, 2: 2027} and l1[1]["minutes"] == 3000      # bez wzgledu na minuty biezacego sezonu
+    l2, s2 = statystyki_z_archiwum(archiwum, {}, "league", ktory=2)
+    assert s2 == {1: 2026} and l2[1]["minutes"] == 900

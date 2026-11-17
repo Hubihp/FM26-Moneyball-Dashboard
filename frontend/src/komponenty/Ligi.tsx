@@ -195,7 +195,7 @@ function SekcjaLig({ wersja }: { wersja: number }) {
         automatyczną.
       </Text>
       <MnoznikRezerw key={String(dane.mnoznik_rezerw)} dane={dane} />
-      <Table striped highlightOnHover>
+      <Table striped>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Liga</Table.Th><Table.Th>Przykładowe kluby</Table.Th><Table.Th>Mnożnik</Table.Th>
@@ -237,7 +237,7 @@ function SekcjaKrajow({ wersja }: { wersja: number }) {
           nazw dla wszystkich krajów z zawodnikami. Nazwę możesz opcjonalnie zmienić; pusta przywraca automatyczną.
         </Text>
       )}
-      <Table striped highlightOnHover>
+      <Table striped>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Kraj</Table.Th><Table.Th>Zawodników</Table.Th><Table.Th>Najdrożsi zawodnicy</Table.Th>
@@ -257,7 +257,7 @@ function SekcjaKrajow({ wersja }: { wersja: number }) {
 // Zakladka "Ligi i kraje": ligi wykryte w zapisie i narodowosci zawodnikow
 export default function Ligi({ wersja }: { wersja: number }) {
   return (
-    <Stack p="md" gap="xl">
+    <Stack gap="xl">
       <SekcjaLig wersja={wersja} />
       <SekcjaKrajow wersja={wersja} />
     </Stack>

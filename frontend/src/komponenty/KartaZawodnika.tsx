@@ -255,7 +255,7 @@ export default function KartaZawodnika({ id, wiersz, zapytanie, wersja, mojKlubU
           <Title order={5}>Podobni zawodnicy (spośród widocznych w tabeli)</Title>
           {podobni.isLoading && <Loader size="sm" />}
           {podobni.data && (
-            <Table striped highlightOnHover>
+            <Table striped>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Piłkarz</Table.Th><Table.Th>Klub</Table.Th><Table.Th>Wiek</Table.Th>

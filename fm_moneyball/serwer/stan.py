@@ -42,7 +42,7 @@ log = logging.getLogger("fm_moneyball")
 CO_ILE_SPRAWDZAC = 15        # sekundy miedzy sprawdzeniami folderu zapisow
 # 2: domyslnie zawodnik we wszystkich pulach, w ktorych jest naturalny (wczesniej tylko glowna)
 WERSJA_USTAWIEN = 2
-WERSJA_CACHE = 26            # zmiana formatu wyniku = nowy klucz cache (26: statystyki z archiwum na poczatku sezonu)
+WERSJA_CACHE = 27            # zmiana formatu wyniku = nowy klucz cache (27: strona meczu, sezon statystyk)
 ILE_W_CACHE = 3
 MAKS_ODCZYTOW_HISTORII_NA_RAZ = 6   # starsze zapisy folderu czytane na jedno wczytanie (historia z folderu)
 PRZERWA_HISTORII_S = 3.0            # przerwa miedzy nimi - serwer odpowiada w tym czasie bez opoznien
@@ -617,6 +617,9 @@ class Stan:
         # migawka do historii rozwoju; jej brak (np. brak miejsca na dysku) nie blokuje wczytania
         try:
             if self.katalog_historii is None:
+                return
+            # statystyki wybranego zakonczonego sezonu nie sa stanem z tej daty - bez migawki
+            if self.konfig.opcje.get("sezon_statystyk") in ("ostatni", "przedostatni"):
                 return
             historia.przenies_stare(self.katalog_historii / "FM27", self.katalog_kariery())
             historia.zapisz_migawke(self.katalog_kariery(), self.dane, date.fromisoformat(self.meta["data_gry"]))

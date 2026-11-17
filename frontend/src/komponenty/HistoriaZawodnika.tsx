@@ -79,7 +79,7 @@ function RozwojAtrybutow({ dane }: { dane: Historia }) {
         }}
       />}
       {zmienione.length > 0 ? (
-        <Table striped withTableBorder fz="xs">
+        <Table striped>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Atrybut</Table.Th>
@@ -194,7 +194,7 @@ export default function HistoriaZawodnika({ id, wiersz, zapytanie, wersja }: Pro
           ],
         }}
       />
-      <Table striped withTableBorder fz="xs">
+      <Table striped>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Statystyka</Table.Th>

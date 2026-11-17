@@ -264,3 +264,7 @@ body {
   color: var(--mantine-color-teal-4);
   text-decoration: underline dotted;
 }
+
+/* wiersze list (np. zawodnicy obok tablicy taktycznej): to samo zielone podswietlenie co wiersze tabel */
+.wiersz-listy { background: var(--mantine-color-dark-6); transition: background 80ms; }
+.wiersz-listy:hover { background: rgba(18, 184, 134, 0.16); }

@@ -102,7 +102,10 @@ def zbierz_mecze(terminarz, statystyki_druzyn, moje_kluby, data_gry, kraj_klubu=
             "data": m.date.isoformat(), "sezon": m.date.year if m.date.month >= 7 else m.date.year - 1,
             "rozgrywki_id": m.competition_id,
             "rozgrywki": nazwy.get(m.competition_id, "Inne rozgrywki"),
-            "u_siebie": dom, "rywal_uid": str(m.away_club_uid if dom else m.home_club_uid),
+            "u_siebie": dom,
+            # gospodarz i gosc z terminarza; boisko neutralne wg flagi meczu (finaly, mecze na wybranym stadionie)
+            "strona": "Neutralne" if getattr(m, "is_neutral_venue", None) else ("Dom" if dom else "Wyjazd"),
+            "rywal_uid": str(m.away_club_uid if dom else m.home_club_uid),
             "rywal": (m.away_club_name if dom else m.home_club_name) or "?",
             "rozegrany": rozegrany,
             "gole": gole if rozegrany else None, "gole_rywala": gole_r if rozegrany else None,

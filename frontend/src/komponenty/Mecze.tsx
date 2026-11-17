@@ -6,6 +6,7 @@ import { api, type Mecz, type PodsumowanieMeczow } from '../api';
 import { eur, formatuj, kolorWyniku } from '../format';
 import { useMenuZawodnika } from './MenuZawodnika';
 import type { Ustawienia } from './PanelBoczny';
+import { KOLOR_PODSWIETLENIA, SZEROKOSC } from '../wyglad';
 import Wykres from './Wykres';
 
 type Props = {
@@ -16,6 +17,7 @@ type Props = {
 
 const KOLOR_WYNIKU: Record<string, string> = { W: 'teal', R: 'gray', P: 'red' };
 const OKNO_SREDNIEJ = 5;
+const KOLOR_STRONY: Record<string, string> = { Dom: 'teal', Wyjazd: 'blue', Neutralne: 'gray' };
 
 function litera(m: Mecz) {
   if (!m.rozegrany || m.gole === null || m.gole_rywala === null) return null;
@@ -73,11 +75,12 @@ function TabelaMeczow({ mecze, naRywala, wybrany, naWskazanie }: {
   wybrany?: string | null; naWskazanie?: (klucz: string | null) => void;
 }) {
   return (
-    <Table striped highlightOnHover withTableBorder fz="xs">
+    <Table striped>
       <Table.Thead>
         <Table.Tr>
           <Table.Th>Data</Table.Th>
           <Table.Th>Rozgrywki</Table.Th>
+          <Table.Th>Strona</Table.Th>
           <Table.Th>Rywal</Table.Th>
           <Table.Th ta="center">Wynik</Table.Th>
           <Table.Th ta="right">xG</Table.Th>
@@ -94,13 +97,18 @@ function TabelaMeczow({ mecze, naRywala, wybrany, naWskazanie }: {
           return (
             <Table.Tr key={kluczMeczu(m)} data-mecz={kluczMeczu(m)}
               style={{ cursor: naRywala ? 'pointer' : undefined,
-                background: wybrany === kluczMeczu(m) ? 'var(--mantine-color-teal-light)' : undefined }}
+                background: wybrany === kluczMeczu(m) ? KOLOR_PODSWIETLENIA : undefined }}
               onMouseEnter={naWskazanie ? () => naWskazanie(kluczMeczu(m)) : undefined}
               onMouseLeave={naWskazanie ? () => naWskazanie(null) : undefined}
               onClick={naRywala ? () => naRywala(m.rywal_uid) : undefined}>
               <Table.Td>{formatuj(m.data, 'data')}</Table.Td>
               <Table.Td>{m.rozgrywki}</Table.Td>
-              <Table.Td>{m.u_siebie ? '' : '@ '}{m.rywal}</Table.Td>
+              <Table.Td>
+                <Badge variant="light" color={KOLOR_STRONY[m.strona ?? (m.u_siebie ? 'Dom' : 'Wyjazd')]}>
+                  {m.strona ?? (m.u_siebie ? 'Dom' : 'Wyjazd')}
+                </Badge>
+              </Table.Td>
+              <Table.Td>{m.rywal}</Table.Td>
               <Table.Td ta="center">
                 {l ? <Badge size="sm" radius="sm" color={KOLOR_WYNIKU[l]} variant="light">{m.gole}:{m.gole_rywala}</Badge> : '–'}
               </Table.Td>
@@ -194,7 +202,7 @@ function RaportRywala({ uid, ustawienia, wersja, otworz }: { uid: string } & Pro
       </Group>
       <Text size="xs" c="dimmed">Ostatnie {p.mecze} meczów rywala (wszystkie rozgrywki):</Text>
       <Podsumowanie p={p} />
-      <Table withTableBorder fz="xs" maw={560}>
+      <Table maw={560}>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Ostatnie {Math.min(p.mecze, moje.mecze)} meczów</Table.Th>
@@ -216,7 +224,7 @@ function RaportRywala({ uid, ustawienia, wersja, otworz }: { uid: string } & Pro
 
       <Title order={6}>Kluczowi zawodnicy (najwyższy SCORE, co najmniej 900 minut)</Title>
       {r.kluczowi.length ? (
-        <Table striped highlightOnHover withTableBorder fz="xs">
+        <Table striped>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>SCORE</Table.Th>
@@ -292,23 +300,23 @@ export default function Mecze(props: Props) {
       label: `${m.rywal} - ${nadchodzacy ? 'najbliższy mecz' : 'ostatni mecz'} ${formatuj(m.data, 'data')}${m.u_siebie ? ' (dom)' : ' (wyjazd)'}` }));
   const rywalWybrany = rywal ?? opcjeRywali[0]?.value ?? null;
 
-  if (dane.isLoading) return <Loader m="md" />;
-  if (dane.error) return <Alert m="md" color="red">{(dane.error as Error).message}</Alert>;
+  if (dane.isLoading) return <Loader />;
+  if (dane.error) return <Alert color="red">{(dane.error as Error).message}</Alert>;
   if (!dane.data?.ma_dane) {
-    return <Alert m="md" color="gray">Analiza meczów wymaga zapisu gry z Twoim klubem (przy CSV i danych demo jej nie ma).</Alert>;
+    return <Alert color="gray">Analiza meczów wymaga zapisu gry z Twoim klubem (przy CSV i danych demo jej nie ma).</Alert>;
   }
   return (
-    <Stack p="md" gap="md">
+    <Stack gap="md">
       <Group justify="space-between">
         <SegmentedControl value={widok} onChange={(v) => setWidok(v as 'analiza' | 'rywal')}
           data={[{ value: 'analiza', label: 'Analiza meczów' }, { value: 'rywal', label: 'Raport o rywalu' }]} />
         {widok === 'analiza' && sezony.length > 0 && (
-          <Select size="xs" w={200} value={sezonWybrany} onChange={setSezon} allowDeselect={false}
+          <Select w={SZEROKOSC.srednia} value={sezonWybrany} onChange={setSezon} allowDeselect={false}
             data={[...sezony.map((s) => ({ value: String(s), label: `Sezon ${s}/${String((s + 1) % 100).padStart(2, '0')}` })),
               { value: 'wszystkie', label: 'Wszystkie mecze' }]} />
         )}
         {widok === 'rywal' && (
-          <Select w={420} searchable value={rywalWybrany} onChange={setRywal} data={opcjeRywali} allowDeselect={false}
+          <Select w={SZEROKOSC.bardzo_szeroka} searchable value={rywalWybrany} onChange={setRywal} data={opcjeRywali} allowDeselect={false}
             placeholder="Wybierz rywala" />
         )}
       </Group>

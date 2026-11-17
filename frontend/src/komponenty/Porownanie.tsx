@@ -40,7 +40,7 @@ export default function Porownanie({ pozycja, wersja, wiersze, wybrani, setWybra
   const opcje = [...wiersze.map((w) => String(w['ID'])), ...wybrani.filter((id) => !wiersze.some((w) => w['ID'] === id))];
 
   return (
-    <Stack p="md">
+    <Stack gap="md">
       <MultiSelect
         label="Zawodnicy do porównania (maks. 4)"
         description="Zaznacz zawodników w tabeli rankingu albo wyszukaj tutaj."
@@ -73,7 +73,7 @@ export default function Porownanie({ pozycja, wersja, wiersze, wybrani, setWybra
             }}
           />
           <Text size="sm" c="dimmed">Percentyl w pozycji {pozycja} (100 = najlepszy w puli). Przy stratach piłki liczy się odwrotnie: mniej strat daje wyższy percentyl. W tabeli zielony = najlepsza wartość wśród porównywanych, czerwony = najgorsza.</Text>
-          <Table striped withTableBorder>
+          <Table striped>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Statystyka</Table.Th>

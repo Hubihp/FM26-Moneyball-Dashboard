@@ -133,6 +133,9 @@ class OpcjeZapisu:
     wszystkie_naturalne_pozycje: bool = True   # zawodnik w kazdej puli, w ktorej jest naturalny (ocena >= 18)
     tylko_kluby_w_lidze: bool = True
     wolni_agenci: bool = True             # zawodnicy bez klubu (z minutami w sezonie) w puli
+    # sezon statystyk: "auto" (biezacy; na poczatku sezonu ostatni zakonczony dla zawodnikow bez minut),
+    # "biezacy" (tylko biezacy), "ostatni" / "przedostatni" (zakonczone sezony z archiwum gry, dla wszystkich)
+    sezon_statystyk: str = "auto"
 
 
 @dataclass(frozen=True)
@@ -314,11 +317,12 @@ def poczatek_sezonu(liczniki, zawodnicy, prog=PROG_MINUT_SEZONU):
     return grajacy / len(z_klubem) < UDZIAL_GRAJACYCH_POCZATKU
 
 
-def statystyki_z_archiwum(archiwum, liczniki, rodzaj, prog=PROG_MINUT_SEZONU):
+def statystyki_z_archiwum(archiwum, liczniki, rodzaj, prog=PROG_MINUT_SEZONU, ktory=None):
     """
     Wiersze archiwum (PlayerSeasonHistory) -> ({player_uid: liczniki ostatniego zakonczonego sezonu}, {player_uid:
     rok rozpoczecia tego sezonu}) dla zawodnikow z mniej niz `prog` minutami w biezacym sezonie i z wieksza liczba
-    minut w archiwum.
+    minut w archiwum. ktory = 1 (ostatni zakonczony sezon zawodnika) albo 2 (sezon wczesniej): wszyscy zawodnicy
+    z tym sezonem w archiwum, bez wzgledu na minuty w biezacym sezonie.
     """
     rodzaje = RODZAJE_ARCHIWUM.get(rodzaj, {rodzaj})
     po_zawodniku = defaultdict(list)
@@ -327,6 +331,14 @@ def statystyki_z_archiwum(archiwum, liczniki, rodzaj, prog=PROG_MINUT_SEZONU):
             po_zawodniku[w.player_uid].append(w)
     wybrane, sezony = [], {}
     for uid, wiersze in po_zawodniku.items():
+        if ktory:
+            lata = sorted({w.season_year for w in wiersze}, reverse=True)
+            if len(lata) < ktory:
+                continue
+            rok = lata[ktory - 1]
+            wybrane += [_WierszArchiwum(w, rodzaj) for w in wiersze if w.season_year == rok]
+            sezony[uid] = rok
+            continue
         teraz = (liczniki.get(uid) or {}).get("minutes") or 0
         if teraz >= prog:
             continue
@@ -1123,7 +1135,18 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
             druzyny = sumuj_druzyny(wiersze_sezonu, opcje.rodzaj_statystyk)
             del wiersze_sezonu
             sezon_archiwalny = {}
-            if poczatek_sezonu(liczniki, zawodnicy):
+            ktory = {"ostatni": 1, "przedostatni": 2}.get(opcje.sezon_statystyk)
+            if ktory:
+                try:      # wybrany zakonczony sezon z archiwum gry dla wszystkich zawodnikow
+                    liczniki, sezon_archiwalny = statystyki_z_archiwum(
+                        zapis.player_season_history(), {}, opcje.rodzaj_statystyk, ktory=ktory)
+                    if sezon_archiwalny:
+                        lata = Counter(sezon_archiwalny.values()).most_common(1)[0][0]
+                        ostrzezenia.append(f"Statystyki z zakończonego sezonu {etykieta_sezonu(lata)} (archiwum gry, "
+                                           "wybór „Sezon statystyk” w panelu bocznym).")
+                except Exception as e:
+                    ostrzezenia.append(f"Nie udało się odczytać archiwum sezonów ({type(e).__name__}).")
+            elif opcje.sezon_statystyk != "biezacy" and poczatek_sezonu(liczniki, zawodnicy):
                 try:      # poczatek sezonu: statystyki ostatniego zakonczonego sezonu z archiwum gry
                     z_archiwum, sezon_archiwalny = statystyki_z_archiwum(
                         zapis.player_season_history(), liczniki, opcje.rodzaj_statystyk)

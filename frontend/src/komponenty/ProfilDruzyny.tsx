@@ -54,7 +54,7 @@ function Sekcja({ nazwa, metryki }: { nazwa: string; metryki: MetrykaProfilu[] }
   return (
     <Card withBorder padding="sm">
       <Title order={5} mb="xs">{nazwa}</Title>
-      <Table fz="sm" verticalSpacing={6}>
+      <Table>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Wskaźnik</Table.Th><Table.Th ta="right">Twoja drużyna</Table.Th>
@@ -113,7 +113,7 @@ function TabelaZmian({ tytul, wiersze, otworz }: {
     <Card withBorder padding="sm">
       <Title order={6} mb={4}>{tytul}</Title>
       {wiersze.length === 0 ? <Text size="sm" c="dimmed">Brak.</Text> : (
-        <Table fz="sm">
+        <Table>
           <Table.Tbody>
             {wiersze.map((w) => (
               <Table.Tr key={w.ID} style={{ cursor: 'pointer' }} onClick={() => otworz(w.pozycja, w.ID)}
@@ -136,7 +136,7 @@ function TabelaOcen({ tytul, wiersze }: { tytul: string; wiersze: ZmianaOceny[] 
     <Card withBorder padding="sm">
       <Title order={6} mb={4}>{tytul}</Title>
       {wiersze.length === 0 ? <Text size="sm" c="dimmed">Brak.</Text> : (
-        <Table fz="sm">
+        <Table>
           <Table.Tbody>
             {wiersze.map((w) => (
               <Table.Tr key={String(w.Piłkarz)}>
@@ -173,7 +173,7 @@ function Atletyzm({ a, otworz }: { a: NonNullable<Profil['atletyzm']>; otworz: P
       </Text>
       <SimpleGrid cols={{ base: 1, xl: 2 }}>
         <Card withBorder padding="sm">
-          <Table fz="sm" verticalSpacing={4} highlightOnHover>
+          <Table>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Zawodnik</Table.Th><Table.Th ta="right">Minuty</Table.Th>
@@ -233,15 +233,15 @@ export default function ProfilDruzyny({ wersja, wagi, ustawienia, otworz }: Prop
     // historia ocen z poprzedniego sezonu czyta sie w tle po wczytaniu zapisu - odswiezamy, az bedzie gotowa
     refetchInterval: (q) => (q.state.data?.zmiany.oceny_status === 'wczytywanie' ? 4000 : false),
   });
-  if (profil.isLoading) return <Loader m="md" />;
-  if (profil.error) return <Alert m="md" color="red">{(profil.error as Error).message}</Alert>;
+  if (profil.isLoading) return <Loader />;
+  if (profil.error) return <Alert color="red">{(profil.error as Error).message}</Alert>;
   const p = profil.data;
   if (!p) return null;
   const fizyczne = p.sekcje.find((s) => s.nazwa === 'Fizycznie');
   const t = p.tabela;
 
   return (
-    <Stack p="md" gap="md">
+    <Stack gap="md">
       <Group justify="space-between" align="end">
         <div>
           <Title order={3}>{p.klub}</Title>

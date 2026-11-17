@@ -44,7 +44,7 @@ export default function NaTleMojego({ id, zapytanie, wersja, mojKlub }: Props) {
       </Group>
       {p.moj && (
         <>
-          <Table withTableBorder fz="xs">
+          <Table>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Kluczowa statystyka</Table.Th>

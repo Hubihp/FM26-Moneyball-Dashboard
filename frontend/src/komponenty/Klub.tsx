@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { api, type MiesiacFinansow, type ObszarSztabu, type OsobaPersonelu } from '../api';
 import { eur, formatuj } from '../format';
+import { SZEROKOSC } from '../wyglad';
 import Wykres from './Wykres';
 
 const KOLOR_STATUSU: Record<string, string> = { ok: 'teal', uwaga: 'yellow', 'błąd': 'red' };
@@ -128,7 +129,7 @@ function Finanse({ wersja }: { wersja: number }) {
             Ich płace ({eur(f.wygasajace.reduce((a, x) => a + (x.Płaca_tydzien ?? 0), 0))} / tydz.) zwolnią się
             z budżetu, jeśli nie przedłużysz umów.
           </Text>
-          <Table striped withTableBorder fz="xs" maw={640}>
+          <Table striped maw={640}>
             <Table.Thead>
               <Table.Tr><Table.Th>Piłkarz</Table.Th><Table.Th ta="right">Wiek</Table.Th><Table.Th>Wygasa</Table.Th>
                 <Table.Th ta="right">Płaca / tydz.</Table.Th></Table.Tr>
@@ -157,7 +158,7 @@ const ocenaKolor = (x: number | null | undefined) =>
 
 function TabelaOsob({ osoby, obszar, zKlubem }: { osoby: OsobaPersonelu[]; obszar?: string; zKlubem?: boolean }) {
   return (
-    <Table striped highlightOnHover withTableBorder fz="xs">
+    <Table striped>
       <Table.Thead>
         <Table.Tr>
           <Table.Th>Osoba</Table.Th>
@@ -194,7 +195,7 @@ function TabelaOsob({ osoby, obszar, zKlubem }: { osoby: OsobaPersonelu[]; obsza
 
 function TabelaObszarow({ obszary, opis }: { obszary: ObszarSztabu[]; opis: Record<string, string[]> }) {
   return (
-    <Table withTableBorder fz="sm" maw={980}>
+    <Table maw={980}>
       <Table.Thead>
         <Table.Tr>
           <Table.Th>Obszar</Table.Th><Table.Th ta="right">Sztab</Table.Th><Table.Th>Kto</Table.Th>
@@ -232,10 +233,10 @@ function Wzmocnienie({ p }: { p: PersonelDane }) {
     <Stack gap="xs">
       <Title order={6}>Wzmocnij obszar</Title>
       <Group align="flex-end" gap="lg">
-        <Select w={260} label="Obszar" allowDeselect={false} value={obszar} onChange={setObszar}
+        <Select w={SZEROKOSC.szeroka} label="Obszar" allowDeselect={false} value={obszar} onChange={setObszar}
           data={p.obszary.map((x) => ({ value: x.obszar, label: `${x.obszar}${x.luka ? ' (luka)' : ''}` }))} />
         {o && (
-          <Card withBorder p="xs" miw={360}>
+          <Card withBorder miw={SZEROKOSC.szeroka}>
             <Text size="xs" c="dimmed">Obecnie w pierwszej drużynie</Text>
             {obecny ? (
               <Group gap="lg">
@@ -249,7 +250,7 @@ function Wzmocnienie({ p }: { p: PersonelDane }) {
         )}
       </Group>
       {kandydaci.length ? (
-        <Table striped highlightOnHover withTableBorder fz="xs">
+        <Table striped>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Kandydat</Table.Th><Table.Th>Klub</Table.Th><Table.Th>Stanowisko</Table.Th>
@@ -326,7 +327,7 @@ function Personel({ wersja }: { wersja: number }) {
 export default function Klub({ wersja }: { wersja: number }) {
   const [widok, setWidok] = useState<'finanse' | 'personel'>('finanse');
   return (
-    <Stack p="md" gap="md">
+    <Stack gap="md">
       <SegmentedControl w="fit-content" value={widok} onChange={(v) => setWidok(v as 'finanse' | 'personel')}
         data={[{ value: 'finanse', label: 'Finanse' }, { value: 'personel', label: 'Personel' }]} />
       {widok === 'finanse' ? <Finanse wersja={wersja} /> : <Personel wersja={wersja} />}

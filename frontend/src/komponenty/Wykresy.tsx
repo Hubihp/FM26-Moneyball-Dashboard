@@ -109,7 +109,7 @@ export default function Wykresy({ wiersze, kolumny, modelWyceny, mojKlubUid, naW
   };
 
   return (
-    <Stack p="md" gap="lg">
+    <Stack gap="lg">
       <div>
         <Group justify="space-between">
           <Title order={5}>Wynik vs {os === 'Koszt' ? 'koszt' : 'wartość'} (najlepsi wg SCORE)</Title>

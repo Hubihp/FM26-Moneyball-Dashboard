@@ -43,7 +43,7 @@ export default function MojaKadra(p: Props) {
   const ukryci = Math.max(0, ...(kadra.data?.pozycje ?? []).map((x) => x.ukryci ?? 0));
 
   return (
-    <Stack p="md" gap="sm">
+    <Stack gap="md">
       <Group justify="space-between">
         <SegmentedControl w="fit-content" value={widok} onChange={setWidok} data={[
           { value: 'pozycje', label: 'Pozycje' },
@@ -82,8 +82,8 @@ type PropsPozycji = Props & { kadra: UseQueryResult<Kadra> };
 function WidokPozycji({ wersja, szukajNastepcy, otworz, zapytanieDla, mojKlubUid, kadra }: PropsPozycji) {
   const menu = useMenuZawodnika();
   const [nastepcaDla, setNastepcaDla] = useState<{ pozycja: string; id: string; pilkarz: string } | null>(null);
-  if (kadra.isLoading) return <Loader m="md" />;
-  if (kadra.error) return <Alert m="md" color="red">{(kadra.error as Error).message}</Alert>;
+  if (kadra.isLoading) return <Loader />;
+  if (kadra.error) return <Alert color="red">{(kadra.error as Error).message}</Alert>;
   if (!kadra.data) return null;
   const pozycje = kadra.data.pozycje;
 
@@ -110,7 +110,7 @@ function WidokPozycji({ wersja, szukajNastepcy, otworz, zapytanieDla, mojKlubUid
               )}
             </Group>
             {p.zawodnicy.length > 0 ? (
-              <Table striped highlightOnHover fz="sm">
+              <Table striped>
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Piłkarz</Table.Th><Table.Th>Wiek</Table.Th><Table.Th>SCORE</Table.Th>

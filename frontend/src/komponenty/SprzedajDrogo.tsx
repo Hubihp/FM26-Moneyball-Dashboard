@@ -32,7 +32,7 @@ export default function SprzedajDrogo({ zapytanie, wersja, otworz, ulubione, prz
     queryKey: ['sprzedaj-drogo', wersja, zapytanie],
     queryFn: () => api.sprzedajDrogo(zapytanie),
   });
-  if (dane.isLoading) return <Loader m="md" />;
+  if (dane.isLoading) return <Loader />;
   if (dane.error) return <Alert color="red">{(dane.error as Error).message}</Alert>;
   const d = dane.data;
   if (!d) return null;
@@ -56,7 +56,7 @@ export default function SprzedajDrogo({ zapytanie, wersja, otworz, ulubione, prz
       {d.wymiany.length === 0 ? (
         <Alert color="gray">Żaden z twoich zawodników nie jest wyraźnie przepłacony.</Alert>
       ) : (
-        <Table striped highlightOnHover fz="sm">
+        <Table striped>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Pozycja</Table.Th>

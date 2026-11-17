@@ -38,7 +38,7 @@ export default function ListaZyczen({ lista, setLista, wersja, wagi, ustawienia,
 
   if (lista.length === 0) {
     return (
-      <Alert m="md" color="gray" title="Lista życzeń jest pusta">
+      <Alert color="gray" title="Lista życzeń jest pusta">
         Kliknij gwiazdkę przy zawodniku w rankingu, w okazjach albo w karcie zawodnika, aby dodać go do listy.
         Lista jest zapamiętywana w tej przeglądarce, także po zamknięciu aplikacji.
       </Alert>
@@ -49,7 +49,7 @@ export default function ListaZyczen({ lista, setLista, wersja, wagi, ustawienia,
   const ulubione = new Set(lista.map((w) => w.klucz));
 
   return (
-    <Stack p="sm" h="100%" gap="xs">
+    <Stack h="100%" gap="xs">
       <Group justify="space-between">
         <Text size="sm">
           Zawodników na liście: {lista.length}. Wynik liczony w pozycji, z której zawodnik został dodany, z bieżącymi

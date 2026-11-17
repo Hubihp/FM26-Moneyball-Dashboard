@@ -16,13 +16,17 @@ import {
   Tooltip,
 } from '@mantine/core';
 
-import type { Filtry, MetaPozycji } from '../api';
+import type { Filtry, MetaPozycji, SezonStatystyk } from '../api';
 import Boisko from './Boisko';
 import { eur } from '../format';
 
 export type Ustawienia = { k_baza: number; ignoruj_mnoznik: boolean };
 
 type Props = {
+  // sezon statystyk (opcja odczytu zapisu, dziala we wszystkich widokach); null - zrodlo bez zapisu gry
+  sezonStatystyk: SezonStatystyk | null;
+  setSezonStatystyk: (s: SezonStatystyk) => void;
+  wczytywanie: boolean;
   pozycje: string[];
   liczby: Record<string, number>;
   pozycja: string;
@@ -76,6 +80,19 @@ export default function PanelBoczny(p: Props) {
     <ScrollArea h="100%" type="auto" offsetScrollbars>
       <Stack gap="sm" pb="xl">
         <Boisko pozycja={p.pozycja} liczby={p.liczby} naWybor={p.setPozycja} />
+
+        {p.sezonStatystyk !== null && (
+          <Select label="Sezon statystyk" allowDeselect={false} value={p.sezonStatystyk} disabled={p.wczytywanie}
+            description={p.wczytywanie ? 'Wczytywanie zapisu...'
+              : 'Dla wszystkich zakładek. Automatycznie: bieżący, a na początku sezonu ostatni zakończony. Zmiana wczytuje zapis ponownie (ok. minuty).'}
+            onChange={(v) => v && v !== p.sezonStatystyk && p.setSezonStatystyk(v as SezonStatystyk)}
+            data={[
+              { value: 'auto', label: 'Automatycznie' },
+              { value: 'biezacy', label: 'Bieżący sezon' },
+              { value: 'ostatni', label: 'Ostatni zakończony' },
+              { value: 'przedostatni', label: 'Sezon wcześniej' },
+            ]} />
+        )}
 
         {p.pozycja !== 'Bramkarz' && (
         <div>

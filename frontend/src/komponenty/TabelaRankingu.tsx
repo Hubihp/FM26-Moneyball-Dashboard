@@ -1,9 +1,11 @@
 import { AllCommunityModule, colorSchemeDark, ModuleRegistry, themeQuartz, type ColDef, type RowClassParams,
-  type ColumnState, type SelectionChangedEvent } from 'ag-grid-community';
+  type ColumnState, type GridApi, type IRowNode, type SelectionChangedEvent } from 'ag-grid-community';
 import { AG_GRID_LOCALE_PL } from '@ag-grid-community/locale';
 import { AgGridReact } from 'ag-grid-react';
 import { Badge, Button, Checkbox, Group, Popover, ScrollArea, Stack } from '@mantine/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CZCIONKA_NAGLOWKA, CZCIONKA_TABELI, KOLOR_PODSWIETLENIA } from '../wyglad';
+import FiltrKolumny, { czyModelFiltra, opisModelu } from './FiltrKolumny';
 
 import type { Kolumna, Wiersz } from '../api';
 import { formatuj, kolorNiedowartosciowania, kolorWyniku, kolorZmiany } from '../format';
@@ -48,12 +50,17 @@ export const motywTabeli = themeQuartz.withPart(colorSchemeDark).withParams({
   chromeBackgroundColor: '#2e2e2e',
   oddRowBackgroundColor: '#272727',
   borderColor: '#424242',
-  rowHoverColor: 'rgba(255, 255, 255, 0.05)',
+  rowHoverColor: KOLOR_PODSWIETLENIA,
   selectedRowBackgroundColor: 'rgba(18, 184, 134, 0.18)',
   accentColor: '#12b886',
-  fontSize: 13,
-  headerFontSize: 12,
-  rowHeight: 34,
+  fontSize: CZCIONKA_TABELI,
+  headerFontSize: CZCIONKA_NAGLOWKA,
+  rowHeight: 36,
+  // okno filtra kolumny jak panele Mantine
+  menuBackgroundColor: '#2e2e2e',
+  menuBorder: { color: '#424242' },
+  menuShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
+  borderRadius: 8,
 });
 
 type Props = {
@@ -83,21 +90,49 @@ type Props = {
 export type ModelFiltrow = Record<string, unknown>;
 
 const PREFIKS_UKLADU = 'fm-uklad|';
+const PREFIKS_SZEROKOSCI = 'fm-szerokosci|';
 
-const OPERATORY: Record<string, string> = {
-  contains: 'zawiera', notContains: 'nie zawiera', equals: '=', notEqual: '≠', startsWith: 'zaczyna się od',
-  endsWith: 'kończy się na', lessThan: '<', lessThanOrEqual: '≤', greaterThan: '>', greaterThanOrEqual: '≥',
-  blank: 'puste', notBlank: 'niepuste',
+// Szerokosc kolumny z tresci: najdluzsza wartosc (po sformatowaniu) i naglowek w dwoch wierszach, zmierzone
+// czcionka tabeli; bez kolumn ustawionych recznie. Kolumny z wlasnym wygladem (pasek, gwiazdka) bez zmian.
+const BEZ_DOPASOWANIA = new Set(['gwiazdka', 'ag-Grid-SelectionColumn', 'Percentyl']);
+const MIN_SZEROKOSCI = 56;
+const MAKS_SZEROKOSCI = 340;
+const MAKS_WIERSZY_POMIARU = 1500;
+let plotno: CanvasRenderingContext2D | null = null;
+// krój czcionki faktycznie uzytej w komorkach tabeli (Inter albo czcionka systemowa, gdy Intera nie ma)
+const kroj = () => {
+  const komorka = document.querySelector('.ag-cell');
+  return komorka ? getComputedStyle(komorka).fontFamily : 'system-ui, sans-serif';
 };
-
-// Filtr kolumny (model AG Grid) -> krotki opis, np. "zawiera Torino", "≤ 23", "18–23"
-function opisFiltru(f: unknown): string {
-  const m = f as { type?: string; filter?: unknown; filterTo?: unknown; operator?: string; conditions?: unknown[] };
-  if (m?.conditions?.length) return m.conditions.map(opisFiltru).join(m.operator === 'OR' ? ' lub ' : ' i ');
-  if (m?.type === 'inRange') return `${String(m.filter)}–${String(m.filterTo)}`;
-  const op = OPERATORY[m?.type ?? ''] ?? m?.type ?? '';
-  return m?.filter === undefined || m?.filter === null ? op : `${op} ${String(m.filter)}`;
+function szerokoscTekstu(tekst: string, pogrubiony = false, rozmiar = CZCIONKA_TABELI): number {
+  plotno ??= document.createElement('canvas').getContext('2d');
+  if (!plotno) return tekst.length * 8;
+  plotno.font = `${pogrubiony ? 600 : 400} ${rozmiar}px ${kroj()}`;
+  return plotno.measureText(tekst).width;
 }
+function szerokosciZTresci(api: GridApi<Wiersz>, reczne: Record<string, number>) {
+  const kolumny = (api.getColumns() ?? []).filter((c) => c.isVisible() && !BEZ_DOPASOWANIA.has(c.getColId())
+    && !(c.getColId() in reczne));
+  const wiersze: IRowNode<Wiersz>[] = [];
+  api.forEachNode((n) => { if (wiersze.length < MAKS_WIERSZY_POMIARU) wiersze.push(n); });
+  return kolumny.map((c) => {
+    const naglowek = c.getColDef().headerName ?? c.getColId();
+    const slowa = naglowek.split(/\s+/);
+    // naglowek zawija sie do dwoch wierszy: szerokosc to dluzsze z najdluzszego slowa i polowy calosci
+    // + odstepy komorki (i ikona sortowania w kolumnie, po ktorej tabela jest posortowana)
+    const szerNaglowka = Math.max(...slowa.map((w) => szerokoscTekstu(w, true, CZCIONKA_NAGLOWKA)),
+      szerokoscTekstu(naglowek, true, CZCIONKA_NAGLOWKA) / 2) + (c.getSort() ? 62 : 40);
+    const pogrubiony = c.getColId() === 'Piłkarz';
+    let szerTresci = 0;
+    for (const n of wiersze) {
+      const v = api.getCellValue({ rowNode: n, colKey: c, useFormatter: true });
+      if (v !== null && v !== undefined) szerTresci = Math.max(szerTresci, szerokoscTekstu(String(v), pogrubiony));
+    }
+    const szer = Math.round(Math.min(MAKS_SZEROKOSCI, Math.max(MIN_SZEROKOSCI, szerNaglowka, szerTresci * 1.04 + 34)));
+    return { key: c.getColId(), newWidth: szer };
+  });
+}
+
 // Stale obiekty (nie tworzone przy kazdym renderze): nowy obiekt kazal siatce przebudowac kolumny,
 // co przywracalo domyslne sortowanie SCORE obok sortowania wybranego przez uzytkownika
 const KOLUMNA_ZAZNACZENIA = { pinned: 'left' as const, width: 46, headerTooltip: 'Zaznacz do porównania' };
@@ -173,7 +208,8 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
     const api = siatka.current?.api;
     const model = filtryRef.current;
     if (!api || !model) return;
-    const dostepne = Object.fromEntries(Object.entries(model).filter(([kol]) => api.getColumn(kol)));
+    // tylko filtry w obecnym formacie (dawne filtry tekstowe/liczbowe AG Grid sa pomijane)
+    const dostepne = Object.fromEntries(Object.entries(model).filter(([kol, f]) => api.getColumn(kol) && czyModelFiltra(f)));
     if (JSON.stringify(api.getFilterModel()) !== JSON.stringify(dostepne)) api.setFilterModel(dostepne);
   }, []);
   useEffect(() => {
@@ -196,10 +232,26 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
 
   // Uklad tabeli zapamietany w pamieci interfejsu: zapis po kazdej zmianie, odtworzenie po zbudowaniu kolumn
   const odtwarzanie = useRef(false);
+  // szerokosci ustawione recznie (przeciagniecie krawedzi) - reszte program dopasowuje do zawartosci
+  const reczne = useRef<Record<string, number>>({});
+  useEffect(() => {
+    try {
+      reczne.current = kluczUkladu ? JSON.parse(czytaj(PREFIKS_SZEROKOSCI + kluczUkladu) || '{}') : {};
+    } catch {
+      reczne.current = {};
+    }
+  }, [kluczUkladu]);
+  const dopasujSzerokosci = useCallback(() => {
+    const api = siatka.current?.api;
+    if (!api) return;
+    const szerokosci = szerokosciZTresci(api, reczne.current);
+    if (szerokosci.length) api.setColumnWidths(szerokosci, true, 'api');
+  }, []);
   const zapiszUklad = useCallback(() => {
     const api = siatka.current?.api;
     if (!api) return;
-    const stan = api.getColumnState();
+    // szerokosc w ukladzie tylko dla kolumn zmienionych recznie (reszta liczona z tresci)
+    const stan = api.getColumnState().map(({ width, ...c }) => (c.colId in reczne.current ? { ...c, width } : c));
     const nowe = stan.filter((c) => c.hide).map((c) => c.colId);
     setUkryte((stare) => (stare.join('|') === nowe.join('|') ? stare : nowe));
     if (!kluczUkladu || odtwarzanie.current) return;
@@ -210,14 +262,20 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
     const uklad = wczytajUklad(kluczUkladu);
     if (!api || !uklad) return;
     odtwarzanie.current = true;
-    api.applyColumnState({ state: uklad, applyOrder: true });
+    api.applyColumnState({ state: uklad.map(({ width, ...c }) => (c.colId in reczne.current ? { ...c, width } : c)),
+      applyOrder: true });
     odtwarzanie.current = false;
     setUkryte(uklad.filter((c) => c.hide).map((c) => c.colId));
   }, [kluczUkladu]);
   const przywrocUklad = () => {
-    if (kluczUkladu) zapisz(PREFIKS_UKLADU + kluczUkladu, null);
+    if (kluczUkladu) {
+      zapisz(PREFIKS_UKLADU + kluczUkladu, null);
+      zapisz(PREFIKS_SZEROKOSCI + kluczUkladu, null);
+    }
+    reczne.current = {};
     siatka.current?.api?.resetColumnState();
     setUkryte([]);
+    dopasujSzerokosci();
   };
   const przelaczKolumne = (pole: string, widoczna: boolean) => {
     siatka.current?.api?.setColumnsVisible([pole], widoczna);
@@ -254,16 +312,14 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
           sortable: true,
           resizable: true,
           valueFormatter: (p) => formatuj(p.value, k.format),
-          filter: k.format === 'tekst' ? 'agTextColumnFilter' : 'agNumberColumnFilter',
-          minWidth: 70,
-          width: k.statystyka ? 118 : undefined,
+          // filtr pod prawym przyciskiem: lista wartosci (tekst), zakres (liczby) albo zakres dat
+          filter: FiltrKolumny,
+          filterParams: { rodzaj: k.format === 'tekst' ? 'lista' : k.format === 'data' ? 'data' : 'zakres', format: k.format },
+          minWidth: MIN_SZEROKOSCI,
         };
-        if (k.format === 'tekst') {
-          def.filter = 'agTextColumnFilter';
-        }
         if (k.pole === 'Piłkarz') {
           Object.assign(def, {
-            pinned: 'left', minWidth: 170, cellStyle: { cursor: 'pointer', fontWeight: 600 },
+            pinned: 'left', minWidth: 140, cellStyle: { cursor: 'pointer', fontWeight: 600 },
             // niepelne statystyki (czesc minut w rozgrywkach bez szczegolowych statystyk): znak ostrzezenia
             valueFormatter: (p: { value: unknown; data?: Wiersz }) =>
               `${p.data?.['Statystyki_niepełne'] ? '⚠ ' : ''}${String(p.value ?? '')}`,
@@ -274,11 +330,11 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
           });
         }
         if (k.pole === 'Kandydat z pozycji') {
-          Object.assign(def, { width: 170, cellClass: 'komorka-kandydat' });
+          Object.assign(def, { cellClass: 'komorka-kandydat' });
         }
         if (k.pole === 'Niedowartościowanie') {
           Object.assign(def, {
-            width: 140,
+            width: 120,
             headerTooltip: 'Wycena wg wyniku / cena. ×2 = zawodnik gra jak typowy zawodnik dwa razy droższy '
               + '(o tym samym wieku i kontrakcie). U21: wskaźnik zaniżony - cena młodych zawiera potencjał.',
             cellRenderer: Niedowartosciowanie,
@@ -396,14 +452,14 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
     <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', gap: 4 }}>
       <Group gap="xs" justify="space-between" wrap="nowrap" align="center">
         <Group gap={6} style={{ minWidth: 0 }}>
-          {Object.entries(filtryKolumn ?? {}).map(([kol, f]) => (
+          {Object.entries(filtryKolumn ?? {}).filter(([, f]) => czyModelFiltra(f)).map(([kol, f]) => (
             <Badge key={kol} variant="light" color="teal" tt="none" style={{ cursor: 'pointer' }}
               title="Filtr kolumny - kliknij, aby usunąć"
               onClick={() => {
                 const { [kol]: _usuniety, ...reszta } = filtryKolumn ?? {};
                 naFiltryKolumn?.(reszta);
               }}>
-              {kolumny.find((k) => k.pole === kol)?.naglowek ?? kol}: {opisFiltru(f)} ×
+              {kolumny.find((k) => k.pole === kol)?.naglowek ?? kol}: {opisModelu(f, kolumny.find((k) => k.pole === kol)?.format)} ×
             </Badge>
           ))}
         </Group>
@@ -450,7 +506,8 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
           if (e.source === 'api') return;      // zmiana z synchronizacji, nie od uzytkownika
           naZaznaczenie?.(e.api.getSelectedRows().map((w) => String(w['ID'])), wiersze.map((w) => String(w['ID'])));
         }}
-        onFirstDataRendered={synchronizuj}
+        onFirstDataRendered={() => { synchronizuj(); dopasujSzerokosci(); }}
+        onRowDataUpdated={dopasujSzerokosci}
         onCellClicked={(e) => {
           if (e.colDef.field === 'Piłkarz' && e.data) otworz(e.data);
         }}
@@ -496,11 +553,17 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         defaultColDef={DOMYSLNA_KOLUMNA}
         animateRows={false}
         tooltipShowDelay={300}
-        onNewColumnsLoaded={() => { odtworzUklad(); nalozFiltry(); }}
+        onNewColumnsLoaded={() => { odtworzUklad(); nalozFiltry(); dopasujSzerokosci(); }}
         onGridReady={() => { odtworzUklad(); nalozFiltry(); }}
-        onSortChanged={zapiszUklad}
+        onSortChanged={() => { zapiszUklad(); dopasujSzerokosci(); }}
         onColumnMoved={(e) => e.finished && zapiszUklad()}
-        onColumnResized={(e) => e.finished && e.source !== 'flex' && zapiszUklad()}
+        onColumnResized={(e) => {
+          if (!e.finished || e.source !== 'uiColumnResized') return;
+          // reczna zmiana szerokosci: zapamietana i wazniejsza niz dopasowanie do tresci
+          for (const c of e.columns ?? []) reczne.current[c.getColId()] = c.getActualWidth();
+          if (kluczUkladu) zapisz(PREFIKS_SZEROKOSCI + kluczUkladu, JSON.stringify(reczne.current));
+          zapiszUklad();
+        }}
         onColumnVisible={zapiszUklad}
         onColumnPinned={zapiszUklad}
       />

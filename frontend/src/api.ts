@@ -7,7 +7,11 @@ export type Opcje = {
   wszystkie_naturalne_pozycje: boolean;
   tylko_kluby_w_lidze: boolean;
   wolni_agenci: boolean;
+  sezon_statystyk?: SezonStatystyk;
 };
+
+// auto: biezacy, a na poczatku sezonu ostatni zakonczony (dla zawodnikow bez minut); ostatni/przedostatni - archiwum gry
+export type SezonStatystyk = 'auto' | 'biezacy' | 'ostatni' | 'przedostatni';
 
 export type Klub = { uid: number; nazwa: string };
 
@@ -67,6 +71,7 @@ export type MetaPozycji = {
 
 export type Mecz = {
   data: string; sezon: number; rozgrywki_id: number; rozgrywki: string; u_siebie: boolean;
+  strona?: 'Dom' | 'Wyjazd' | 'Neutralne';
   rywal_uid: string; rywal: string; rozegrany: boolean;
   gole: number | null; gole_rywala: number | null; xg: number | null; xg_rywala: number | null;
   strzaly: number | null; strzaly_rywala: number | null; celne: number | null; celne_rywala: number | null;

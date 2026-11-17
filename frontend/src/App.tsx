@@ -382,6 +382,14 @@ export default function App() {
 
       <AppShell.Navbar p="md">
         <PanelBoczny
+          sezonStatystyk={s?.zrodlo.typ === 'folder' || s?.zrodlo.typ === 'plik' ? (s.zrodlo.opcje.sezon_statystyk ?? 'auto') : null}
+          wczytywanie={s?.status === 'wczytywanie'}
+          setSezonStatystyk={(sezon) => {
+            if (!s) return;
+            void api.ustawZrodlo({ typ: s.zrodlo.typ, folder: s.zrodlo.folder, plik: s.zrodlo.plik, sledz: s.zrodlo.sledz,
+              wczytaj_przy_starcie: s.zrodlo.wczytaj_przy_starcie, opcje: { ...s.zrodlo.opcje, sezon_statystyk: sezon } })
+              .then(() => void stan.refetch());
+          }}
           pozycje={POZYCJE}
           liczby={s?.pozycje ?? {}}
           pozycja={pozycja}
@@ -461,7 +469,7 @@ export default function App() {
             </Tabs.List>
 
             <Tabs.Panel value="ranking" style={{ flex: 1, minHeight: 0 }}>
-              <Box p="sm" h="100%" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <Box h="100%" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {ranking.error && <Alert color="red">{(ranking.error as Error).message}</Alert>}
                 <Text size="xs" c="dimmed">
                   {s?.meta.moj_klub && (
@@ -530,7 +538,7 @@ export default function App() {
             </Tabs.Panel>
             <Tabs.Panel value="profil" style={{ overflow: 'auto' }}>
               <Karta id="profil" {...stanKart}>{(
-                <Suspense fallback={<Loader m="md" />}>
+                <Suspense fallback={<Loader />}>
                   <ProfilDruzyny wersja={wersja} wagi={wagiWlasne} ustawienia={ustawienia}
                     otworz={(poz, id) => {
                       setPozycja(poz);
@@ -541,7 +549,7 @@ export default function App() {
             </Tabs.Panel>
             <Tabs.Panel value="mecze" style={{ overflow: 'auto' }}>
               <Karta id="mecze" {...stanKart}>{(
-                <Suspense fallback={<Loader m="md" />}>
+                <Suspense fallback={<Loader />}>
                   <Mecze wersja={wersja} ustawienia={ustawienia}
                     otworz={(poz, id) => {
                       setPozycja(poz);
@@ -552,7 +560,7 @@ export default function App() {
             </Tabs.Panel>
             <Tabs.Panel value="klub" style={{ overflow: 'auto' }}>
               <Karta id="klub" {...stanKart}>{(
-                <Suspense fallback={<Loader m="md" />}><Klub wersja={wersja} /></Suspense>
+                <Suspense fallback={<Loader />}><Klub wersja={wersja} /></Suspense>
               )}</Karta>
             </Tabs.Panel>
             <Tabs.Panel value="ligi" style={{ overflow: 'auto' }}>
@@ -560,7 +568,7 @@ export default function App() {
             </Tabs.Panel>
             <Tabs.Panel value="porownanie" style={{ overflow: 'auto' }}>
               <Karta id="porownanie" {...stanKart}>{(
-                <Suspense fallback={<Loader m="md" />}>
+                <Suspense fallback={<Loader />}>
                   <Porownanie pozycja={pozycja} wersja={wersja} wiersze={wiersze} wybrani={wybraniPozycji}
                     setWybrani={(ids) => setWybrani({ ...wybrani, [pozycja]: ids })} zapytanie={zapytanie} />
                 </Suspense>
@@ -568,7 +576,7 @@ export default function App() {
             </Tabs.Panel>
             <Tabs.Panel value="wykresy" style={{ overflow: 'auto' }}>
               <Karta id="wykresy" {...stanKart}>{rankingPozycji && (
-                <Suspense fallback={<Loader m="md" />}>
+                <Suspense fallback={<Loader />}>
                   <Wykresy wiersze={wiersze} kolumny={rankingPozycji.kolumny} modelWyceny={rankingPozycji.model_wyceny}
                     mojKlubUid={mojKlubUid} naWybor={setKarta} pozycja={pozycja} />
                 </Suspense>

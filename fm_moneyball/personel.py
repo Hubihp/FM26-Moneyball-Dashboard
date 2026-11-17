@@ -132,7 +132,9 @@ def analiza_personelu(personel, moj_klub_uid, kluby_ligi, kurs):
             for obszar, v in o.items():
                 if v is not None and v > najlepsze.get(obszar, 0):
                     najlepsze[obszar] = v
-        if s.club_uid != moj_klub_uid and (s.age or 0) <= MAKS_WIEKU_KANDYDATA and _stanowisko(s) in OBSZARY_STANOWISK:
+        # kandydaci: bez menedzerow (pierwszych trenerow) innych klubow - ich sie nie zatrudnia jako sztab
+        if s.club_uid != moj_klub_uid and (s.age or 0) <= MAKS_WIEKU_KANDYDATA and _stanowisko(s) in OBSZARY_STANOWISK \
+                and _stanowisko(s) != "MANAGER":
             pula.append((s, o))
     druzyny = {slot: _obszary_druzyny(moi, slot, najlepsi_ligi) for slot in sorted({m["druzyna"] for m in moi} | {0})}
     obszary = druzyny[0]

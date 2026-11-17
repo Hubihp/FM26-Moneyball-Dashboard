@@ -51,3 +51,11 @@ def test_prognoza_wartosci_za_2_lata():
     assert abs(wynik.loc[0, "Zmiana wartości"] - np.exp(0.3)) < 1e-9
     assert abs(wynik.loc[0, "Wartość za 2 lata"] - 1e6 * np.exp(0.3)) < 1e-3
     assert np.isnan(wynik.loc[1, "Wartość za 2 lata"])        # bez obecnej wartosci - bez prognozy
+
+
+def test_kandydaci_bez_menedzerow_innych_klubow():
+    ludzie = [_osoba(1, 10, "COACH", attacking=50, tactical=50),
+              _osoba(2, 20, "MANAGER", attacking=100, tactical=100),      # pierwszy trener innego klubu
+              _osoba(3, 20, "COACH", attacking=90, tactical=90)]
+    wynik = personel.analiza_personelu(ludzie, 10, {20}, kurs=1.0)
+    assert [k["uid"] for k in wynik["kandydaci"]["Atak"]] == ["3"]

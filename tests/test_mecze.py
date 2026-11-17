@@ -37,6 +37,7 @@ def test_zbierz_mecze_moje_i_rywala():
     assert [m["rywal_uid"] for m in moje] == ["2", "3", "3"]
     assert moje[0]["xg"] == 0.5 and moje[0]["xg_rywala"] == 1.8 and moje[0]["ocena"] == "szczęśliwa wygrana"
     assert moje[0]["rozgrywki"] == "Liga" and moje[1]["xg"] is None      # mecz bez statystyk
+    assert [m["strona"] for m in moje] == ["Dom", "Wyjazd", "Dom"]
     assert not moje[2]["rozegrany"]
     assert [m["data"] for m in wynik["2"]] == ["2027-09-01", "2027-09-15"]  # rywal: tylko rozegrane do dzis
     p = mecze.podsumowanie([m for m in moje if m["rozegrany"]])

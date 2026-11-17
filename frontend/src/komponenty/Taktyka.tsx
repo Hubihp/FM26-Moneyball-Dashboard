@@ -333,9 +333,9 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
     }
   }, [biezace, zawodnicy, setBiezace]);
 
-  if (sklad.isLoading) return <Loader m="md" />;
+  if (sklad.isLoading) return <Loader />;
   if (sklad.error) return <Alert color="red">{(sklad.error as Error).message}</Alert>;
-  if (!biezace) return zawodnicy.length ? <Loader m="md" /> : <Alert color="gray">Brak zawodników w kadrze.</Alert>;
+  if (!biezace) return zawodnicy.length ? <Loader /> : <Alert color="gray">Brak zawodników w kadrze.</Alert>;
 
   const u = biezace;
   const taktykaGry = zGry.data?.taktyki[0];
@@ -569,8 +569,9 @@ export default function Taktyka({ wersja, wagi, ustawienia, tylkoPierwsza, otwor
                     onPointerEnter={() => setPodswietlony(slotGracza(z.klucz))}
                     onPointerLeave={() => setPodswietlony(null)}
                     onClick={() => !poPrzeciagnieciu.current && kliknijGracza(z)}
+                    className="wiersz-listy"
                     style={{ padding: '4px 8px', borderRadius: 6, cursor: 'grab', opacity: naBoisku.has(z.klucz) ? 0.5 : 1,
-                      background: 'var(--mantine-color-dark-6)', touchAction: 'none', userSelect: 'none' }}>
+                      touchAction: 'none', userSelect: 'none' }}>
                     <div style={{ minWidth: 0 }}>
                       <Text size="sm" fw={600} truncate>{z.Piłkarz}</Text>
                       <Text size="xs" c="dimmed" truncate>

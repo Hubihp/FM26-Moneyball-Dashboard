@@ -75,7 +75,7 @@ export default function HistoriaPorownania({ wybrani, zapytanie, wersja }: Props
           })),
         }}
       />
-      <Table withTableBorder fz="xs">
+      <Table>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Zawodnik</Table.Th>

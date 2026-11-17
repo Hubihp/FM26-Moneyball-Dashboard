@@ -24,7 +24,7 @@ export default function KontrolaOdczytu({ wersja }: { wersja: number }) {
         Ligi zgodne z tabelami: <b>{zgodne} z {ocenione.length}</b>
         {reszta > 0 && <Text span c="dimmed"> · bez oceny: {reszta} (mało klubów do porównania albo brak tabeli w zapisie)</Text>}
       </Text>
-      <Table fz="sm" verticalSpacing={4}>
+      <Table>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Liga</Table.Th><Table.Th>Stan</Table.Th>

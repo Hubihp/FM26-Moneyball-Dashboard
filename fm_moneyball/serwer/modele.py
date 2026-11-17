@@ -11,6 +11,7 @@ class OpcjeZapisuModel(BaseModel):
     wszystkie_naturalne_pozycje: bool = False
     tylko_kluby_w_lidze: bool = True
     wolni_agenci: bool = True
+    sezon_statystyk: str = "auto"            # auto | biezacy | ostatni | przedostatni
 
 
 class ZrodloModel(BaseModel):

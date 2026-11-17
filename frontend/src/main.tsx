@@ -3,13 +3,14 @@ import './style.css';
 
 import {
   Autocomplete, Button, Card, Checkbox, createTheme, FileInput, MantineProvider, MultiSelect, NumberInput,
-  SegmentedControl, Select, Switch, Textarea, TextInput,
+  Badge, SegmentedControl, Select, Switch, Table, Tabs, Textarea, TextInput, Title, Tooltip,
 } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import App from './App';
+import { KOLOR_PODSWIETLENIA } from './wyglad';
 import { wczytajPamiec } from './pamiecSerwera';
 
 const klient = new QueryClient({
@@ -24,7 +25,12 @@ const motyw = createTheme({
   primaryColor: 'teal',
   defaultRadius: 'md',
   fontFamily: 'Inter, system-ui, sans-serif',
-  headings: { fontFamily: 'Inter, system-ui, sans-serif', fontWeight: '600' },
+  // jedna skala naglowkow sekcji: h4 tytul zakladki, h5 sekcja, h6 podsekcja
+  headings: {
+    fontFamily: 'Inter, system-ui, sans-serif', fontWeight: '600',
+    sizes: { h4: { fontSize: '18px', lineHeight: '1.3' }, h5: { fontSize: '16px', lineHeight: '1.35' },
+      h6: { fontSize: '14px', lineHeight: '1.4' } },
+  },
   components: {
     Button: Button.extend({ defaultProps: ROZMIAR }),
     TextInput: TextInput.extend({ defaultProps: ROZMIAR }),
@@ -38,6 +44,16 @@ const motyw = createTheme({
     Switch: Switch.extend({ defaultProps: ROZMIAR }),
     Checkbox: Checkbox.extend({ defaultProps: ROZMIAR }),
     Card: Card.extend({ defaultProps: { padding: 'sm', radius: 'md' } }),
+    // wszystkie tabele: ta sama czcionka, odstepy, ramka i zielone podswietlenie wiersza pod kursorem
+    Table: Table.extend({
+      defaultProps: { fz: 'sm', verticalSpacing: 6, horizontalSpacing: 'sm', withTableBorder: true,
+        highlightOnHover: true, highlightOnHoverColor: KOLOR_PODSWIETLENIA },
+    }),
+    Title: Title.extend({ defaultProps: { order: 5 } }),
+    Badge: Badge.extend({ defaultProps: { radius: 'sm' } }),
+    Tooltip: Tooltip.extend({ defaultProps: { withArrow: true, openDelay: 200 } }),
+    // jeden margines zakladek (tresc karty zaczyna sie w tym samym miejscu na kazdej zakladce)
+    Tabs: Tabs.extend({ styles: { panel: { padding: 'var(--mantine-spacing-md)' } } }),
   },
 });
 

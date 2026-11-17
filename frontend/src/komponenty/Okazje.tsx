@@ -45,7 +45,7 @@ export default function Okazje({ zapytanie, okazje, wersja, mojKlubUid, naWybor,
   const ukryci = ranking.data?.liczba_ukrytych_mojego_klubu ?? 0;
 
   return (
-    <Stack p="sm" h="100%" gap="xs">
+    <Stack h="100%" gap="xs">
       <Chip.Group multiple value={wybrane} onChange={setWybrane}>
         <Group gap="xs">
           {okazje.map((o) => (

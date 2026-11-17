@@ -90,7 +90,7 @@ export default function Optymalizator({ zapytanie, wersja, pozycje, otworz, ulub
           onChange={(v) => setBudzetWlasny(Number(v) || 0)} />
         <NumberInput label="Pensje nowych (tys. € / tydz.)" w={SZEROKOSC.srednia} min={0} step={10} value={placTys}
           onChange={(v) => setPlacWlasne(Number(v) || 0)} />
-        <MultiSelect label="Pozycje do wzmocnienia" w={420} data={pozycje} value={pozycjeWybrane}
+        <MultiSelect label="Pozycje do wzmocnienia" w={SZEROKOSC.bardzo_szeroka} data={pozycje} value={pozycjeWybrane}
           onChange={setWybrane} maxValues={8} placeholder="Wybierz pozycje" />
         <Button onClick={policz} disabled={!pozycjeWybrane.length} loading={wynik.isFetching}>Policz</Button>
       </Group>
@@ -141,7 +141,7 @@ export default function Optymalizator({ zapytanie, wersja, pozycje, otworz, ulub
           {d.zestaw.length === 0 ? (
             <Alert color="gray">Nikt w tym budżecie nie jest lepszy od twoich zawodników na wybranych pozycjach.</Alert>
           ) : (
-            <Table striped highlightOnHover fz="sm">
+            <Table striped>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Pozycja</Table.Th><Table.Th>Zawodnik</Table.Th><Table.Th ta="right">Wiek</Table.Th>

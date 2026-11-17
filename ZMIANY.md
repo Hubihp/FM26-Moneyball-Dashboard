@@ -3,6 +3,22 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 2.6.0
+
+- Spójny wygląd całej aplikacji: wspólny margines zakładek, jedna czcionka i odstępy we wszystkich
+  tabelach, jedna skala nagłówków sekcji, jednakowa wysokość pól i przycisków oraz wspólne szerokości
+  pól - ustawione centralnie w motywie.
+- Nowe filtry kolumn (prawy przycisk na nagłówku): lista wartości występujących w kolumnie z checkboxami
+  i liczbą wierszy, puste jako „(brak)”; zakres od-do dla liczb i dat; wyszukiwanie dla kolumn
+  z setkami wartości (np. nazwisko).
+- Szerokość kolumn dopasowana do zawartości: wąskie kolumny krótkich wartości (wiek, HG, oceny),
+  pełne nazwiska, kluby, role i pozycje. Ręcznie zmieniona szerokość jest zapamiętana.
+- „Sezon statystyk” w panelu bocznym: wybór sezonu statystyk dla wszystkich zakładek (automatycznie,
+  bieżący, ostatni zakończony, sezon wcześniej).
+- To samo zielone podświetlenie wiersza pod kursorem we wszystkich tabelach i listach.
+- Mecze: kolumna „Strona” (Dom, Wyjazd, Neutralne).
+- Personel: kandydaci do sztabu bez menedżerów (pierwszych trenerów) innych klubów.
+
 ## 2.5.0
 
 - Początek sezonu: w lipcu statystyki sezonu są w zapisie wyzerowane, więc zawodnicy lig europejskich
