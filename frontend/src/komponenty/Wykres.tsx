@@ -24,6 +24,8 @@ type Props = {
   naMenu?: (dane: unknown, e: MouseEvent) => void;
   // podswietlony punkt (indeks danych pierwszej serii): podpowiedz i wyroznienie, np. mecz wskazany w tabeli
   podswietl?: number | null;
+  // kursor nad wykresem: indeks kategorii osi X pod kursorem (null - kursor poza wykresem)
+  naNajechanie?: (indeks: number | null) => void;
 };
 
 // Cienka otoczka na ECharts: tworzy wykres raz, aktualizuje opcje i reaguje na zmiane rozmiaru.
@@ -34,7 +36,7 @@ type Props = {
 // rysunek (podpowiedz kilkaset pikseli obok kursora) i rysowal w nizszej rozdzielczosci. Dlatego wykres zyje
 // w otoczce z odwrotnym zoomem (lacznie 1), a powiekszenie daje mu transform: scale - ECharts przelicza kursor
 // przez transformacje poprawnie, a plotno ma rozdzielczosc ekranu x skala.
-export default function Wykres({ opcje, wysokosc = 420, naKlik, naMenu, podswietl }: Props) {
+export default function Wykres({ opcje, wysokosc = 420, naKlik, naMenu, podswietl, naNajechanie }: Props) {
   const skala = useSkala();
   const ref = useRef<HTMLDivElement>(null);
   const wykres = useRef<echarts.ECharts | null>(null);
@@ -120,6 +122,29 @@ export default function Wykres({ opcje, wysokosc = 420, naKlik, naMenu, podswiet
       w.off('click', obsluga);
     };
   }, [naKlik, skala]);
+
+  useEffect(() => {
+    const w = wykres.current;
+    if (!w || !naNajechanie) return;
+    let ostatni: number | null = null;
+    const zglos = (i: number | null) => {
+      if (i === ostatni) return;
+      ostatni = i;
+      naNajechanie(i);
+    };
+    // podpowiedz osi (trigger: 'axis') przesuwa wskaznik na kategorie pod kursorem
+    const wskaznik = (e: unknown) => {
+      const v = (e as { axesInfo?: { value?: number }[] }).axesInfo?.[0]?.value;
+      if (typeof v === 'number') zglos(v);
+    };
+    const poza = () => zglos(null);
+    w.on('updateAxisPointer', wskaznik);
+    w.on('globalout', poza);
+    return () => {
+      w.off('updateAxisPointer', wskaznik);
+      w.off('globalout', poza);
+    };
+  }, [naNajechanie, skala]);
 
   useEffect(() => {
     const w = wykres.current;

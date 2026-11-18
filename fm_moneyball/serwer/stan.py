@@ -42,7 +42,7 @@ log = logging.getLogger("fm_moneyball")
 CO_ILE_SPRAWDZAC = 15        # sekundy miedzy sprawdzeniami folderu zapisow
 # 2: domyslnie zawodnik we wszystkich pulach, w ktorych jest naturalny (wczesniej tylko glowna)
 WERSJA_USTAWIEN = 2
-WERSJA_CACHE = 27            # zmiana formatu wyniku = nowy klucz cache (27: strona meczu, sezon statystyk)
+WERSJA_CACHE = 28            # zmiana formatu wyniku = nowy klucz cache (27: strona meczu, sezon statystyk)
 ILE_W_CACHE = 3
 MAKS_ODCZYTOW_HISTORII_NA_RAZ = 6   # starsze zapisy folderu czytane na jedno wczytanie (historia z folderu)
 PRZERWA_HISTORII_S = 3.0            # przerwa miedzy nimi - serwer odpowiada w tym czasie bez opoznien
@@ -419,6 +419,8 @@ class Stan:
                                                if wynik.moj_klub_uid is not None else []),
             "ostrzezenia": wynik.ostrzezenia, "liczniki": wynik.liczniki,
             "budzety": {str(k): v for k, v in (getattr(wynik, "budzety", None) or {}).items()},
+            # sezony statystyk zawodnikow ({"2027/28": 2400, ...}); pusty - wszyscy z biezacego sezonu
+            "sezony_statystyk": getattr(wynik, "sezony_statystyk", None) or {},
             "czas_odczytu_s": round(time.time() - start, 1),
             "z_cache": z_cache,
             "wczytano": datetime.now().isoformat(timespec="seconds"),
@@ -619,7 +621,7 @@ class Stan:
             if self.katalog_historii is None:
                 return
             # statystyki wybranego zakonczonego sezonu nie sa stanem z tej daty - bez migawki
-            if self.konfig.opcje.get("sezon_statystyk") in ("ostatni", "przedostatni"):
+            if str(self.konfig.opcje.get("sezon_statystyk") or "auto") not in ("auto", "biezacy"):
                 return
             historia.przenies_stare(self.katalog_historii / "FM27", self.katalog_kariery())
             historia.zapisz_migawke(self.katalog_kariery(), self.dane, date.fromisoformat(self.meta["data_gry"]))

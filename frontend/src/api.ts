@@ -11,7 +11,8 @@ export type Opcje = {
 };
 
 // auto: biezacy, a na poczatku sezonu ostatni zakonczony (dla zawodnikow bez minut); ostatni/przedostatni - archiwum gry
-export type SezonStatystyk = 'auto' | 'biezacy' | 'ostatni' | 'przedostatni';
+// rok sezonu ("2027" = 2027/28) albo dawne wartosci (ostatni / przedostatni)
+export type SezonStatystyk = string;
 
 export type Klub = { uid: number; nazwa: string };
 
@@ -42,6 +43,7 @@ export type Stan = {
     ostrzezenia?: string[];
     liczniki?: Record<string, number>;
     czas_odczytu_s?: number;
+    sezony_statystyk?: Record<string, number>;   // "2027/28" -> liczba zawodnikow z tym sezonem statystyk
     wczytano?: string;
     demo?: boolean;
   };
@@ -65,7 +67,7 @@ export type MetaPozycji = {
   min_minut_rozwoju: number;
   min_minut_auto: number;            // prog automatyczny calej puli (orientacyjnie; filtr liczy go wg ligi)
   statystyki_niedostepne: string[];  // cechy wag domyslnych, ktorych zapis nie podaje
-  role_fm?: { nazwa: string; kluczowe: string[]; zalecane: string[] }[]; // role FM do oceny z atrybutow
+  role_fm?: { nazwa: string; faza?: 'z' | 'bez'; kluczowe: string[]; zalecane: string[] }[]; // role FM do oceny z atrybutow
   ma_hg?: boolean;                   // zapis gry: kraje i kluby wychowania (home-grown)
 };
 

@@ -285,17 +285,17 @@ _FORMATY = {'SCORE': 'score', 'Percentyl': 'pasek', 'Wiek': 'int', 'Minuty': 'in
             'Ocena na pozycji': 'int', 'Strata piłek na podanie': 'dec2', 'Asysty/90': 'dec2', 'Kartki/90': 'dec2',
             'Błędy prowadzące do gola/90': 'dec2', 'Prognoza SCORE': 'int',
             'Niedowartościowanie': 'mnoznik', 'Wycena wg wyniku': 'eur', 'Δ SCORE': 'zmiana',
-            'Ocena roli': 'dec1', 'Klauzula': 'eur', 'Wartość za 2 lata': 'eur', 'Zmiana wartości': 'mnoznik'}
+            'Ocena roli': 'dec1', 'Ocena roli bez piłki': 'dec1', 'Klauzula': 'eur', 'Wartość za 2 lata': 'eur', 'Zmiana wartości': 'mnoznik'}
 # Kolumny prezentowane z pol liczbowych (sortowanie po liczbie, nie po tekscie)
 _POLA = {'Cena': ('Wartość_Numeryczna', 'eur'), 'Płaca': ('Zarobki_Numeryczne', 'eur_tyg'),
          'Wygasa': ('Wygasa_Data', 'data'), 'Koszt (3 lata)': ('Koszt', 'eur')}
 _TEKSTOWE = {'Piłkarz', 'Klub', 'Liga', 'Pozycja', 'Kraj', 'Preferowana noga', 'Okazje', 'Pozycja na liście',
-             'Kandydat z pozycji', 'Rola FM', 'HG', 'Sezon statystyk'}
+             'Kandydat z pozycji', 'Rola FM', 'Rola bez piłki', 'HG', 'Sezon statystyk'}
 # Naglowki inne niz nazwa kolumny w danych
 _NAGLOWKI = {'Kraj': 'Narodowość', 'Pozycja': 'Pozycje', 'Δ SCORE': 'Δ SCORE'}
 # Kolumny Moneyball (z wzbogac), nie sa statystykami meczowymi
 _MONEYBALL = {'Koszt (3 lata)', 'Okazje', 'Ocena na pozycji', 'Wycena wg wyniku',
-              'Niedowartościowanie', 'Δ SCORE', 'Prognoza SCORE', 'Ocena roli', 'Rola FM', 'Klauzula', 'HG',
+              'Niedowartościowanie', 'Δ SCORE', 'Prognoza SCORE', 'Ocena roli', 'Rola FM', 'Ocena roli bez piłki', 'Rola bez piłki', 'Klauzula', 'HG',
               'Wartość za 2 lata', 'Zmiana wartości'}
 
 
@@ -337,6 +337,9 @@ def kolumny_tabeli(pozycja, pula):
     if 'Ocena roli' in pula.columns and pula['Ocena roli'].notna().any():
         _wstaw_po(nazwy, 'Rola FM', 'Prognoza SCORE' if 'Prognoza SCORE' in nazwy else 'Percentyl')
         _wstaw_po(nazwy, 'Ocena roli', 'Rola FM')
+        if 'Ocena roli bez piłki' in pula.columns and pula['Ocena roli bez piłki'].notna().any():
+            _wstaw_po(nazwy, 'Rola bez piłki', 'Ocena roli')
+            _wstaw_po(nazwy, 'Ocena roli bez piłki', 'Rola bez piłki')
     if 'Klauzula' in pula.columns and pula['Klauzula'].notna().any():
         _wstaw_po(nazwy, 'Klauzula', 'Cena')
     if 'HG' in pula.columns and pula['HG'].notna().any():
@@ -345,7 +348,8 @@ def kolumny_tabeli(pozycja, pula):
         _wstaw_po(nazwy, 'Kandydat z pozycji', 'Piłkarz')
         if 'Ocena na pozycji' in pula.columns and pula['Ocena na pozycji'].notna().any():
             _wstaw_po(nazwy, 'Ocena na pozycji', 'Kandydat z pozycji')
-    return [_opis_kolumny(nazwa) for nazwa in nazwy]
+    # bez kolumny Percentyl (powtarza SCORE w innej skali; zostaje na karcie zawodnika)
+    return [_opis_kolumny(nazwa) for nazwa in nazwy if nazwa != 'Percentyl']
 
 
 def _opis_kolumny(nazwa):
@@ -409,7 +413,7 @@ POLA_WIERSZA = ['ID', 'UID', 'Piłkarz', 'Klub', 'Klub_UID', 'Liga', 'Kraj', 'Wi
                 'Okazje', 'Pareto', 'Kandydat', 'Kandydat z pozycji', 'Ocena na pozycji',
                 'Wycena wg wyniku', 'Niedowartościowanie', 'Kontuzje_2_lata', 'Δ SCORE', 'Δ percentyl',
                 'Δ minut', 'Nowe pozycje', 'Δ_mała_próba', 'U21', 'Wycena_ograniczona', 'Statystyki_niepełne',
-                'Prognoza_wiek', 'Prognoza_regresja', 'Sezon statystyk', 'Rola FM', 'Ocena roli', 'HG', 'Klauzula', 'Wartość za 2 lata', 'Zmiana wartości', 'Mnożnik_ligi_klubu', 'Udział_poza_ligą_klubu', 'Ligi_gry']
+                'Prognoza_wiek', 'Prognoza_regresja', 'Sezon statystyk', 'Rola FM', 'Ocena roli', 'Rola bez piłki', 'Ocena roli bez piłki', 'HG', 'Klauzula', 'Wartość za 2 lata', 'Zmiana wartości', 'Mnożnik_ligi_klubu', 'Udział_poza_ligą_klubu', 'Ligi_gry']
 
 
 def pola_wiersza(pozycja, pula):
@@ -418,7 +422,7 @@ def pola_wiersza(pozycja, pula):
 
 def pola_karty(pozycja, pula):
     """Pola wiersza karty zawodnika: jak w tabeli + oceny we wszystkich rolach FM pozycji ('Rola|<nazwa>')."""
-    return pola_wiersza(pozycja, pula) + [k for k in pula.columns if str(k).startswith('Rola|')] + \
+    return pola_wiersza(pozycja, pula) + [k for k in pula.columns if str(k).startswith(('Rola|', 'RolaBez|'))] + \
         [k for k in ('Klauzula_krajowa_do', 'Status w kadrze') if k in pula.columns]
 
 

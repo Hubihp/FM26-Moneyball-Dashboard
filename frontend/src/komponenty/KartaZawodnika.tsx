@@ -50,20 +50,24 @@ function SekcjaFM({ id, w, zapytanie, wersja }: { id: string; w: Wiersz; zapytan
     retry: false,
   });
   const d = dane.data ?? {};
-  const role = Object.entries(d).filter(([k, v]) => k.startsWith('Rola|') && typeof v === 'number')
-    .map(([k, v]) => [k.slice(5), v as number] as const).sort((a, b) => b[1] - a[1]);
+  const rolePrefiksu = (prefiks: string) => Object.entries(d)
+    .filter(([k, v]) => k.startsWith(prefiks) && typeof v === 'number')
+    .map(([k, v]) => [k.slice(prefiks.length), v as number] as const).sort((a, b) => b[1] - a[1]);
+  const role = rolePrefiksu('Rola|');
+  const roleBez = rolePrefiksu('RolaBez|');
   const x: Wiersz = { ...w, ...d };
   const klauzula = typeof x['Klauzula'] === 'number' ? x['Klauzula'] as number : null;
   const hg = x['HG'] === 'klub' ? 'wychowanek mojego klubu' : x['HG'] === 'kraj' ? 'wychowanek kraju mojego klubu' : null;
-  if (!role.length && klauzula === null && !hg && !x['Status w kadrze']) return null;
+  if (!role.length && !roleBez.length && klauzula === null && !hg && !x['Status w kadrze']) return null;
   return (
     <Stack gap={6}>
       <Text fw={600} size="sm">Według gry (atrybuty i kontrakt z zapisu)</Text>
-      {role.length > 0 && (
-        <Group gap={6}>
-          {role.map(([nazwa, ocena], i) => (
+      {[['Z piłką', role], ['Bez piłki', roleBez]].map(([tytul, lista]) => (lista as typeof role).length > 0 && (
+        <Group key={tytul as string} gap={6}>
+          <Text size="sm" c="dimmed" w={70}>{tytul as string}</Text>
+          {(lista as typeof role).map(([nazwa, ocena], i) => (
             <Tooltip key={nazwa} label={`Średnia ważona atrybutów roli w skali 1-20${silnik ? ', z wagami silnika' : ''}`}>
-              <Badge variant={i === 0 ? 'filled' : 'light'} color="gray" radius="sm"
+              <Badge variant={i === 0 ? 'filled' : 'light'} color="gray"
                 styles={{ root: { textTransform: 'none' } }}
                 leftSection={<span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 4,
                   background: kolorWyniku(30 + (ocena - 6) * 4) }} />}>
@@ -72,7 +76,7 @@ function SekcjaFM({ id, w, zapytanie, wersja }: { id: string; w: Wiersz; zapytan
             </Tooltip>
           ))}
         </Group>
-      )}
+      ))}
       <Group gap="lg">
         {x['Status w kadrze'] ? <Pole etykieta="Status w kadrze" wartosc={String(x['Status w kadrze'])} /> : null}
         {klauzula !== null && (

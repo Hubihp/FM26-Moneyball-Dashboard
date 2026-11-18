@@ -3,6 +3,22 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 2.7.0
+
+- Po uruchomieniu żadna kolumna nie jest posortowana (bez strzałki przy SCORE): wiersze są ułożone
+  od najwyższego SCORE przez serwer, a sortowanie włącza dopiero kliknięcie nagłówka.
+- Sezon statystyk działa osobno dla każdej ligi: ligi zmieniają sezon w różnych dniach (np. w lipcu
+  Serie A ma już nowy sezon, a LaLiga jeszcze nie). Automatycznie: każdy zawodnik ma swój ostatni
+  sezon z minutami. Zamiast „ostatni zakończony” wybierasz konkretny sezon (np. 2027/28), a pod polem
+  widać, jakie sezony są użyte i dla ilu zawodników.
+- Dymki z opisem przy każdym filtrze panelu bocznego.
+- Taktyka: żetony zawodników tej samej wielkości z piłką i bez piłki.
+- Mecze: najechanie na mecz na wykresie podświetla go w tabeli.
+- Bez kolumny „Percentyl” w głównej tabeli (zostaje na karcie zawodnika).
+- Role jak w FM27: role z piłką i bez piłki na każdej pozycji (np. bramkarz-libero, stoper doskakujący,
+  wahadłowy do środka, pomocnik wbiegający w kanały, napastnik wracający do obrony). Nowe kolumny
+  „Rola bez piłki” i „Ocena roli bez piłki”; lista ról w README.
+
 ## 2.6.0
 
 - Spójny wygląd całej aplikacji: wspólny margines zakładek, jedna czcionka i odstępy we wszystkich

@@ -11,6 +11,7 @@ dlatego nazwy pochodza z mapy `dane/nazwy_rozgrywek.csv` (id rozgrywek w bazie -
 ktora mozna zbudowac automatycznie ze starych eksportow CSV (`zbuduj_mape_nazw_lig`).
 """
 import json
+from types import SimpleNamespace
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -176,6 +177,7 @@ class WynikZapisu:
     kontrola: dict = field(default_factory=dict)       # kontrola jakosci odczytu (fm_moneyball/kontrola.py)
     mecze: dict = field(default_factory=dict)          # club_uid (tekst) -> mecze moich klubow i ich rywali (mecze.py)
     finanse: dict = field(default_factory=dict)        # club_uid (tekst) -> miesiace finansow (finanse.py)
+    sezony_statystyk: dict = field(default_factory=dict)  # "2027/28" -> liczba zawodnikow z tym sezonem statystyk
 
 
 # =============================================================================
@@ -287,13 +289,18 @@ def sumuj_statystyki(wiersze, rodzaj):
     return wynik
 
 
-# --- Poczatek sezonu: statystyki z archiwum gry ---------------------------------------------------
-# Na poczatku sezonu (np. lipiec w ligach europejskich) statystyki biezacego sezonu sa wyzerowane i zawodnicy
-# odpadaja przy odczycie (prog minut) albo maja wynik z kilku meczow. Gra archiwizuje zakonczone sezony
-# (player_season_history: te same pola co biezacy sezon, season_year = rok rozpoczecia sezonu) - zawodnik
-# z mniej niz PROG_MINUT_SEZONU minutami dostaje statystyki ostatniego zakonczonego sezonu.
+# --- Sezon statystyk: biezacy sezon i archiwum gry --------------------------------------------------
+# Gra archiwizuje zakonczone sezony (player_season_history: te same pola co biezacy sezon, season_year = rok
+# rozpoczecia sezonu), ale kazda liga w innym dniu: 7 lipca Serie A ma juz nowy sezon 2028/29 (2027/28 w archiwum),
+# a LaLiga wciaz ma 2027/28 jako biezacy. Dlatego rok biezacego sezonu jest ustalany osobno dla kazdej ligi
+# (ostatni rok w archiwum jej zawodnikow + 1), a sezon statystyk wybiera sie po roku, nie "ostatni zakonczony".
+# Tryb automatyczny: kazdy zawodnik ma swoj ostatni sezon z minutami - biezacy, gdy rozegral w nim co najmniej
+# PROG_MINUT_SEZONU minut, inaczej ostatni zakonczony (z archiwum), jesli ma w nim wiecej minut.
 PROG_MINUT_SEZONU = 450
-UDZIAL_GRAJACYCH_POCZATKU = 0.30   # (w trakcie sezonu ok. 47%, na poczatku lipca 20%) mniej zawodnikow z klubem z PROG_MINUT_SEZONU minutami - poczatek sezonu
+# liga, w ktorej mniej niz tyle zawodnikow ma PROG_MINUT_SEZONU minut, dopiero zaczela sezon (w trakcie sezonu
+# ok. 50%) - wtedy tryb automatyczny czyta archiwum (ok. 25 s)
+UDZIAL_GRAJACYCH_POCZATKU = 0.30
+MIN_ZAWODNIKOW_LIGI_POCZATKU = 40
 RODZAJE_ARCHIWUM = {"league": {"league"}, "overall": {"league", "cup", "continental"}}
 
 
@@ -308,51 +315,108 @@ class _WierszArchiwum:
         return getattr(self._w, nazwa)
 
 
-def poczatek_sezonu(liczniki, zawodnicy, prog=PROG_MINUT_SEZONU):
-    """Czy wiekszosc zawodnikow z klubem nie ma jeszcze minut w sezonie (wtedy warto czytac archiwum)."""
-    z_klubem = [z for z in zawodnicy if z.club_uid is not None]
-    if not z_klubem:
-        return False
-    grajacy = sum(1 for z in z_klubem if ((liczniki.get(z.uid) or {}).get("minutes") or 0) >= prog)
-    return grajacy / len(z_klubem) < UDZIAL_GRAJACYCH_POCZATKU
+def etykieta_sezonu(rok):
+    return f"{rok}/{(rok + 1) % 100:02d}"
 
 
-def statystyki_z_archiwum(archiwum, liczniki, rodzaj, prog=PROG_MINUT_SEZONU, ktory=None):
+def rok_sezonu(data):
+    """Rok rozpoczecia sezonu (od lipca) dla daty w grze."""
+    return data.year if data.month >= 7 else data.year - 1
+
+
+def _liga_zawodnika(zawodnik, liga_klubu):
+    liga = (liga_klubu or {}).get(zawodnik.club_uid)
+    return liga.competition_id if liga is not None else None
+
+
+def poczatek_sezonu(liczniki, zawodnicy, liga_klubu=None, prog=PROG_MINUT_SEZONU):
+    """Czy ktoras liga (z co najmniej MIN_ZAWODNIKOW_LIGI_POCZATKU zawodnikami) dopiero zaczela sezon - wiekszosc
+    jej zawodnikow nie ma jeszcze PROG minut. Bez mapy lig - wszyscy zawodnicy z klubem jako jedna liga."""
+    grupy = defaultdict(lambda: [0, 0])
+    for z in zawodnicy:
+        if z.club_uid is None:
+            continue
+        g = grupy[_liga_zawodnika(z, liga_klubu) if liga_klubu else 0]
+        g[0] += 1
+        g[1] += ((liczniki.get(z.uid) or {}).get("minutes") or 0) >= prog
+    return any(n >= (MIN_ZAWODNIKOW_LIGI_POCZATKU if liga_klubu else 1) and grajacy / n < UDZIAL_GRAJACYCH_POCZATKU
+               for n, grajacy in grupy.values())
+
+
+def lata_biezace(archiwum_po_zawodniku, zawodnicy, liga_klubu):
+    """{competition_id: rok biezacego sezonu ligi} = najczestszy (ostatni rok w archiwum + 1) wsrod jej zawodnikow."""
+    po_lidze = defaultdict(Counter)
+    for z in zawodnicy:
+        wiersze = archiwum_po_zawodniku.get(z.uid)
+        if wiersze:
+            po_lidze[_liga_zawodnika(z, liga_klubu)][max(w.season_year for w in wiersze) + 1] += 1
+    return {liga: c.most_common(1)[0][0] for liga, c in po_lidze.items()}
+
+
+def wybierz_sezony(liczniki, archiwum, zawodnicy, liga_klubu, rodzaj, rok=None, data_gry=None,
+                   prog=PROG_MINUT_SEZONU):
     """
-    Wiersze archiwum (PlayerSeasonHistory) -> ({player_uid: liczniki ostatniego zakonczonego sezonu}, {player_uid:
-    rok rozpoczecia tego sezonu}) dla zawodnikow z mniej niz `prog` minutami w biezacym sezonie i z wieksza liczba
-    minut w archiwum. ktory = 1 (ostatni zakonczony sezon zawodnika) albo 2 (sezon wczesniej): wszyscy zawodnicy
-    z tym sezonem w archiwum, bez wzgledu na minuty w biezacym sezonie.
+    Liczniki biezacego sezonu + archiwum -> (liczniki, {player_uid: rok sezonu}).
+    rok=None (automatycznie): zawodnik z mniej niz `prog` minutami bierze ostatni zakonczony sezon, w ktorym ma
+    wiecej minut. rok=R: kazdy zawodnik ma sezon R - biezacy, gdy biezacy sezon jego ligi to R, inaczej z archiwum
+    (bez sezonu R - bez statystyk).
     """
     rodzaje = RODZAJE_ARCHIWUM.get(rodzaj, {rodzaj})
     po_zawodniku = defaultdict(list)
     for w in archiwum:
         if str(getattr(w, "kind", "")) in rodzaje and (getattr(w, "minutes", None) or 0) > 0:
             po_zawodniku[w.player_uid].append(w)
-    wybrane, sezony = [], {}
-    for uid, wiersze in po_zawodniku.items():
-        if ktory:
-            lata = sorted({w.season_year for w in wiersze}, reverse=True)
-            if len(lata) < ktory:
-                continue
-            rok = lata[ktory - 1]
-            wybrane += [_WierszArchiwum(w, rodzaj) for w in wiersze if w.season_year == rok]
-            sezony[uid] = rok
+    biezace = lata_biezace(po_zawodniku, zawodnicy, liga_klubu)
+    domyslny = rok_sezonu(data_gry) if data_gry is not None else (max(biezace.values()) if biezace else None)
+    wynik, sezony, wybrane = {}, {}, []
+    for z in zawodnicy:
+        wiersze = po_zawodniku.get(z.uid, [])
+        biezacy_rok = biezace.get(_liga_zawodnika(z, liga_klubu))
+        if biezacy_rok is None:
+            biezacy_rok = max((w.season_year for w in wiersze), default=(domyslny or 0) - 1) + 1
+        teraz = liczniki.get(z.uid)
+        minuty = (teraz or {}).get("minutes") or 0
+        if rok is None:
+            cel = biezacy_rok
+            if minuty < prog and wiersze:
+                ostatni = max(w.season_year for w in wiersze)
+                if sum(w.minutes or 0 for w in wiersze if w.season_year == ostatni) > minuty:
+                    cel = ostatni
+        else:
+            cel = rok
+        if cel == biezacy_rok:
+            if teraz is not None:
+                wynik[z.uid] = teraz
+                sezony[z.uid] = cel
             continue
-        teraz = (liczniki.get(uid) or {}).get("minutes") or 0
-        if teraz >= prog:
-            continue
-        rok = max(w.season_year for w in wiersze)
-        ostatni = [w for w in wiersze if w.season_year == rok]
-        if sum(w.minutes or 0 for w in ostatni) <= teraz:
-            continue
-        wybrane += [_WierszArchiwum(w, rodzaj) for w in ostatni]
-        sezony[uid] = rok
-    return sumuj_statystyki(wybrane, rodzaj), sezony
+        z_roku = [w for w in wiersze if w.season_year == cel]
+        if z_roku:
+            wybrane += [_WierszArchiwum(w, rodzaj) for w in z_roku]
+            sezony[z.uid] = cel
+    wynik.update(sumuj_statystyki(wybrane, rodzaj))
+    return wynik, sezony
 
 
-def etykieta_sezonu(rok):
-    return f"{rok}/{(rok + 1) % 100:02d}"
+def statystyki_z_archiwum(archiwum, liczniki, rodzaj, prog=PROG_MINUT_SEZONU, ktory=None):
+    """Zgodnosc wsteczna (testy): tryb automatyczny bez mapy lig - tylko zawodnicy, ktorzy dostali archiwum."""
+    uidy = set(liczniki) | {w.player_uid for w in archiwum}
+    zawodnicy = [SimpleNamespace(uid=u, club_uid=None) for u in uidy]
+    wynik, sezony = wybierz_sezony(liczniki, archiwum, zawodnicy, {}, rodzaj, prog=prog)
+    if ktory:
+        po = defaultdict(set)
+        for w in archiwum:
+            if str(getattr(w, "kind", "")) in RODZAJE_ARCHIWUM.get(rodzaj, {rodzaj}) and (w.minutes or 0) > 0:
+                po[w.player_uid].add(w.season_year)
+        wynik, sezony, wybrane = {}, {}, []
+        for uid, lata in po.items():
+            if len(lata) >= ktory:
+                r = sorted(lata, reverse=True)[ktory - 1]
+                wybrane += [_WierszArchiwum(w, rodzaj) for w in archiwum if w.player_uid == uid and w.season_year == r
+                            and str(w.kind) in RODZAJE_ARCHIWUM.get(rodzaj, {rodzaj})]
+                sezony[uid] = r
+        return sumuj_statystyki(wybrane, rodzaj), sezony
+    z_archiwum = {u: wynik[u] for u, r in sezony.items() if u in wynik and wynik[u] is not liczniki.get(u)}
+    return z_archiwum, {u: sezony[u] for u in z_archiwum}
 
 
 def sumuj_druzyny(wiersze, rodzaj):
@@ -1134,31 +1198,23 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
             liczniki = sumuj_statystyki(wiersze_sezonu, opcje.rodzaj_statystyk)
             druzyny = sumuj_druzyny(wiersze_sezonu, opcje.rodzaj_statystyk)
             del wiersze_sezonu
+            # sezon statystyk: kazdy zawodnik dostaje rok sezonu (kolumna "Sezon statystyk"); archiwum gry czytane
+            # przy wybranym roku albo w trybie automatycznym, gdy ktoras liga dopiero zaczela sezon
             sezon_archiwalny = {}
-            ktory = {"ostatni": 1, "przedostatni": 2}.get(opcje.sezon_statystyk)
-            if ktory:
-                try:      # wybrany zakonczony sezon z archiwum gry dla wszystkich zawodnikow
-                    liczniki, sezon_archiwalny = statystyki_z_archiwum(
-                        zapis.player_season_history(), {}, opcje.rodzaj_statystyk, ktory=ktory)
-                    if sezon_archiwalny:
-                        lata = Counter(sezon_archiwalny.values()).most_common(1)[0][0]
-                        ostrzezenia.append(f"Statystyki z zakończonego sezonu {etykieta_sezonu(lata)} (archiwum gry, "
-                                           "wybór „Sezon statystyk” w panelu bocznym).")
-                except Exception as e:
-                    ostrzezenia.append(f"Nie udało się odczytać archiwum sezonów ({type(e).__name__}).")
-            elif opcje.sezon_statystyk != "biezacy" and poczatek_sezonu(liczniki, zawodnicy):
-                try:      # poczatek sezonu: statystyki ostatniego zakonczonego sezonu z archiwum gry
-                    z_archiwum, sezon_archiwalny = statystyki_z_archiwum(
-                        zapis.player_season_history(), liczniki, opcje.rodzaj_statystyk)
-                    liczniki.update(z_archiwum)
-                    if sezon_archiwalny:
-                        lata = Counter(sezon_archiwalny.values()).most_common(1)[0][0]
-                        ostrzezenia.append(
-                            f"Początek sezonu: {len(sezon_archiwalny)} zawodników ma mniej niż {PROG_MINUT_SEZONU} minut "
-                            f"w bieżącym sezonie, więc ich statystyki pochodzą z ostatniego zakończonego sezonu "
-                            f"(najczęściej {etykieta_sezonu(lata)}) z archiwum gry - kolumna „Sezon statystyk”.")
+            wybor = str(opcje.sezon_statystyk or "auto")
+            rok_wyboru = int(wybor) if wybor.isdigit() else \
+                {"ostatni": 1, "przedostatni": 2}.get(wybor) and rok_sezonu(info.game_date) - {"ostatni": 1, "przedostatni": 2}[wybor]
+            if rok_wyboru or (wybor != "biezacy" and poczatek_sezonu(liczniki, zawodnicy, liga_klubu)):
+                try:
+                    liczniki, sezon_archiwalny = wybierz_sezony(
+                        liczniki, zapis.player_season_history(), zawodnicy, liga_klubu, opcje.rodzaj_statystyk,
+                        rok=rok_wyboru or None, data_gry=info.game_date)
+                    if rok_wyboru:
+                        ostrzezenia.append(f"Statystyki z sezonu {etykieta_sezonu(rok_wyboru)} (wybór „Sezon statystyk” "
+                                           "w panelu bocznym): bieżący sezon ligi albo archiwum gry.")
                 except Exception as e:   # archiwum to dodatek
                     ostrzezenia.append(f"Nie udało się odczytać archiwum sezonów ({type(e).__name__}).")
+            sezony_statystyk = dict(Counter(etykieta_sezonu(r) for r in sezon_archiwalny.values()).most_common())
             moje_uidy = {m.club_uid for m in zarzadzane}
             try:
                 miesiace = list(zapis.finances())
@@ -1245,6 +1301,7 @@ def wczytaj_zapis(sciezka, opcje=OpcjeZapisu(), nazwy=None, postep=None):
         kontrola=kontrola_odczytu,
         mecze=mecze,
         finanse=finanse,
+        sezony_statystyk=sezony_statystyk,
     )
 
 

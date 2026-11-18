@@ -145,7 +145,7 @@ Dośrodkowania, 100% sytuacje, sprinty, odbiory, wygrane główki, celność pod
 
 Te kolumny i filtry liczy się z zapisu gry (przy CSV ich nie ma). Używane są tylko dane widoczne w grze: atrybuty z ekranu zawodnika, reputacja, kontrakt i miejsce wychowania.
 
-- **Rola FM i Ocena roli.** Ocena zawodnika w roli z gry, w skali atrybutów 1-20: średnia ważona atrybutów roli, kluczowe z wagą 1, zalecane z wagą 0,5 (na wzór ról z FM). Domyślnie kolumna pokazuje najlepszą rolę zawodnika na tej pozycji; w panelu można wybrać konkretną rolę (podpowiedź pokazuje jej atrybuty). Karta zawodnika ma oceny we wszystkich rolach pozycji. Uwaga: zapis ma dokładne atrybuty każdego zawodnika, a gra pokazuje je dopiero po skautingu.
+- **Rola FM i Ocena roli.** Ocena zawodnika w roli z gry, w skali atrybutów 1-20: średnia ważona atrybutów roli, kluczowe z wagą 1, zalecane z wagą 0,5. Role jak w FM27 (system z FM26: osobne role z piłką i bez piłki). Kolumny „Rola FM” / „Ocena roli” pokazują najlepszą rolę z piłką, a „Rola bez piłki” / „Ocena roli bez piłki” - najlepszą rolę bez piłki; w panelu można wybrać konkretną rolę (lista pogrupowana na role z piłką i bez piłki, podpowiedź pokazuje atrybuty). Karta zawodnika ma oceny we wszystkich rolach pozycji. Gra nie zapisuje w pliku, które atrybuty są kluczowe dla roli - przypisanie poniżej jest nasze, według opisów ról w grze. Uwaga: zapis ma dokładne atrybuty każdego zawodnika, a gra pokazuje je dopiero po skautingu.
 - **Wagi atrybutów wg testów silnika.** Społeczność FM-Arena testuje silnik meczowy: zmienia jeden atrybut całej drużyny i liczy punkty w tysiącach meczów. Najwięcej dają szybkość i przyspieszenie, potem skoczność, zwinność i drybling. Przełącznik (domyślnie włączony) mnoży wagi tych atrybutów w ocenie roli: szybkość i przyspieszenie ×1,6, skoczność ×1,3, zwinność ×1,2, drybling ×1,15, wytrzymałość, siła i przewidywanie ×1,1 (bez bramkarzy).
 - **Klauzula.** Najniższa klauzula odstępnego z kontraktu, która obowiązuje wobec mojego klubu: ogólna, dla klubów zagranicznych albo dla klubów z tego samego kraju (ta ostatnia do daty wygaśnięcia). Okazja „klauzula ≤ wartość”: klub nie może odrzucić oferty w wysokości klauzuli, a jest ona nie wyższa niż wartość zawodnika.
 - **HG (home-grown).** „kraj” - wychowanek kraju mojego klubu, „klub” - wychowanek mojego klubu (3 sezony w klubach kraju lub klubu między 15. a 21. rokiem życia). Liczy się do limitów rejestracji, np. w Lidze Mistrzów (8 z 25). Filtr „Home-grown” w panelu.
@@ -154,22 +154,98 @@ Te kolumny i filtry liczy się z zapisu gry (przy CSV ich nie ma). Używane są 
 
 Na początku sezonu (np. w lipcu w ligach europejskich) statystyki bieżącego sezonu w zapisie są wyzerowane. Zawodnicy odpadaliby wtedy przy odczycie (próg minut) albo dostawaliby wynik z jednego, dwóch meczów. Gra archiwizuje zakończone sezony z pełnymi statystykami, więc gdy w zapisie gra jeszcze mniej niż 30% zawodników z klubem (w trakcie sezonu ok. 47%), program czyta archiwum (ok. 10 s dłużej). Zawodnik z mniej niż 450 minutami w bieżącym sezonie dostaje statystyki ostatniego zakończonego sezonu. Kolumna „Sezon statystyk” pokazuje, z którego sezonu są dane (puste - bieżący), a ostrzeżenie na górze mówi, ilu zawodników to dotyczy.
 
-Pole „Sezon statystyk” w panelu bocznym wybiera sezon dla wszystkich zakładek: Automatycznie (jak wyżej), Bieżący sezon (bez archiwum), Ostatni zakończony albo Sezon wcześniej (archiwum gry dla wszystkich zawodników: ostatni albo przedostatni zakończony sezon każdego z nich). Zmiana wczytuje zapis ponownie (ok. minuty). Przy wybranym zakończonym sezonie program nie zapisuje migawki historii. Przy rodzaju statystyk „wszystkie rozgrywki” sumowane są liga, puchary krajowe i międzynarodowe.
+Pole „Sezon statystyk” w panelu bocznym wybiera sezon dla wszystkich zakładek. Ligi zmieniają sezon w różnych dniach (7 lipca Serie A ma już sezon 2028/29, a LaLiga wciąż 2027/28 jako bieżący), więc rok bieżącego sezonu program ustala osobno dla każdej ligi (ostatni rok w archiwum jej zawodników + 1).
+- **Automatycznie (ostatni z minutami)**: każdy zawodnik ma swój ostatni sezon z minutami - bieżący sezon swojej ligi, gdy rozegrał w nim co najmniej 450 minut, inaczej ostatni zakończony sezon z archiwum, jeśli ma w nim więcej minut. Archiwum jest czytane, gdy któraś liga dopiero zaczęła sezon.
+- **Sezon RRRR/RR**: wszyscy zawodnicy z tego sezonu - bieżący sezon ligi, jeśli to ten rok, inaczej archiwum. Zawodnik, który w tym sezonie nie grał, nie ma statystyk.
+
+Pod polem widać, jakie sezony są faktycznie użyte i dla ilu zawodników (np. „Użyte: 2027/28 (37609), 2028/29 (14436)”), a kolumna „Sezon statystyk” pokazuje sezon każdego zawodnika. Minimum minut liczy się z minut sezonu użytego dla zawodnika. Zmiana wczytuje zapis ponownie (ok. minuty); przy wybranym roku program nie zapisuje migawki historii. Przy rodzaju statystyk „wszystkie rozgrywki” sumowane są liga, puchary krajowe i międzynarodowe.
 
 ### Mecze: analiza i raport o rywalu
 
 Karta „Mecze” (przy zapisie gry z Twoim klubem):
 
-- **Analiza meczów.** Kolumna „Strona”: Dom, Wyjazd albo Neutralne (z gospodarza meczu i oznaczenia boiska neutralnego w terminarzu, np. finały). Najechanie na mecz w tabeli podświetla go na wykresie, a kliknięcie punktu na wykresie wskazuje mecz w tabeli. Wszystkie mecze pierwszej drużyny z ostatnich ~13 miesięcy z wynikiem, xG obu drużyn, strzałami, posiadaniem i punktami oczekiwanymi (xPts: szansa wygranej, remisu i porażki z xG obu drużyn, rozkład Poissona). Podsumowanie sezonu: bilans, gole, xG za i przeciw, punkty wobec oczekiwanych i forma. Wykres średniej kroczącej xG przeciw (z 5 meczów) pokazuje, czy obrona dopuszcza więcej, czy mniej. Mecze wygrane mimo xG niższego o co najmniej 0,6 są oznaczone jako „szczęśliwa wygrana”, a przegrane mimo wyższego - „pechowa porażka”. Gra zachowuje statystyki (xG) tylko części meczów.
+- **Analiza meczów.** Kolumna „Strona”: Dom, Wyjazd albo Neutralne (z gospodarza meczu i oznaczenia boiska neutralnego w terminarzu, np. finały). Najechanie na mecz na wykresie podświetla go w tabeli (i odwrotnie), a kliknięcie punktu przewija tabelę do meczu. Wszystkie mecze pierwszej drużyny z ostatnich ~13 miesięcy z wynikiem, xG obu drużyn, strzałami, posiadaniem i punktami oczekiwanymi (xPts: szansa wygranej, remisu i porażki z xG obu drużyn, rozkład Poissona). Podsumowanie sezonu: bilans, gole, xG za i przeciw, punkty wobec oczekiwanych i forma. Wykres średniej kroczącej xG przeciw (z 5 meczów) pokazuje, czy obrona dopuszcza więcej, czy mniej. Mecze wygrane mimo xG niższego o co najmniej 0,6 są oznaczone jako „szczęśliwa wygrana”, a przegrane mimo wyższego - „pechowa porażka”. Gra zachowuje statystyki (xG) tylko części meczów.
 - **Raport o rywalu.** Domyślnie najbliższy rywal z terminarza (można wybrać innego albo kliknąć mecz w analizie): miejsce w tabeli, forma i xG z jego ostatnich 10 meczów na tle Twoich, nasze mecze z nim i kluczowi zawodnicy (najwyższy SCORE wśród grających co najmniej 900 minut, z rolą FM). Taktyki rywala zapis gry nie zawiera.
 
 Zapis nie ma nazw rozgrywek: liga ma nazwę z mapy lig, a pozostałe rozgrywki są opisane jako „Puchar krajowy” albo „Rozgrywki międzynarodowe”.
 
 ### Tabele: filtry i szerokości kolumn
 
-Filtr kolumny otwiera prawy przycisk myszy na nagłówku. Kolumny tekstowe mają listę wartości występujących w kolumnie z checkboxami i liczbą wierszy (puste pola jako „(brak)”, przy dłuższych listach wyszukiwarka); kolumny z setkami różnych wartości (np. nazwisko) - wyszukiwanie fragmentu tekstu. Kolumny liczbowe mają zakres od-do z podpowiedzią najmniejszej i największej wartości, daty - zakres dat. Aktywne filtry są nad tabelą (kliknięcie usuwa filtr), a nagłówek filtrowanej kolumny jest wyróżniony.
+Po uruchomieniu żadna kolumna nie jest posortowana: wiersze są ułożone od najwyższego SCORE przez serwer, a sortowanie tabeli włącza kliknięcie nagłówka (i nie jest zapamiętywane). Każdy filtr panelu bocznego ma dymek z opisem (po najechaniu). Filtr kolumny otwiera prawy przycisk myszy na nagłówku. Kolumny tekstowe mają listę wartości występujących w kolumnie z checkboxami i liczbą wierszy (puste pola jako „(brak)”, przy dłuższych listach wyszukiwarka); kolumny z setkami różnych wartości (np. nazwisko) - wyszukiwanie fragmentu tekstu. Kolumny liczbowe mają zakres od-do z podpowiedzią najmniejszej i największej wartości, daty - zakres dat. Aktywne filtry są nad tabelą (kliknięcie usuwa filtr), a nagłówek filtrowanej kolumny jest wyróżniony.
 
 Szerokość kolumn program dopasowuje do zawartości (najdłuższa wartość i nagłówek w dwóch wierszach), więc krótkie kolumny są wąskie, a nazwiska, kluby i role widać w całości. Szerokość zmieniona ręcznie (przeciągnięcie krawędzi nagłówka) jest zapamiętana; „Przywróć układ” wraca do dopasowania.
+
+### Role FM i ich kluczowe atrybuty
+
+| Pozycja | Rola | Faza | Kluczowe atrybuty |
+|---|---|---|---|
+| BR | Bramkarz | z piłką | zasięg w powietrzu, panowanie w polu karnym, komunikacja, chwytanie, refleks, ustawianie się, koncentracja, zwinność |
+| BR | Bramkarz grający nogami | z piłką | wybicia, wyrzuty, przyjęcie piłki, podania, opanowanie, decyzje, wizja gry, refleks |
+| BR | Bramkarz bez ryzyka | z piłką | chwytanie, refleks, wybicia, zasięg w powietrzu, ustawianie się, koncentracja |
+| BR | Bramkarz na linii | bez piłki | refleks, chwytanie, ustawianie się, koncentracja, sam na sam, zwinność |
+| BR | Bramkarz-libero | bez piłki | wychodzenie z bramki, sam na sam, przewidywanie, opanowanie, decyzje, przyspieszenie, zwinność, refleks |
+| ŚO | Środkowy obrońca | z piłką | gra głową, krycie, odbiór piłki, ustawianie się, skoczność, siła |
+| ŚO | Stoper rozgrywający | z piłką | podania, opanowanie, wizja gry, przyjęcie piłki, technika, decyzje, gra głową, krycie, odbiór piłki |
+| ŚO | Stoper bez ryzyka | z piłką | gra głową, krycie, odbiór piłki, siła, skoczność, ustawianie się |
+| ŚO | Szeroki stoper | z piłką | drybling, podania, odbiór piłki, krycie, ustawianie się, szybkość, wytrzymałość |
+| ŚO | Stoper wychodzący z piłką | z piłką | drybling, podania, przyjęcie piłki, opanowanie, decyzje, wizja gry, odbiór piłki |
+| ŚO | Stoper podłączający się | z piłką | dośrodkowania, drybling, wytrzymałość, pracowitość, szybkość, gra bez piłki, odbiór piłki |
+| ŚO | Stoper doskakujący | bez piłki | odbiór piłki, agresja, odwaga, przewidywanie, decyzje, siła |
+| ŚO | Stoper asekurujący | bez piłki | krycie, przewidywanie, koncentracja, ustawianie się, szybkość, przyspieszenie |
+| LO/PO, LWAH/PWAH | Boczny obrońca | z piłką | krycie, odbiór piłki, przewidywanie, koncentracja, ustawianie się, gra zespołowa |
+| LO/PO, LWAH/PWAH | Boczny obrońca do środka | z piłką | krycie, odbiór piłki, ustawianie się, opanowanie, decyzje, siła |
+| LO/PO, LWAH/PWAH | Odwrócony boczny obrońca | z piłką | przyjęcie piłki, podania, technika, opanowanie, decyzje, ustawianie się, odbiór piłki |
+| LO/PO, LWAH/PWAH | Wahadłowy | z piłką | dośrodkowania, drybling, odbiór piłki, gra bez piłki, gra zespołowa, pracowitość, przyspieszenie, wytrzymałość |
+| LO/PO, LWAH/PWAH | Wahadłowy rozgrywający | z piłką | przyjęcie piłki, podania, technika, wizja gry, decyzje, gra zespołowa, opanowanie |
+| LO/PO, LWAH/PWAH | Wahadłowy ofensywny | z piłką | dośrodkowania, drybling, technika, kreatywność, gra bez piłki, pracowitość, przyspieszenie, wytrzymałość |
+| LO/PO, LWAH/PWAH | Wahadłowy do środka | z piłką | przyjęcie piłki, podania, technika, decyzje, gra bez piłki, pracowitość, wytrzymałość |
+| LO/PO, LWAH/PWAH | Pressujący boczny obrońca | bez piłki | odbiór piłki, agresja, przewidywanie, pracowitość, przyspieszenie, wytrzymałość |
+| LO/PO, LWAH/PWAH | Defensywny boczny obrońca | bez piłki | krycie, odbiór piłki, ustawianie się, koncentracja, przewidywanie |
+| DP | Defensywny pomocnik | z piłką | odbiór piłki, przewidywanie, koncentracja, ustawianie się, gra zespołowa |
+| DP | Rozgrywający z głębi | z piłką | przyjęcie piłki, podania, technika, opanowanie, decyzje, gra zespołowa, wizja gry |
+| DP | Półobrońca | z piłką | krycie, odbiór piłki, przewidywanie, opanowanie, koncentracja, decyzje, ustawianie się, gra zespołowa |
+| DP | Pressujący defensywny pomocnik | bez piłki | odbiór piłki, agresja, przewidywanie, pracowitość, gra zespołowa, wytrzymałość |
+| DP | Osłaniający defensywny pomocnik | bez piłki | krycie, przewidywanie, koncentracja, ustawianie się, gra zespołowa |
+| DP | Asekurujący boki defensywny pomocnik | bez piłki | przewidywanie, ustawianie się, pracowitość, wytrzymałość, szybkość, odbiór piłki |
+| ŚP | Środkowy pomocnik | z piłką | przyjęcie piłki, podania, odbiór piłki, decyzje, gra zespołowa |
+| ŚP | Box-to-box | z piłką | podania, odbiór piłki, gra bez piłki, gra zespołowa, pracowitość, wytrzymałość |
+| ŚP | Rozgrywający box-to-box | z piłką | przyjęcie piłki, podania, technika, decyzje, wizja gry, gra bez piłki, pracowitość, wytrzymałość |
+| ŚP | Rozgrywający | z piłką | przyjęcie piłki, podania, technika, opanowanie, decyzje, gra zespołowa, wizja gry |
+| ŚP | Pomocnik wbiegający w kanały | z piłką | gra bez piłki, pracowitość, przyspieszenie, wytrzymałość, podania, drybling |
+| ŚP | Pressujący środkowy pomocnik | bez piłki | odbiór piłki, agresja, przewidywanie, pracowitość, wytrzymałość, przyspieszenie |
+| ŚP | Osłaniający środkowy pomocnik | bez piłki | krycie, ustawianie się, koncentracja, przewidywanie, gra zespołowa |
+| ŚP | Szeroki środkowy pomocnik | bez piłki | pracowitość, wytrzymałość, ustawianie się, gra zespołowa, odbiór piłki |
+| LP/PP | Boczny pomocnik | z piłką | podania, odbiór piłki, decyzje, gra zespołowa, pracowitość |
+| LP/PP | Skrzydłowy | z piłką | dośrodkowania, drybling, technika, przyspieszenie, zwinność |
+| LP/PP | Rozgrywający skrzydłowy | z piłką | przyjęcie piłki, podania, technika, wizja gry, decyzje, opanowanie |
+| LP/PP | Odwrócony skrzydłowy | z piłką | dośrodkowania, drybling, podania, technika, przyspieszenie, zwinność |
+| LP/PP | Skrzydłowy wracający do obrony | bez piłki | pracowitość, wytrzymałość, odbiór piłki, gra zespołowa, ustawianie się |
+| LP/PP | Skrzydłowy na wyjście (szeroko) | bez piłki | przyspieszenie, szybkość, gra bez piłki, przewidywanie |
+| LP/PP | Skrzydłowy na wyjście (do środka) | bez piłki | gra bez piłki, przewidywanie, przyspieszenie, opanowanie |
+| OP | Ofensywny pomocnik | z piłką | przyjęcie piłki, strzały z dystansu, podania, technika, opanowanie, decyzje, kreatywność, gra bez piłki |
+| OP | Wysunięty rozgrywający | z piłką | przyjęcie piłki, podania, technika, opanowanie, decyzje, wizja gry, gra bez piłki |
+| OP | Wolna rola | z piłką | przyjęcie piłki, podania, technika, drybling, kreatywność, wizja gry, decyzje, gra bez piłki |
+| OP | Cień napastnika | z piłką | drybling, wykończenie, przyjęcie piłki, przewidywanie, opanowanie, gra bez piłki, przyspieszenie |
+| OP | Ofensywny pomocnik wracający | bez piłki | pracowitość, wytrzymałość, gra zespołowa, odbiór piłki, przewidywanie |
+| OP | Ofensywny pomocnik na wyjście | bez piłki | gra bez piłki, przewidywanie, przyjęcie piłki, opanowanie |
+| OP | Ofensywny pomocnik rozdzielający | bez piłki | gra bez piłki, przyspieszenie, szybkość, przewidywanie |
+| LS/PS | Skrzydłowy | z piłką | dośrodkowania, drybling, technika, przyspieszenie, zwinność |
+| LS/PS | Odwrócony napastnik | z piłką | drybling, wykończenie, przyjęcie piłki, technika, gra bez piłki, przyspieszenie, zwinność |
+| LS/PS | Odwrócony skrzydłowy | z piłką | dośrodkowania, drybling, podania, technika, przyspieszenie, zwinność |
+| LS/PS | Rozgrywający skrzydłowy | z piłką | przyjęcie piłki, podania, technika, wizja gry, decyzje, opanowanie |
+| LS/PS | Szeroki napastnik | z piłką | wykończenie, gra bez piłki, drybling, przyspieszenie, szybkość |
+| LS/PS | Skrzydłowy wracający do obrony | bez piłki | pracowitość, wytrzymałość, odbiór piłki, gra zespołowa, ustawianie się |
+| LS/PS | Skrzydłowy na wyjście (szeroko) | bez piłki | przyspieszenie, szybkość, gra bez piłki, przewidywanie |
+| LS/PS | Skrzydłowy na wyjście (do środka) | bez piłki | gra bez piłki, przewidywanie, przyspieszenie, opanowanie |
+| N | Środkowy napastnik | z piłką | wykończenie, przyjęcie piłki, gra głową, gra bez piłki, opanowanie, siła |
+| N | Snajper | z piłką | wykończenie, przewidywanie, opanowanie, gra bez piłki |
+| N | Target man | z piłką | gra głową, odwaga, gra zespołowa, równowaga, skoczność, siła |
+| N | Cofnięty napastnik | z piłką | przyjęcie piłki, podania, technika, opanowanie, decyzje, gra bez piłki, gra zespołowa |
+| N | Napastnik wbiegający w kanały | z piłką | gra bez piłki, przyspieszenie, szybkość, drybling, wykończenie, pracowitość |
+| N | Fałszywa 9 | z piłką | drybling, przyjęcie piłki, podania, technika, opanowanie, decyzje, gra bez piłki, wizja gry, zwinność |
+| N | Napastnik wracający do obrony | bez piłki | agresja, przewidywanie, odwaga, decyzje, gra zespołowa, pracowitość, przyspieszenie, wytrzymałość |
+| N | Napastnik na wyjście | bez piłki | gra bez piłki, przewidywanie, siła, przyjęcie piłki |
+| N | Napastnik rozdzielający | bez piłki | gra bez piłki, przyspieszenie, szybkość, przewidywanie |
 
 ### Klub: finanse i personel
 

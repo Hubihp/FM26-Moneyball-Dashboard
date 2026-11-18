@@ -134,7 +134,9 @@ function TabelaMeczow({ mecze, naRywala, wybrany, naWskazanie }: {
 
 // Srednia kroczaca xG przeciw (ostatnie OKNO_SREDNIEJ meczow z xG); wskazany mecz podswietlony na wykresie,
 // klikniecie punktu wskazuje mecz w tabeli
-function WykresXg({ mecze, wybrany, naWybor }: { mecze: Mecz[]; wybrany: string | null; naWybor: (k: string) => void }) {
+function WykresXg({ mecze, wybrany, naWybor, naWskazanie }: {
+  mecze: Mecz[]; wybrany: string | null; naWybor: (k: string) => void; naWskazanie: (k: string | null) => void;
+}) {
   const z = mecze.filter((m) => m.xg !== null && m.xg_rywala !== null);
   const indeks = wybrany ? z.findIndex((m) => kluczMeczu(m) === wybrany) : -1;
   const srednia = (klucz: 'xg' | 'xg_rywala') => z.map((_, i) => {
@@ -166,6 +168,7 @@ function WykresXg({ mecze, wybrany, naWybor }: { mecze: Mecz[]; wybrany: string 
         ],
       }}
       podswietl={indeks >= 0 ? indeks : null}
+      naNajechanie={(i) => naWskazanie(i !== null && z[i] ? kluczMeczu(z[i]) : null)}
       naKlik={(_, i) => { if (i !== undefined && z[i]) naWybor(kluczMeczu(z[i])); }}
     />
   );
@@ -331,14 +334,14 @@ export default function Mecze(props: Props) {
               </Text>
             )}
           </Card>
-          <WykresXg mecze={meczeSezonu} wybrany={wskazany} naWybor={wybierzNaWykresie} />
+          <WykresXg mecze={meczeSezonu} wybrany={wskazany} naWybor={wybierzNaWykresie} naWskazanie={setWskazany} />
           {najblizsze.length > 0 && (
             <Text size="sm">
               Najbliższe mecze: {najblizsze.slice(0, 5).map((m) => `${formatuj(m.data, 'data')} ${m.u_siebie ? '' : '@ '}${m.rywal}`).join(' · ')}
             </Text>
           )}
           <Text size="xs" c="dimmed">
-            Najechanie na mecz w tabeli podświetla go na wykresie, kliknięcie punktu na wykresie wskazuje mecz w tabeli.
+            Najechanie na mecz na wykresie podświetla go w tabeli (i odwrotnie), kliknięcie punktu przewija tabelę do meczu.
             Kliknięcie meczu w tabeli otwiera raport o rywalu. Gra zachowuje xG tylko części meczów.
           </Text>
           <TabelaMeczow mecze={meczeSezonu} naRywala={(uid) => { setRywal(uid); setWidok('rywal'); }}

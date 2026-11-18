@@ -604,3 +604,30 @@ def test_wybrany_sezon_z_archiwum():
     assert s1 == {1: 2027, 2: 2027} and l1[1]["minutes"] == 3000      # bez wzgledu na minuty biezacego sezonu
     l2, s2 = statystyki_z_archiwum(archiwum, {}, "league", ktory=2)
     assert s2 == {1: 2026} and l2[1]["minutes"] == 900
+
+
+def test_sezon_osobno_dla_kazdej_ligi():
+    """7 lipca: Serie A ma nowy sezon (2027/28 w archiwum), LaLiga wciaz 2027/28 jako biezacy (archiwum do 2026)."""
+    from types import SimpleNamespace
+
+    from fm_moneyball.zrodla.zapis_fm import wybierz_sezony
+
+    def wiersz(uid, rok, minuty):
+        return SimpleNamespace(player_uid=uid, season_year=rok, minutes=minuty, kind="league", club_uid=1, team_slot=0,
+                               distance_km=None, passes_attempted=None)
+    liga = {1: SimpleNamespace(competition_id=100), 2: SimpleNamespace(competition_id=200)}
+    zaw = [SimpleNamespace(uid=1, club_uid=1), SimpleNamespace(uid=2, club_uid=2), SimpleNamespace(uid=3, club_uid=2)]
+    archiwum = [wiersz(1, 2027, 3330), wiersz(1, 2026, 1350),        # Serie A: 2027/28 juz w archiwum
+                wiersz(2, 2026, 2000), wiersz(3, 2026, 1000)]        # LaLiga: archiwum do 2026/27
+    liczniki = {1: {"minutes": 0}, 2: {"minutes": 3060}, 3: {"minutes": 90}}
+    # automatycznie: ostatni sezon z minutami - Serie A z archiwum 2027, LaLiga biezacy 2027 (zawodnik 3: 90 minut
+    # biezacego sezonu < 1000 w 2026/27 - starszy sezon z wiekszymi minutami)
+    wynik, sezony = wybierz_sezony(liczniki, archiwum, zaw, liga, "league")
+    assert sezony == {1: 2027, 2: 2027, 3: 2026}
+    assert wynik[1]["minutes"] == 3330 and wynik[2]["minutes"] == 3060 and wynik[3]["minutes"] == 1000
+    # wybrany rok 2027/28: Serie A z archiwum, LaLiga biezacy sezon (ten sam rok)
+    wynik, sezony = wybierz_sezony(liczniki, archiwum, zaw, liga, "league", rok=2027)
+    assert sezony == {1: 2027, 2: 2027, 3: 2027} and wynik[3]["minutes"] == 90
+    # wybrany rok 2026/27: wszyscy z archiwum
+    wynik, sezony = wybierz_sezony(liczniki, archiwum, zaw, liga, "league", rok=2026)
+    assert sezony == {1: 2026, 2: 2026, 3: 2026} and wynik[2]["minutes"] == 2000

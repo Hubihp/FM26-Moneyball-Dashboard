@@ -250,8 +250,10 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
   const zapiszUklad = useCallback(() => {
     const api = siatka.current?.api;
     if (!api) return;
-    // szerokosc w ukladzie tylko dla kolumn zmienionych recznie (reszta liczona z tresci)
-    const stan = api.getColumnState().map(({ width, ...c }) => (c.colId in reczne.current ? { ...c, width } : c));
+    // szerokosc w ukladzie tylko dla kolumn zmienionych recznie (reszta liczona z tresci); sortowanie nie jest
+    // zapamietywane - po starcie zadna kolumna nie jest posortowana
+    const stan = api.getColumnState().map(({ width, sort: _s, sortIndex: _i, ...c }) =>
+      (c.colId in reczne.current ? { ...c, width } : c));
     const nowe = stan.filter((c) => c.hide).map((c) => c.colId);
     setUkryte((stare) => (stare.join('|') === nowe.join('|') ? stare : nowe));
     if (!kluczUkladu || odtwarzanie.current) return;
@@ -262,7 +264,8 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
     const uklad = wczytajUklad(kluczUkladu);
     if (!api || !uklad) return;
     odtwarzanie.current = true;
-    api.applyColumnState({ state: uklad.map(({ width, ...c }) => (c.colId in reczne.current ? { ...c, width } : c)),
+    api.applyColumnState({
+      state: uklad.map(({ width, sort: _s, sortIndex: _i, ...c }) => (c.colId in reczne.current ? { ...c, width } : c)),
       applyOrder: true });
     odtwarzanie.current = false;
     setUkryte(uklad.filter((c) => c.hide).map((c) => c.colId));
@@ -383,7 +386,9 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         }
         if (k.format === 'score') {
           Object.assign(def, {
-            pinned: 'left', width: 108, sort: kolumny.some((x) => x.sortuj) ? null : 'desc', wrapHeaderText: false,
+            // bez domyslnego sortowania: wiersze przychodza z serwera ulozone od najwyzszego SCORE, a sortowanie
+            // tabeli wlacza dopiero klikniecie naglowka
+            pinned: 'left', width: 108, wrapHeaderText: false,
             suppressHeaderFilterButton: true,
             cellClass: 'komorka-score',
             cellStyle: (p: { value: number | null }) => (p.value === null ? null : { backgroundColor: kolorWyniku(p.value) }),
@@ -420,9 +425,6 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         }
                 if (k.format === 'pasek') {
           Object.assign(def, { cellRenderer: Pasek, width: 110 });
-        }
-        if (k.format === 'data') {
-          def.filter = 'agTextColumnFilter';
         }
         return def;
       }),

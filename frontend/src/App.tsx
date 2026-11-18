@@ -384,6 +384,8 @@ export default function App() {
         <PanelBoczny
           sezonStatystyk={s?.zrodlo.typ === 'folder' || s?.zrodlo.typ === 'plik' ? (s.zrodlo.opcje.sezon_statystyk ?? 'auto') : null}
           wczytywanie={s?.status === 'wczytywanie'}
+          dataGry={s?.meta.data_gry}
+          sezonyUzyte={s?.meta.sezony_statystyk ?? {}}
           setSezonStatystyk={(sezon) => {
             if (!s) return;
             void api.ustawZrodlo({ typ: s.zrodlo.typ, folder: s.zrodlo.folder, plik: s.zrodlo.plik, sledz: s.zrodlo.sledz,

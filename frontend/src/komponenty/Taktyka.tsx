@@ -137,7 +137,7 @@ function Zeton({ slot, miejsce, faza, gracz, numer, wybrany, przygaszony, naKlik
   const wynik = wynikNa(gracz, pozycja);
   const poza = gracz && !naturalny(gracz, pozycja);
   const bez = faza === 'bez';
-  const rozmiar = bez ? 36 : 42;
+  const rozmiar = 42;            // ten sam rozmiar zetonu w fazie z pilka i bez pilki
   return (
     <div
       data-slot={slot.id}
@@ -159,7 +159,7 @@ function Zeton({ slot, miejsce, faza, gracz, numer, wybrany, przygaszony, naKlik
             style={{ width: rozmiar, height: rozmiar, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: bez ? 'radial-gradient(circle at 35% 30%, #4dabf7, #1864ab)' : 'radial-gradient(circle at 35% 30%, #ff6b6b, #c92a2a)',
               color: 'white', fontWeight: 800,
-              fontSize: (SKROTY[pozycja] ?? '').length > 2 ? 10 : bez ? 13 : 14, boxShadow: '0 3px 6px rgba(0,0,0,0.45)',
+              fontSize: (SKROTY[pozycja] ?? '').length > 2 ? 10 : 14, boxShadow: '0 3px 6px rgba(0,0,0,0.45)',
               border: `2px solid ${wybrany ? '#ffd43b' : poza ? '#fd7e14' : 'white'}` }}>
             {SKROTY[pozycja] ?? numer}
           </div>
@@ -174,7 +174,7 @@ function Zeton({ slot, miejsce, faza, gracz, numer, wybrany, przygaszony, naKlik
         </Menu.Dropdown>
       </Menu>
       {gracz ? (
-        <div style={{ marginTop: bez ? 2 : 3, background: 'rgba(15,17,20,0.82)', borderRadius: 6, padding: '1px 6px', textAlign: 'center',
+        <div style={{ marginTop: 3, background: 'rgba(15,17,20,0.82)', borderRadius: 6, padding: '1px 6px', textAlign: 'center',
           maxWidth: 110 }}>
           <Text size="xs" fw={700} c="white" truncate onDoubleClick={naKarte} title={`${gracz.Piłkarz} - dwuklik: karta`}>
             {nazwisko(gracz)}
