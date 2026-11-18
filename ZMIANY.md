@@ -3,6 +3,12 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 2.7.1
+
+- Zapisy z gry po aktualizacji 27.1 dały błąd „Zapis ma układ danych, którego program nie potrafi
+  odczytać”: biblioteka fmsave 0.12.3 nie znała nowego układu danych. Program używa teraz fmsave
+  0.12.6, które czyta zapisy z wersji 27.1 i nadal starsze zapisy FM27.
+
 ## 2.7.0
 
 - Po uruchomieniu żadna kolumna nie jest posortowana (bez strzałki przy SCORE): wiersze są ułożone
