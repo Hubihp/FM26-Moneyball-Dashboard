@@ -459,6 +459,8 @@ export type SystemInfo = {
   strona: string;
   rozmiar: number | null;
   mozna_instalowac: boolean;
+  blad: string | null;
+  sprawdzono_o: string | null;
   okno: boolean;
   postep: { etap: 'pobieranie' | 'instalacja' | 'blad'; proc?: number; komunikat?: string } | null;
 };

@@ -4,7 +4,7 @@ import json
 import pytest
 
 from fm_moneyball import __version__, aktualizacje
-from fm_moneyball.aktualizacje import Aktualizacje, nowsza, opis_wydania, wersja_krotka
+from fm_moneyball.aktualizacje import Aktualizacje, nowsza, opis_wydania, opis_z_przekierowania, wersja_krotka
 from fm_moneyball.pamiec import Pamiec
 
 pytest.importorskip("fastapi")
@@ -45,11 +45,30 @@ def test_stan_aktualizacji_i_brak_sieci(monkeypatch):
 
     def bez_sieci(adres):
         raise OSError("brak sieci")
-    b = Aktualizacje(pobierz_json=bez_sieci)
+    b = Aktualizacje(pobierz_json=bez_sieci, adres_koncowy=bez_sieci)
     assert b.sprawdz() is None and b.stan()["sprawdzono"] and not b.stan()["dostepna"]
+    assert b.stan()["blad"] and b.stan()["sprawdzono_o"]
     c = Aktualizacje(pobierz_json=lambda adres: _wydanie(f"v{__version__}"))
     c.sprawdz()
     assert not c.stan()["dostepna"]
+
+
+def test_zapasowo_strona_wydan_gdy_api_zawiedzie():
+    import urllib.error
+
+    def limit(adres):
+        raise urllib.error.HTTPError(adres, 403, "rate limit", {}, None)
+    a = Aktualizacje(pobierz_json=limit,
+                     adres_koncowy=lambda adres: "https://github.com/Hubihp/FM26-Moneyball-Dashboard/releases/tag/v99.1.0")
+    a.sprawdz()
+    s = a.stan()
+    assert s["dostepna"] and s["wersja"] == "99.1.0" and s["blad"] is None
+    assert a.wydanie["instalator"].endswith("/releases/download/v99.1.0/FM27Dashboard-Setup.exe")
+    assert a.wydanie["suma"] == a.wydanie["instalator"] + ".sha256"
+    assert opis_z_przekierowania("https://github.com/x/y/releases") is None
+    b = Aktualizacje(pobierz_json=limit, adres_koncowy=lambda adres: "https://github.com/x/y/releases")
+    b.sprawdz()
+    assert "ogranicza" in b.stan()["blad"] and not b.stan()["dostepna"]
 
 
 def test_pobieranie_z_suma(tmp_path, monkeypatch):

@@ -7,7 +7,10 @@ instalator, sprawdza sume SHA-256 z pliku `.sha256` wydania, uruchamia instalato
 i zamyka program - instalator po skonczeniu uruchamia nowa wersje. Dane uzytkownika sa w
 ~/.fm_moneyball, ktorego instalator nie dotyka.
 
-Bledy sieci sa ciche: brak internetu = brak paska.
+Gdy API GitHuba zawiedzie (np. limit 60 zapytan/h na adres IP), program pyta strone
+github.com/<repo>/releases/latest - przekierowuje ona na /releases/tag/vX.Y.Z, z ktorego bierzemy wersje,
+a adresy instalatora i sumy maja staly wzor. Gdy zawioda obie drogi, interfejs pokazuje blad zamiast
+"masz najnowsza wersje".
 """
 import hashlib
 import json
@@ -17,6 +20,9 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
+import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -29,7 +35,8 @@ ADRES_WYDANIA = f"https://api.github.com/repos/{REPOZYTORIUM}/releases/latest"
 STRONA_WYDAN = f"https://github.com/{REPOZYTORIUM}/releases/latest"
 NAZWA_INSTALATORA = "FM27Dashboard-Setup.exe"
 ARGUMENTY_INSTALATORA = ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS"]
-LIMIT_CZASU = 5
+LIMIT_CZASU = 10
+POBIERANIE_WYDAN = f"https://github.com/{REPOZYTORIUM}/releases/download"
 
 
 def wersja_krotka(tekst):
@@ -69,9 +76,43 @@ def opis_wydania(wydanie):
     }
 
 
+def _adres_koncowy(adres):
+    """Adres po przekierowaniach (strona releases/latest -> releases/tag/vX.Y.Z)."""
+    zapytanie = urllib.request.Request(adres, method="HEAD", headers={"User-Agent": f"FM27Dashboard/{__version__}"})
+    with urllib.request.urlopen(zapytanie, timeout=LIMIT_CZASU) as odp:
+        return odp.geturl()
+
+
+def opis_z_przekierowania(adres_koncowy):
+    """Adres .../releases/tag/vX.Y.Z -> opis wydania jak z API (bez opisu zmian i rozmiaru); None, gdy brak tagu."""
+    m = re.search(r"/releases/tag/([^/?#]+)", str(adres_koncowy or ""))
+    if not m or wersja_krotka(m.group(1)) is None:
+        return None
+    tag = urllib.parse.unquote(m.group(1))
+    instalator = f"{POBIERANIE_WYDAN}/{tag}/{NAZWA_INSTALATORA}"
+    return {"wersja": tag.lstrip("v"), "notatki": "", "strona": adres_koncowy, "instalator": instalator,
+            "rozmiar": None, "suma": instalator + ".sha256"}
+
+
+def opis_bledu(e):
+    """Krotki komunikat dla uzytkownika."""
+    if isinstance(e, urllib.error.HTTPError):
+        if e.code in (403, 429):
+            return "GitHub chwilowo ogranicza liczbę zapytań - spróbuj ponownie za godzinę"
+        return f"GitHub odpowiedział błędem {e.code}"
+    if isinstance(e, TimeoutError) or "timed out" in str(e):
+        return "GitHub nie odpowiedział na czas"
+    if isinstance(e, urllib.error.URLError):
+        return f"brak połączenia z GitHubem ({e.reason})"
+    return str(e) or type(e).__name__
+
+
 class Aktualizacje:
-    def __init__(self, pobierz_json=_pobierz_json, zamknij_program=None):
+    def __init__(self, pobierz_json=_pobierz_json, zamknij_program=None, adres_koncowy=_adres_koncowy):
         self._pobierz_json = pobierz_json
+        self._adres_koncowy = adres_koncowy
+        self.blad = None
+        self.sprawdzono_o = None
         self.zamknij_program = zamknij_program      # ustawiane przez okno programu
         self._blokada = threading.Lock()
         self.wydanie = None
@@ -82,13 +123,21 @@ class Aktualizacje:
         threading.Thread(target=self.sprawdz, daemon=True, name="aktualizacje").start()
 
     def sprawdz(self):
+        wydanie, blad = None, None
         try:
             wydanie = opis_wydania(self._pobierz_json(ADRES_WYDANIA))
-        except Exception as e:      # brak sieci, limit API, zla odpowiedz - po cichu
-            log.info("Sprawdzanie aktualizacji nie powiodło się: %s", e)
-            wydanie = None
+        except Exception as e:      # brak sieci, limit API, zla odpowiedz - probujemy strony wydan
+            log.info("Sprawdzanie aktualizacji przez API nie powiodło się: %s", e)
+            try:
+                wydanie = opis_z_przekierowania(self._adres_koncowy(STRONA_WYDAN))
+                if wydanie is None:
+                    raise ValueError("strona wydań nie wskazała wersji")
+            except Exception as e2:
+                log.info("Sprawdzanie aktualizacji nie powiodło się: %s", e2)
+                blad = opis_bledu(e)
         with self._blokada:
-            self.wydanie, self.sprawdzono = wydanie, True
+            self.wydanie, self.sprawdzono, self.blad = wydanie, True, blad
+            self.sprawdzono_o = time.strftime("%H:%M")
         return wydanie
 
     def stan(self):
@@ -99,7 +148,7 @@ class Aktualizacje:
                     "wersja": w["wersja"] if dostepna else None, "notatki": w["notatki"] if dostepna else None,
                     "strona": w["strona"] if w else STRONA_WYDAN, "rozmiar": w["rozmiar"] if dostepna else None,
                     "mozna_instalowac": dostepna and mozna_instalowac() and bool(w["instalator"]),
-                    "postep": self.postep}
+                    "blad": self.blad, "sprawdzono_o": self.sprawdzono_o, "postep": self.postep}
 
     def instaluj(self):
         with self._blokada:

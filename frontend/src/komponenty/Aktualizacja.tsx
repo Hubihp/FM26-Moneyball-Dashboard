@@ -153,10 +153,17 @@ export function WersjaProgramu() {
         <Stack gap="sm">
           <Group gap="xs">
             <Button variant="light" loading={sprawdzanie} onClick={sprawdz}>Sprawdź aktualizacje</Button>
-            <Text size="sm">
-              {!s.sprawdzono ? 'Sprawdzanie...' : s.dostepna ? `Dostępna wersja ${s.wersja}.` : 'Masz najnowszą wersję.'}
+            <Text size="sm" c={s.sprawdzono && !s.dostepna && s.blad ? 'red' : undefined}>
+              {!s.sprawdzono ? 'Sprawdzanie...' : s.dostepna ? `Dostępna wersja ${s.wersja}.`
+                : s.blad ? 'Nie udało się sprawdzić aktualizacji.' : 'Masz najnowszą wersję.'}
             </Text>
           </Group>
+          {s.sprawdzono && !s.dostepna && s.blad && (
+            <Text size="xs" c="dimmed">
+              Powód: {s.blad}. Najnowszą wersję możesz też pobrać ręcznie ze strony wydań (link poniżej).
+            </Text>
+          )}
+          {s.sprawdzono_o && <Text size="xs" c="dimmed">Sprawdzono o {s.sprawdzono_o}.</Text>}
           <Anchor size="sm" href={s.strona} target="_blank">Wszystkie wydania i opisy zmian</Anchor>
           {s.okno && (
             <Stack gap={4}>

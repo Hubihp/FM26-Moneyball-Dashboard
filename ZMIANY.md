@@ -3,6 +3,13 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 2.8.1
+
+- Sprawdzanie aktualizacji nie pokazywało nowej wersji, gdy GitHub odrzucił zapytanie (np. limit zapytań
+  na adres IP albo wolne łącze), a okno „O programie” pisało wtedy „Masz najnowszą wersję”. Program
+  sprawdza teraz także stronę wydań na GitHubie, a gdy obie drogi zawiodą, pokazuje powód i godzinę
+  sprawdzenia zamiast fałszywej informacji.
+
 ## 2.8.0
 
 - Nowa wyszukiwarka personelu (Klub → Wyszukiwarka personelu): personel wszystkich klubów po atrybutach
