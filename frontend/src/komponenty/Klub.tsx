@@ -6,6 +6,7 @@ import { api, type MiesiacFinansow, type ObszarSztabu, type OsobaPersonelu } fro
 import { eur, formatuj } from '../format';
 import { SZEROKOSC } from '../wyglad';
 import Wykres from './Wykres';
+import WyszukiwarkaPersonelu from './WyszukiwarkaPersonelu';
 
 const KOLOR_STATUSU: Record<string, string> = { ok: 'teal', uwaga: 'yellow', 'błąd': 'red' };
 
@@ -325,12 +326,14 @@ function Personel({ wersja }: { wersja: number }) {
 }
 
 export default function Klub({ wersja }: { wersja: number }) {
-  const [widok, setWidok] = useState<'finanse' | 'personel'>('finanse');
+  const [widok, setWidok] = useState<'finanse' | 'personel' | 'szukaj'>('finanse');
   return (
     <Stack gap="md">
-      <SegmentedControl w="fit-content" value={widok} onChange={(v) => setWidok(v as 'finanse' | 'personel')}
-        data={[{ value: 'finanse', label: 'Finanse' }, { value: 'personel', label: 'Personel' }]} />
-      {widok === 'finanse' ? <Finanse wersja={wersja} /> : <Personel wersja={wersja} />}
+      <SegmentedControl w="fit-content" value={widok} onChange={(v) => setWidok(v as 'finanse' | 'personel' | 'szukaj')}
+        data={[{ value: 'finanse', label: 'Finanse' }, { value: 'personel', label: 'Personel' },
+          { value: 'szukaj', label: 'Wyszukiwarka personelu' }]} />
+      {widok === 'finanse' ? <Finanse wersja={wersja} /> : widok === 'personel' ? <Personel wersja={wersja} />
+        : <WyszukiwarkaPersonelu wersja={wersja} />}
     </Stack>
   );
 }

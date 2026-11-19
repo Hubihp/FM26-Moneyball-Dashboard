@@ -50,6 +50,19 @@ class MojKlubModel(BaseModel):
     uid: int
 
 
+class SzukajPersoneluModel(BaseModel):
+    stanowiska: list[str] = Field(default_factory=list)      # puste - wszystkie
+    min_atrybuty: dict[str, int] = Field(default_factory=dict)   # atrybut -> minimum (1-20)
+    wiek: tuple[int, int] | None = None
+    maks_placa: float | None = None                          # EUR / tydzien
+    szukaj: str = ""
+    bez_menedzerow: bool = True                              # bez menedzerow (pierwszych trenerow) innych klubow
+    bez_mojego: bool = True                                  # bez mojego sztabu
+    sortuj: str | None = None                                # atrybut sortowania (domyslnie suma wybranych)
+    charakter: list[str] = Field(default_factory=list)       # etykiety charakteru (puste - dowolny)
+    limit: int = 500
+
+
 class RywalModel(BaseModel):
     uid: str                         # club_uid rywala
     ignoruj_mnoznik: bool = False

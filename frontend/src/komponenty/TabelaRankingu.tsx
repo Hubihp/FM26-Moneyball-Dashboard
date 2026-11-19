@@ -85,6 +85,8 @@ type Props = {
   przelaczUlubione?: (wiersz: Wiersz) => void;
   // klucz zapamietanego ukladu (sortowanie, kolejnosc, szerokosc, ukryte kolumny), np. "ranking|Napastnik"
   kluczUkladu?: string;
+  // tabela bez zawodnikow (np. wyszukiwarka personelu): bez karty zawodnika i jego menu pod prawym przyciskiem
+  bezMenuZawodnika?: boolean;
 };
 
 export type ModelFiltrow = Record<string, unknown>;
@@ -189,7 +191,7 @@ const czyMoj = (w: Wiersz | undefined, uid: number | null | undefined) =>
 const MALA_PROBA_MINUT = 900;
 
 export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, zaznaczeni, naZaznaczenie, ulubione,
-  przelaczUlubione, kluczUkladu, pozycja, filtryKolumn, naFiltryKolumn, fokusId }: Props) {
+  przelaczUlubione, kluczUkladu, pozycja, filtryKolumn, naFiltryKolumn, fokusId, bezMenuZawodnika }: Props) {
   const siatka = useRef<AgGridReact<Wiersz>>(null);
   const menu = useMenuZawodnika();
 
@@ -199,7 +201,7 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
     siatka.current?.api?.forEachNodeAfterFilterAndSort((n) => { if (n.data) lista.push(n.data); });
     return lista;
   };
-  const otworz = (w: Wiersz) => naWybor(String(w['ID']), w, kolejnosc());
+  const otworz = (w: Wiersz) => { if (!bezMenuZawodnika) naWybor(String(w['ID']), w, kolejnosc()); };
 
   // Filtry kolumn trzymane poza tabela: nalozenie po zbudowaniu kolumn i przy zmianie z zewnatrz
   const filtryRef = useRef(filtryKolumn);
@@ -519,7 +521,7 @@ export default function TabelaRankingu({ kolumny, wiersze, mojKlubUid, naWybor, 
         onCellContextMenu={(e) => {
           const w = e.data;
           const zdarzenie = e.event as MouseEvent | null;
-          if (!w || !zdarzenie) return;
+          if (!w || !zdarzenie || bezMenuZawodnika) return;
           menu.otworzMenu(zdarzenie, { id: String(w['ID']), pozycja: String(w['Pozycja na liście'] ?? pozycja ?? ''),
             pilkarz: String(w['Piłkarz'] ?? ''), wiersz: w });
         }}

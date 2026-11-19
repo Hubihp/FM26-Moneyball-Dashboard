@@ -3,6 +3,13 @@
 Opis każdej wersji trafia do wydania na GitHubie i do paska aktualizacji w programie
 (sekcja `## <wersja>`).
 
+## 2.8.0
+
+- Nowa wyszukiwarka personelu (Klub → Wyszukiwarka personelu): personel wszystkich klubów po atrybutach
+  liczbowych 1-20, z gotowymi zestawami kluczowych atrybutów stanowisk („Szukam”: trenerzy, skauci,
+  analitycy, fizjoterapeuci, dyrektorzy i inni), minimum dla wybranych atrybutów, stanowiskiem,
+  charakterem, wiekiem i płacą. Atrybuty personelu mają nazwy jak w grze.
+
 ## 2.7.1
 
 - Zapisy z gry po aktualizacji 27.1 dały błąd „Zapis ma układ danych, którego program nie potrafi

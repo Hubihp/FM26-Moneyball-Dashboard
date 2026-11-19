@@ -7,7 +7,8 @@ from fastapi import APIRouter, HTTPException
 from fm_moneyball import finanse as fin
 from fm_moneyball import historia_proces
 from fm_moneyball.analiza import moi_zawodnicy
-from fm_moneyball.personel import personel_z_zapisu
+from fm_moneyball.personel import ATRYBUTY_PERSONELU, ZESTAWY_PERSONELU, personel_z_zapisu, szukaj_personelu
+from fm_moneyball.serwer.modele import SzukajPersoneluModel
 
 log = logging.getLogger("fm_moneyball")
 
@@ -65,6 +66,22 @@ def utworz(stan, obl):
     @router.get("/personel")
     def personel():
         """Sztab mojego klubu z ocenami obszarow, luki na tle ligi i kandydaci (odczyt ok. 20 s, potem z pamieci)."""
+        return {k: v for k, v in _personel().items() if not k.startswith("_")}
+
+    @router.post("/personel/szukaj")
+    def szukaj(z: SzukajPersoneluModel):
+        """Wyszukiwarka personelu wszystkich klubow po atrybutach liczbowych 1-20 (te same dane co analiza sztabu)."""
+        lista = _personel().get("_lista") or []
+        liczba, wyniki = szukaj_personelu(
+            lista, stanowiska=z.stanowiska, min_atrybuty=z.min_atrybuty, wiek=z.wiek, maks_placa=z.maks_placa,
+            szukaj=z.szukaj, bez_menedzerow=z.bez_menedzerow, bez_mojego=z.bez_mojego, sortuj=z.sortuj, limit=z.limit,
+            charaktery=z.charakter)
+        return {"liczba": liczba, "wszystkich": len(lista), "wyniki": wyniki, "atrybuty": ATRYBUTY_PERSONELU,
+                "stanowiska": sorted({o["stanowisko"] for o in lista}),
+                "charaktery": sorted({o["charakter"] for o in lista if o.get("charakter")}),
+                "zestawy": ZESTAWY_PERSONELU}
+
+    def _personel():
         uid = _moj_klub()
         sciezka = getattr(stan, "_sciezka_odczytu", None)
         if not sciezka or stan.meta.get("demo"):

@@ -137,6 +137,23 @@ export type Personel = {
   liga_klubow: number;
 };
 
+export type ZapytanieSzukajPersonelu = {
+  stanowiska: string[]; min_atrybuty: Record<string, number>; wiek: [number, number] | null;
+  maks_placa: number | null; szukaj: string; bez_menedzerow: boolean; bez_mojego: boolean; charakter: string[];
+  sortuj?: string | null; limit?: number;
+};
+
+export type PracownikWyszukiwarki = {
+  uid: string; nazwa: string; wiek: number | null; klub: string; klub_uid: number | null; stanowisko: string;
+  druzyna: number; placa_tydzien: number | null; kontrakt_do: string | null; kontrakt: boolean; menedzer: boolean;
+  moj: boolean; atrybuty: Record<string, number>; charakter: string | null;
+};
+
+export type WynikSzukajPersonelu = {
+  liczba: number; wszystkich: number; wyniki: PracownikWyszukiwarki[]; atrybuty: Record<string, string>;
+  stanowiska: string[]; charaktery: string[]; zestawy: Record<string, string[]>;
+};
+
 export type PunktHistorii = {
   data: string;
   sezon: number;
@@ -532,6 +549,7 @@ export const api = {
     prog_szczescia: number }>('/api/mecze'),
   finanse: () => zadanie<Finanse>('/api/finanse'),
   personel: () => zadanie<Personel>('/api/personel'),
+  szukajPersonelu: (body: ZapytanieSzukajPersonelu) => post<WynikSzukajPersonelu>('/api/personel/szukaj', body),
   rywal: (body: { uid: string; ignoruj_mnoznik: boolean; k_baza: number }) => post<RaportRywala>('/api/rywal', body),
   taktykaZGry: () => zadanie<{ taktyki: TaktykaZGry[]; uwaga: string }>('/api/taktyka-z-gry'),
   profilDruzyny: (body: { wagi: Record<string, Record<string, number>>; ignoruj_mnoznik: boolean; k_baza: number;

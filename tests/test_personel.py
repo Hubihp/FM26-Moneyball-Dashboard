@@ -59,3 +59,36 @@ def test_kandydaci_bez_menedzerow_innych_klubow():
               _osoba(3, 20, "COACH", attacking=90, tactical=90)]
     wynik = personel.analiza_personelu(ludzie, 10, {20}, kurs=1.0)
     assert [k["uid"] for k in wynik["kandydaci"]["Atak"]] == ["3"]
+
+
+def test_wyszukiwarka_personelu():
+    ludzie = [_osoba(1, 10, "COACH", attacking=90, tactical=60),                 # moj sztab
+              _osoba(2, 20, "COACH", attacking=85, tactical=80),
+              _osoba(3, 30, "SCOUT", judging_player_ability=95, judging_player_potential=90),
+              _osoba(4, 30, "MANAGER", attacking=100, tactical=100),             # menedzer innego klubu
+              _osoba(5, 40, "COACH", attacking=50, tactical=95)]
+    lista = personel.lista_personelu(ludzie, 10, kurs=1.0)
+    assert {o["uid"] for o in lista} == {"1", "2", "3", "4", "5"}
+    assert lista[1]["atrybuty"]["attacking"] == 17 and lista[1]["atrybuty"]["tactical"] == 16   # 85/5, 80/5
+    n, wyniki = personel.szukaj_personelu(lista, min_atrybuty={"attacking": 15})
+    assert n == 1 and wyniki[0]["uid"] == "2"           # bez mojego sztabu i bez menedzera innego klubu
+    n, wyniki = personel.szukaj_personelu(lista, min_atrybuty={"attacking": 15}, bez_menedzerow=False, bez_mojego=False)
+    assert [o["uid"] for o in wyniki] == ["4", "1", "2"]   # malejaco po sumie wybranych atrybutow
+    n, wyniki = personel.szukaj_personelu(lista, stanowiska=["skaut"])
+    assert [o["uid"] for o in wyniki] == ["3"]
+
+
+def test_zestawy_i_charakter():
+    from types import SimpleNamespace as N
+    for nazwa, atrybuty in personel.ZESTAWY_PERSONELU.items():
+        assert atrybuty and all(a in personel.ATRYBUTY_PERSONELU for a in atrybuty), nazwa
+    assert personel.ZESTAWY_PERSONELU["Trener bramkarzy"] == ["goalkeeping", "determination", "motivating", "authority"]
+    assert personel.ZESTAWY_PERSONELU["Trener młodzieży ataku"][0] == "working_with_youngsters"
+    oso = lambda **k: N(**{"professionalism": 10, "ambition": 10, "pressure": 10, "loyalty": 10,  # noqa: E731
+                           "sportsmanship": 10, "temperament": 10, "controversy": 5, **k})
+    assert personel.charakter(oso(professionalism=20)) == "wzorowy profesjonalista"
+    assert personel.charakter(oso(professionalism=16)) == "profesjonalista"
+    assert personel.charakter(oso(ambition=18)) == "ambitny"
+    assert personel.charakter(oso(temperament=3)) == "wybuchowy"
+    assert personel.charakter(oso()) == "zrównoważony"
+    assert personel.charakter(None) is None

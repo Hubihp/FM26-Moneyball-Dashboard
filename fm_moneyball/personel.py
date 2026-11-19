@@ -148,12 +148,167 @@ def analiza_personelu(personel, moj_klub_uid, kluby_ligi, kurs):
             "kandydaci": kandydaci, "obszary_opis": {k: list(v) for k, v in OBSZARY.items()}}
 
 
+# --- Wyszukiwarka personelu ----------------------------------------------------------------------
+# Atrybuty personelu w skali gry 1-20 (jak na ekranie personelu w grze); nazwy polskie
+ATRYBUTY_PERSONELU = {
+    "goalkeeping": "Gra na bramce", "attacking": "Ofensywa", "defending": "Defensywa", "fitness": "Kondycja",
+    "possession": "Posiadanie piłki", "technical": "Technika", "tactical": "Taktyka",
+    "set_pieces": "Stałe fragmenty gry", "working_with_youngsters": "Praca z juniorami",
+    "judging_player_ability": "Ocena umiejętności zawodników", "judging_player_potential": "Ocena potencjału zawodników",
+    "judging_staff_ability": "Ocena umiejętności sztabu", "tactical_knowledge": "Wiedza taktyczna",
+    "analysing_data": "Analiza danych", "negotiating": "Negocjacje", "physiotherapy": "Zdolności medyczne",
+    "sports_science": "Nauka o sporcie", "people_management": "Kierowanie zespołem", "motivating": "Motywowanie",
+    "determination": "Determinacja", "authority": "Bezkompromisowość", "adaptability": "Zdolność adaptacji",
+}
+
+# Gotowe zestawy wyszukiwarki: kluczowe atrybuty stanowisk w FM (lista od uzytkownika, nazwy z polskiej wersji gry).
+# Gra nie zapisuje ich w pliku - to stala lista programu. Zestaw zaznacza atrybuty, nie zaweza stanowiska.
+_DMB = ["determination", "motivating", "authority"]
+_OCENA = ["judging_player_ability", "judging_player_potential"]
+_TRENERZY = {
+    "bramkarzy": ["goalkeeping"], "ataku": ["attacking"], "obrony": ["defending"], "siłowy": ["fitness"],
+    "posiadania": ["possession"], "techniki": ["technical"], "stałych fragmentów gry": ["set_pieces", "tactical_knowledge"],
+}
+ZESTAWY_PERSONELU = {
+    **{f"Trener {k}": v + _DMB for k, v in _TRENERZY.items()},
+    "Asystent menedżera": _OCENA,
+    "Główny skaut": _OCENA + ["adaptability"],
+    "Skaut": _OCENA + ["adaptability"],
+    "Główny analityk gry": ["determination", "analysing_data", "judging_player_ability", "tactical_knowledge"],
+    "Analityk gry": ["analysing_data", "tactical_knowledge"],
+    "Analityk ds. rekrutacji": ["analysing_data", "judging_player_ability"],
+    "Główny fizjoterapeuta": ["physiotherapy"],
+    "Fizjoterapeuta": ["physiotherapy"],
+    "Główny naukowiec sportowy": ["sports_science"],
+    "Naukowiec sportowy": ["sports_science"],
+    "Koordynator pionu juniorskiego": ["working_with_youngsters"] + _OCENA,
+    "Dyrektor ds. sportowych": ["negotiating"] + _OCENA,
+    "Dyrektor techniczny": ["negotiating", "judging_staff_ability"],
+    "Kierownik ds. wypożyczeń": ["people_management", "analysing_data"] + _OCENA,
+    **{f"Trener młodzieży {k}": ["working_with_youngsters"] + v + _DMB for k, v in _TRENERZY.items()},
+    "Asystent menedżera młodzieży": ["working_with_youngsters"] + _OCENA,
+}
+
+
+def charakter(osobowosc, determinacja=None):
+    """
+    Slowna etykieta charakteru (jak w grze) z ukrytych cech osobowosci 1-20 i determinacji - przyblizenie wg
+    znanych progow FM; samych liczb program nie pokazuje. None, gdy brak osobowosci.
+    """
+    if osobowosc is None:
+        return None
+    g = lambda n: getattr(osobowosc, n, None) or 10   # noqa: E731
+    pro, amb, pre, loj, spo, tem, kon = (g("professionalism"), g("ambition"), g("pressure"), g("loyalty"),
+                                         g("sportsmanship"), g("temperament"), g("controversy"))
+    det = determinacja if determinacja is not None else 10
+    if pro >= 20 and tem >= 10:
+        return "wzorowy profesjonalista"
+    if pro >= 15 and spo >= 15 and tem >= 15 and loj >= 14 and det >= 14:
+        return "wzorowy obywatel"
+    if pro >= 17 and amb >= 14 and det >= 14:
+        return "perfekcjonista"
+    if pro >= 15 and det >= 15 and amb >= 12:
+        return "zdeterminowany profesjonalista"
+    if pro >= 15:
+        return "profesjonalista"
+    if det >= 18:
+        return "zdeterminowany"
+    if amb >= 16:
+        return "ambitny"
+    if pre >= 15 and det >= 12:
+        return "odporny"
+    if loj >= 17:
+        return "lojalny"
+    if tem <= 6 or kon >= 15:
+        return "wybuchowy"
+    if pro <= 6:
+        return "mało profesjonalny"
+    if amb <= 6:
+        return "swobodny"
+    return "zrównoważony"
+
+
+def atrybuty_osoby(atrybuty):
+    """StaffAttributes -> {atrybut: wartosc 1-20 (zaokraglona jak w grze)}; brakujace pomijane."""
+    wynik = {}
+    for nazwa in ATRYBUTY_PERSONELU:
+        v = _skala(nazwa, getattr(atrybuty, nazwa, None)) if atrybuty is not None else None
+        if v is not None:
+            wynik[nazwa] = int(min(20, max(1, round(v))))
+    return wynik
+
+
+def lista_personelu(personel, moj_klub_uid, kurs):
+    """
+    Caly personel z atrybutami (bez zarzadu i lekarzy) -> lista slownikow do wyszukiwarki: osoba, klub, stanowisko,
+    placa, kontrakt, czy menedzer, atrybuty 1-20 i oceny obszarow.
+    """
+    wynik = []
+    for s in personel:
+        # bez zarzadu, lekarzy i osob bez kontraktu (dzialacze, np. czlonkowie zarzadu bez stanowiska w zapisie)
+        if s.attributes is None or _stanowisko(s) in POZA_SZTABEM or getattr(s, "is_human_manager", False) \
+                or not getattr(s, "has_contract", True):
+            continue
+        stanowisko = _stanowisko(s)
+        o = opis_osoby(s, kurs)
+        wynik.append({
+            "uid": o["uid"], "nazwa": o["nazwa"], "wiek": o["wiek"], "klub": o["klub"], "klub_uid": s.club_uid,
+            "stanowisko": o["stanowisko"], "druzyna": o["druzyna"], "placa_tydzien": o["placa_tydzien"],
+            "kontrakt_do": o["kontrakt_do"], "kontrakt": bool(getattr(s, "has_contract", True)),
+            "menedzer": stanowisko == "MANAGER", "moj": s.club_uid == moj_klub_uid,
+            "atrybuty": (atr := atrybuty_osoby(s.attributes)), "oceny": o["oceny"],
+            "charakter": charakter(getattr(s, "personality", None), atr.get("determination")),
+            "najlepszy_obszar": o["najlepszy_obszar"], "najlepsza_ocena": o["najlepsza_ocena"],
+        })
+    return wynik
+
+
+def szukaj_personelu(lista, stanowiska=(), min_atrybuty=None, wiek=None, maks_placa=None, szukaj="",
+                     bez_menedzerow=True, bez_mojego=True, sortuj=None, limit=500, charaktery=()):
+    """
+    Filtr wyszukiwarki: stanowiska (nazwy polskie; puste - wszystkie), minimalne wartosci atrybutow 1-20
+    ({atrybut: min}), zakres wieku, maksymalna placa tygodniowa, fragment nazwiska / klubu. Sortowanie: suma
+    wybranych atrybutow (albo `sortuj`), malejaco. Zwraca (liczba pasujacych, pierwsze `limit`).
+    """
+    min_atrybuty = {k: v for k, v in (min_atrybuty or {}).items() if v}
+    szukaj = (szukaj or "").strip().lower()
+    pasujacy = []
+    for o in lista:
+        if bez_menedzerow and o["menedzer"] and not o["moj"]:
+            continue
+        if bez_mojego and o["moj"]:
+            continue
+        if stanowiska and o["stanowisko"] not in stanowiska:
+            continue
+        if charaktery and o.get("charakter") not in charaktery:
+            continue
+        if wiek and o["wiek"] is not None and not wiek[0] <= o["wiek"] <= wiek[1]:
+            continue
+        if maks_placa is not None and (o["placa_tydzien"] or 0) > maks_placa:
+            continue
+        if szukaj and szukaj not in f"{o['nazwa'] or ''} {o['klub'] or ''}".lower():
+            continue
+        if any((o["atrybuty"].get(a) or 0) < v for a, v in min_atrybuty.items()):
+            continue
+        pasujacy.append(o)
+    klucze = [sortuj] if sortuj else list(min_atrybuty)
+    if klucze:
+        pasujacy.sort(key=lambda o: -sum(o["atrybuty"].get(k) or 0 for k in klucze))
+    else:
+        pasujacy.sort(key=lambda o: -(o["najlepsza_ocena"] or 0))
+    return len(pasujacy), pasujacy[:limit]
+
+
 def personel_z_zapisu(sciezka, moj_klub_uid, kluby_ligi, kurs):
-    """Odczyt personelu z pliku zapisu i analiza (wolane w procesie potomnym albo zapasowo w watku)."""
+    """Odczyt personelu z pliku zapisu: analiza sztabu i lista do wyszukiwarki ("_lista"); wolane w procesie
+    potomnym albo zapasowo w watku."""
     import warnings
 
     import fmsave
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         with fmsave.open(sciezka) as zapis:
-            return analiza_personelu(zapis.staff(), moj_klub_uid, set(kluby_ligi), kurs)
+            personel = list(zapis.staff())
+    wynik = analiza_personelu(personel, moj_klub_uid, set(kluby_ligi), kurs)
+    wynik["_lista"] = lista_personelu(personel, moj_klub_uid, kurs)
+    return wynik
